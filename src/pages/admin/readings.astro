@@ -1,0 +1,17 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import { ReadingsTable } from "@/components/readings/ReadingsTable";
+import { ReadingForm } from "@/components/readings/ReadingForm";
+---
+
+<Layout title="Readings">
+  <main>
+    <h1>Readings</h1>
+    <section>
+      <ReadingsTable client:load />
+    </section>
+    <section style="margin-top:1rem;">
+      <ReadingForm client:load />
+    </section>
+  </main>
+</Layout>

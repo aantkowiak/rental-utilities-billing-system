@@ -41,6 +41,19 @@ npm run dev
 npm run build
 ```
 
+## Environment variables
+
+Create a `.env` file (or configure your deployment secrets) with the following values:
+
+```
+SUPABASE_URL=<supabase-project-url>
+SUPABASE_KEY=<supabase-anon-key>
+SUPABASE_SERVICE_ROLE_KEY=<supabase-service-role-key>
+SERVICE_ROLE_KEY=<internal-task-endpoint-secret>
+```
+
+`SERVICE_ROLE_KEY` is compared against the `x-service-role-key` header when invoking the scheduler task endpoint.
+
 ## Available Scripts
 
 - `npm run dev` - Start development server
@@ -48,6 +61,25 @@ npm run build
 - `npm run preview` - Preview production build
 - `npm run lint` - Run ESLint
 - `npm run lint:fix` - Fix ESLint issues
+
+## API Endpoints
+
+### Monthly Conditions (`/v1/monthly-conditions`)
+
+| Method | Path | Description | Auth |
+| ------ | ---- | ----------- | ---- |
+| GET | `/v1/monthly-conditions` | List monthly conditions with optional `propertyId`, `month`, `page`, `pageSize` filters. Tenants are automatically scoped to their property. | Tenant/Admin |
+| POST | `/v1/monthly-conditions` | Create a monthly condition record. | Admin |
+| GET | `/v1/monthly-conditions/{id}` | Retrieve a single monthly condition. Tenants can access only their property. | Tenant/Admin |
+| PATCH | `/v1/monthly-conditions/{id}` | Update a monthly condition. Blocked if linked reports are realized or unlocked. | Admin |
+| DELETE | `/v1/monthly-conditions/{id}` | Delete a monthly condition. Returns 422 when linked to realized reports. | Admin |
+
+**Error Codes**
+
+- `monthly_condition_not_found` (404) – Missing or unauthorized record.
+- `conflict` (409) – Duplicate property/month combination.
+- `monthly_condition_locked` (422) – Updates or deletes blocked when linked reports have status other than `draft`.
+- `forbidden` (403) – Returned for insufficient permissions or tenant/property mismatch.
 
 ## Project Structure
 

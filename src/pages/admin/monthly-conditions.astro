@@ -1,0 +1,13 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import { MonthlyConditionsTable } from "@/components/monthly/MonthlyConditionsTable";
+---
+
+<Layout title="Monthly Conditions">
+  <main>
+    <h1>Monthly Conditions</h1>
+    <section>
+      <MonthlyConditionsTable client:load />
+    </section>
+  </main>
+</Layout>

@@ -13,7 +13,7 @@ import type { Tables } from "@/db/database.types";
  * Works for the database rows that use only primitive / nested objects.
  */
 export type Camelize<T> = {
-  [K in keyof T as CamelCase<K & string>]: T[K] extends Record<string, any> ? Camelize<T[K]> : T[K];
+  [K in keyof T as CamelCase<K & string>]: T[K] extends Record<string, unknown> ? Camelize<T[K]> : T[K];
 };
 
 /* Simple snake → camel implementation (handles single underscore) */
@@ -33,9 +33,18 @@ type ReportEmailAttemptRow = Tables<"report_email_attempts">;
 
 export type PropertyDTO = Camelize<PropertyRow>;
 export type ProfileDTO = Camelize<ProfileRow>;
-export type ContractDTO = Camelize<ContractRow>;
+export interface ContractPeriod {
+  from: string;
+  to: string;
+}
+
+export type ContractDTO = Omit<Camelize<ContractRow>, "period"> & {
+  period: ContractPeriod;
+};
 export type MonthlyConditionDTO = Camelize<MonthlyConditionRow>;
 export type ReadingDTO = Camelize<ReadingRow>;
+export type ReadingOrigin = "tenant" | "admin_replacement";
+export type ReadingType = "regular" | "baseline";
 export type ReportDTO = Camelize<ReportRow>;
 export type ReportEmailDTO = Camelize<ReportEmailRow>;
 export type ReportEmailAttemptDTO = Camelize<ReportEmailAttemptRow>;
@@ -55,7 +64,12 @@ export type CreatePropertyCmd = Pick<PropertyDTO, "label" | "startMonth">;
 export type UpdatePropertyCmd = Partial<CreatePropertyCmd>;
 
 /* 2.4 Contracts */
-export type CreateContractCmd = Pick<ContractDTO, "propertyId" | "tenantUserId" | "period">;
+export interface CreateContractCmd {
+  propertyId: string;
+  tenantUserId: string;
+  period: ContractPeriod;
+}
+
 export type UpdateContractCmd = Partial<CreateContractCmd>;
 
 /* 2.5 Monthly Conditions */
@@ -75,11 +89,22 @@ export type CreateMonthlyConditionCmd = Pick<
 export type UpdateMonthlyConditionCmd = Partial<CreateMonthlyConditionCmd>;
 
 /* 2.6 Readings */
-export type CreateReadingCmd = Pick<ReadingDTO, "propertyId" | "readingAt" | "coldM3" | "hotM3" | "heatingGj">;
+export type CreateReadingCmd = Pick<ReadingDTO, "propertyId" | "readingAt" | "coldM3" | "hotM3" | "heatingGj"> &
+  Partial<Pick<ReadingDTO, "commentText" | "commentVisibleToTenant">>;
+
 export type UpdateReadingCmd = Partial<CreateReadingCmd>;
 
-export interface CreateReadingReplacementCmd {
+export type CreateReadingReplacementCmd = Pick<
+  ReadingDTO,
+  "propertyId" | "readingAt" | "coldM3" | "hotM3" | "heatingGj"
+> & {
   effectiveMonth: string;
+} & Partial<Pick<ReadingDTO, "commentText" | "commentVisibleToTenant">>;
+
+export interface RecalculateAnchorsCmd {
+  propertyId: string;
+  fromMonth?: string;
+  toMonth?: string;
 }
 
 /* 2.7 Reports */
