@@ -16,33 +16,39 @@ export function RoleNav({ role, currentPath }: RoleNavProps): JSX.Element {
   const links = useMemo<NavLink[]>(() => {
     if (role === "admin") {
       return [
-        { href: "/admin/properties", label: "Properties" },
-        { href: "/admin/contracts", label: "Contracts" },
-        { href: "/admin/monthly-conditions", label: "Monthly" },
-        { href: "/admin/readings", label: "Readings" },
-        { href: "/admin/tasks", label: "Tasks" },
+        { href: "/admin/properties", label: "Nieruchomości" },
+        { href: "/admin/contracts", label: "Umowy" },
+        { href: "/admin/monthly-conditions", label: "Warunki miesięczne" },
+        { href: "/admin/readings", label: "Odczyty" },
+        { href: "/admin/reports", label: "Raporty" },
+        { href: "/admin/tasks", label: "Zadania" },
       ];
     }
 
     return [
-      { href: "/app/my-property", label: "My Property" },
-      { href: "/app/readings", label: "My Readings" },
-      { href: "/app/reports", label: "My Reports" },
-      { href: "/app/profile", label: "Profile" },
+      { href: "/app/my-property", label: "Moja nieruchomość" },
+      { href: "/app/readings", label: "Odczyty" },
+      { href: "/app/reports", label: "Raporty" },
+      { href: "/app/profile", label: "Profil" },
     ];
   }, [role]);
 
   return (
-    <nav aria-label="Primary">
-      <ul role="list" style={{ display: "flex", gap: "0.75rem", padding: 0, margin: 0 }}>
+    <nav aria-label="Nawigacja główna">
+      <ul className="flex flex-wrap items-center gap-2">
         {links.map((link) => {
           const isCurrent = currentPath ? currentPath === link.href : false;
           return (
-            <li key={link.href} style={{ listStyle: "none" }}>
+            <li key={link.href}>
               <a
+                className={[
+                  "inline-flex items-center rounded-md border border-transparent px-3 py-1 text-sm font-medium transition",
+                  isCurrent
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                ].join(" ")}
                 href={link.href}
                 aria-current={isCurrent ? "page" : undefined}
-                style={{ textDecoration: isCurrent ? "underline" : "none" }}
               >
                 {link.label}
               </a>

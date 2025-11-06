@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { apiGet, apiPost, type ApiError } from "@/lib/client/http";
 import type { GenerateReportCmd, ReportDTO, ReportEmailAttemptDTO } from "@/types";
 
+const MONTH_STORAGE_KEY = "tenant-reports:month";
+
 interface TenantReportPermissions {
   canGenerate?: boolean;
   generateDisabledReason?: string | null;
@@ -30,7 +32,7 @@ interface TenantReportsTableProps {
 
 export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): JSX.Element {
   const { pushToast } = useToast();
-  const [month, setMonth] = useState<string>(() => initialMonth ?? getCurrentMonth());
+  const [month, setMonth] = useState<string>(() => resolveInitialMonth(initialMonth));
   const [items, setItems] = useState<TenantReportListItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -76,11 +78,19 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
     });
   }, [loadReports]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(MONTH_STORAGE_KEY, month);
+    replaceMonthParam(month);
+  }, [month]);
+
   const onMonthChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const nextMonth = event.target.value;
       setMonth(nextMonth);
-      replaceMonthParam(nextMonth);
     },
     []
   );
@@ -284,6 +294,27 @@ function getCurrentMonth(): string {
   const year = now.getFullYear();
   const month = `${now.getMonth() + 1}`.padStart(2, "0");
   return `${year}-${month}`;
+}
+
+function resolveInitialMonth(initialMonth?: string): string {
+  if (initialMonth) {
+    return initialMonth;
+  }
+
+  if (typeof window !== "undefined") {
+    const params = new URLSearchParams(window.location.search);
+    const queryMonth = params.get("month");
+    if (queryMonth) {
+      return queryMonth;
+    }
+
+    const stored = window.localStorage.getItem(MONTH_STORAGE_KEY);
+    if (stored) {
+      return stored;
+    }
+  }
+
+  return getCurrentMonth();
 }
 
 function buildListQuery(month: string): string {

@@ -2,12 +2,12 @@
 
 - [x] `ui-view-impl-01-Login.md`
 - [x] `ui-view-impl-02-TenantReadings.md`
-- [ ] `ui-view-impl-03-TenantReportsList.md`
-- [ ] `ui-view-impl-04-TenantReportDetail.md`
-- [ ] `ui-view-impl-05-AdminReadings.md`
-- [ ] `ui-view-impl-06-AdminMonthlyConditions.md`
-- [ ] `ui-view-impl-07-AdminReportsList.md`
-- [ ] `ui-view-impl-08-AdminReportDetail.md`
+- [x] `ui-view-impl-03-TenantReportsList.md`
+- [x] `ui-view-impl-04-TenantReportDetail.md`
+- [x] `ui-view-impl-05-AdminReadings.md`
+- [x] `ui-view-impl-06-AdminMonthlyConditions.md`
+- [x] `ui-view-impl-07-AdminReportsList.md`
+- [x] `ui-view-impl-08-AdminReportDetail.md`
 - [ ] `ui-view-impl-09-AdminProperties.md`
 - [ ] `ui-view-impl-10-AdminContracts.md`
 - [ ] `ui-view-impl-11-AdminProfile.md`

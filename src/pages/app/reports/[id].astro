@@ -1,0 +1,46 @@
+---
+import Layout from "../../../../layouts/Layout.astro";
+import { RoleNav } from "@/components/nav/RoleNav";
+import { TenantReportDetailView } from "@/components/reports/TenantReportDetail";
+import { requireAuth } from "@/lib/api/auth";
+
+const auth = await requireAuth(Astro.request, Astro.locals);
+if (!auth.success) {
+  return auth.response;
+}
+
+if (auth.role !== "tenant") {
+  return Astro.redirect("/admin/reports");
+}
+
+const { id } = Astro.params;
+if (!id) {
+  return Astro.redirect("/app/reports");
+}
+
+const pageTitle = "Szczegóły raportu";
+---
+
+<Layout title={pageTitle}>
+  <a
+    class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-primary-foreground"
+    href="#main-content"
+  >
+    Przejdź do treści
+  </a>
+
+  <header class="border-b bg-card">
+    <div class="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-6">
+      <div>
+        <p class="text-sm text-muted-foreground">Panel najemcy</p>
+        <h1 class="text-2xl font-semibold text-foreground">{pageTitle}</h1>
+      </div>
+      <RoleNav client:only="react" currentPath="/app/reports" role="tenant" />
+    </div>
+  </header>
+
+  <main id="main-content" class="mx-auto w-full max-w-4xl px-4 py-8" role="main">
+    <TenantReportDetailView client:load reportId={id} />
+  </main>
+</Layout>
+

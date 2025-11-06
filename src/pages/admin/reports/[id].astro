@@ -1,7 +1,7 @@
 ---
-import Layout from "../../layouts/Layout.astro";
+import Layout from "../../../layouts/Layout.astro";
 import { RoleNav } from "@/components/nav/RoleNav";
-import { MonthlyConditionsTable } from "@/components/monthly/MonthlyConditionsTable";
+import { AdminReportDetail } from "@/components/reports/AdminReportDetail";
 import { requireAuth } from "@/lib/api/auth";
 
 const auth = await requireAuth(Astro.request, Astro.locals, { requireAdmin: true });
@@ -9,7 +9,8 @@ if (!auth.success) {
   return auth.response;
 }
 
-const pageTitle = "Warunki miesięczne";
+const reportId = Astro.params.id ?? "";
+const pageTitle = "Szczegóły raportu — administrator";
 ---
 
 <Layout title={pageTitle}>
@@ -26,11 +27,13 @@ const pageTitle = "Warunki miesięczne";
         <p class="text-sm text-muted-foreground">Panel administratora</p>
         <h1 class="text-2xl font-semibold text-foreground">{pageTitle}</h1>
       </div>
-      <RoleNav client:only="react" currentPath="/admin/monthly-conditions" role="admin" />
+      <RoleNav client:only="react" currentPath="/admin/reports" role="admin" />
     </div>
   </header>
 
   <main id="main-content" class="mx-auto w-full max-w-5xl px-4 py-8" role="main">
-    <MonthlyConditionsTable client:load />
+    <AdminReportDetail client:load reportId={reportId} />
   </main>
 </Layout>
+
+
