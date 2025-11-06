@@ -1,12 +1,4 @@
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
@@ -87,22 +79,18 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
     commentText: null as HTMLTextAreaElement | null,
   });
 
-  const refocusOnErrors = useCallback(
-    (errors: FieldErrors) => {
-      const order: FieldName[] = ["coldM3", "hotM3", "heatingGj", "readingAt", "commentText"];
-      const firstInvalid = order.find((field) => Boolean(errors[field]));
-      if (!firstInvalid) {
-        return;
-      }
+  const refocusOnErrors = useCallback((errors: FieldErrors) => {
+    const order: FieldName[] = ["coldM3", "hotM3", "heatingGj", "readingAt", "commentText"];
+    const firstInvalid = order.find((field) => Boolean(errors[field]));
+    if (!firstInvalid) {
+      return;
+    }
 
-      const target = fieldRefs.current[firstInvalid];
-      window.requestAnimationFrame(() => {
-        target?.focus({ preventScroll: false });
-      });
-    },
-    []
-  );
-
+    const target = fieldRefs.current[firstInvalid];
+    window.requestAnimationFrame(() => {
+      target?.focus({ preventScroll: false });
+    });
+  }, []);
   useEffect(() => {
     if (submitted) {
       refocusOnErrors(fieldErrors);
@@ -323,7 +311,10 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
       try {
         let saved: ReadingDTO;
         if (currentReading) {
-          const response = await apiPatch<ReadingResponse>(`/api/v1/readings/${encodeURIComponent(currentReading.id)}`, command);
+          const response = await apiPatch<ReadingResponse>(
+            `/api/v1/readings/${encodeURIComponent(currentReading.id)}`,
+            command
+          );
           saved = response.reading;
           pushToast({
             variant: "success",
@@ -453,7 +444,7 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
                   {currentReading.commentText}
                 </p>
               ) : null}
-        </div>
+            </div>
           ) : null}
         </div>
       </section>
@@ -483,7 +474,7 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
               <label className="text-sm font-medium text-foreground" htmlFor="readingAt">
                 Data i godzina odczytu
               </label>
-        <input
+              <input
                 ref={(node) => (fieldRefs.current.readingAt = node)}
                 aria-invalid={Boolean(fieldErrors.readingAt)}
                 className={buildInputClasses(fieldErrors.readingAt)}
@@ -497,15 +488,15 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
                   updateField("readingAt", parseLocalInput(event.target.value));
                 }}
                 required
-          type="datetime-local"
+                type="datetime-local"
                 value={toLocalInput(formState.readingAt)}
-        />
+              />
               {fieldErrors.readingAt ? (
                 <p className="text-sm text-destructive">{fieldErrors.readingAt}</p>
               ) : windowStatus.withinWindow && windowStatus.message ? (
                 <p className="text-sm text-muted-foreground">{windowStatus.message}</p>
               ) : null}
-      </div>
+            </div>
 
             <DecimalInputField
               ref={(node) => {
@@ -566,15 +557,15 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
               ) : (
                 <p className="text-xs text-muted-foreground">Wiadomość będzie widoczna dla administratora.</p>
               )}
-      </div>
-      </div>
+            </div>
+          </div>
 
           <div className="flex justify-end">
             <Button className="min-w-40" disabled={submitDisabled} type="submit">
               {pending ? "Zapisywanie..." : currentReading ? "Zapisz zmiany" : "Zapisz odczyt"}
             </Button>
-      </div>
-      </div>
+          </div>
+        </div>
       </section>
     </form>
   );
