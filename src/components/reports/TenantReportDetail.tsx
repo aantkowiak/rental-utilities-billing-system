@@ -13,8 +13,17 @@ interface TenantReportPermissions {
   sendEmailDisabledReason?: string | null;
 }
 
+interface TenantReportLineItem {
+  id: string;
+  label: string;
+  amountRaw: number | null;
+  description?: string | null;
+  category?: string | null;
+}
+
 interface TenantReportDetailResponse {
   report: ReportDTO;
+  lineItems?: TenantReportLineItem[] | null;
   lastEmailAttempt?: ReportEmailAttemptDTO | null;
   permissions?: TenantReportPermissions | null;
 }
@@ -30,8 +39,9 @@ const currencyFormatter = new Intl.NumberFormat("pl-PL", {
   maximumFractionDigits: 2,
 });
 
-const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
-  dateStyle: "long",
+const monthFormatter = new Intl.DateTimeFormat("pl-PL", {
+  month: "long",
+  year: "numeric",
 });
 
 const dateTimeFormatter = new Intl.DateTimeFormat("pl-PL", {
@@ -39,75 +49,155 @@ const dateTimeFormatter = new Intl.DateTimeFormat("pl-PL", {
   timeStyle: "short",
 });
 
-export function TenantReportDetail({ reportId }: TenantReportDetailProps): JSX.Element {
+function TenantReportDetailContent({ reportId }: TenantReportDetailProps): JSX.Element {
   const { pushToast } = useToast();
+
   const [report, setReport] = useState<ReportDTO | null>(null);
+  const [lineItems, setLineItems] = useState<TenantReportLineItem[]>([]);
   const [lastEmailAttempt, setLastEmailAttempt] = useState<ReportEmailAttemptDTO | null>(null);
   const [permissions, setPermissions] = useState<TenantReportPermissions | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
-  const [pendingAction, setPendingAction] = useState<boolean>(false);
-
-  const canResend = useMemo(() => {
-    if (!permissions) {
-      return false;
-    }
-
-    if (permissions.sendEmailDisabledReason) {
-      return false;
-    }
-
-    return Boolean(permissions.canSendEmail);
-  }, [permissions]);
+  const [actionAccessError, setActionAccessError] = useState<string | null>(null);
+  const [pendingResend, setPendingResend] = useState(false);
 
   const loadDetail = useCallback(async () => {
+    if (!reportId) {
+      setReport(null);
+      setLineItems([]);
+      setLastEmailAttempt(null);
+      setPermissions(null);
+      setFetchError("Brak identyfikatora raportu.");
+      setAccessError(null);
+      setActionAccessError(null);
+      return;
+    }
+
     setLoading(true);
     setFetchError(null);
     setAccessError(null);
+    setActionAccessError(null);
 
     try {
-      const response = await apiGet<TenantReportDetailResponse>(
-        `/api/v1/reports/${encodeURIComponent(reportId)}`
-      );
+      const response = await apiGet<TenantReportDetailResponse>(`/api/v1/reports/${encodeURIComponent(reportId)}`);
       setReport(response.report);
+      setLineItems(Array.isArray(response.lineItems) ? response.lineItems : []);
       setLastEmailAttempt(response.lastEmailAttempt ?? null);
       setPermissions(response.permissions ?? null);
     } catch (error) {
       const apiError = toApiError(error);
 
-      if (apiError.code === "forbidden") {
+      if (apiError.code === "forbidden" || apiError.status === 403) {
         setAccessError(apiError.message);
         setReport(null);
+        setLineItems([]);
+        setLastEmailAttempt(null);
+        setPermissions(null);
+        return;
+      }
+
+      if (apiError.code === "not_found" || apiError.status === 404) {
+        setFetchError(apiError.message || "Nie znaleziono raportu.");
+        setReport(null);
+        setLineItems([]);
         setLastEmailAttempt(null);
         setPermissions(null);
         return;
       }
 
       setFetchError(apiError.message);
-      setReport(null);
-      setLastEmailAttempt(null);
-      setPermissions(null);
+
+      const shouldShowToast = !apiError.status || apiError.status >= 500 || apiError.status === 409;
+      if (shouldShowToast) {
+        pushToast({
+          variant: "error",
+          title: "Nie udało się pobrać raportu",
+          description: apiError.message,
+        });
+      }
     } finally {
       setLoading(false);
     }
-  }, [reportId]);
+  }, [pushToast, reportId]);
 
   useEffect(() => {
     loadDetail().catch(() => {
-      // błąd obsłużony w loadDetail
+      /* obsłużone wewnątrz loadDetail */
     });
   }, [loadDetail]);
 
+  const canResend = useMemo(() => {
+    if (!report) {
+      return false;
+    }
+
+    if (!permissions) {
+      return true;
+    }
+
+    if (permissions.sendEmailDisabledReason) {
+      return false;
+    }
+
+    if (permissions.canSendEmail === undefined) {
+      return true;
+    }
+
+    return Boolean(permissions.canSendEmail);
+  }, [permissions, report]);
+
+  const resendDisabledReason = permissions?.sendEmailDisabledReason ?? null;
+  const showFetchError = Boolean(fetchError) && !report;
+
+  const displayLineItems = useMemo(() => {
+    if (lineItems.length > 0) {
+      return lineItems;
+    }
+
+    if (!report) {
+      return [];
+    }
+
+    return [
+      {
+        id: "actual-rent",
+        label: "Czynsz bieżący",
+        amountRaw: report.actualRentRaw,
+      },
+      {
+        id: "fixed-cost",
+        label: "Koszty stałe",
+        amountRaw: report.fixedCostRaw,
+      },
+      {
+        id: "meter-cold",
+        label: "Koszt zimnej wody",
+        amountRaw: report.meterCostColdRaw,
+      },
+      {
+        id: "meter-hot",
+        label: "Koszt ciepłej wody",
+        amountRaw: report.meterCostHotRaw,
+      },
+      {
+        id: "meter-heating",
+        label: "Koszt ogrzewania",
+        amountRaw: report.meterCostHeatingRaw,
+      },
+    ];
+  }, [lineItems, report]);
+
   const handleResend = useCallback(async () => {
-    if (pendingAction || !canResend) {
+    if (!report || pendingResend || !canResend) {
       return;
     }
 
-    setPendingAction(true);
+    setPendingResend(true);
+    setActionAccessError(null);
 
     try {
-      await apiPost<void>(`/api/v1/reports/${encodeURIComponent(reportId)}/send-email`);
+      await apiPost<void>(`/api/v1/reports/${encodeURIComponent(report.id)}/send-email`);
       pushToast({
         variant: "success",
         title: "E-mail wysłany",
@@ -117,104 +207,136 @@ export function TenantReportDetail({ reportId }: TenantReportDetailProps): JSX.E
     } catch (error) {
       const apiError = toApiError(error);
 
-      if (apiError.code === "forbidden") {
-        pushToast({
-          variant: "error",
-          title: "Brak uprawnień",
-          description: apiError.message,
-        });
+      if (apiError.code === "forbidden" || apiError.status === 403) {
+        setActionAccessError(apiError.message);
       } else {
         pushToast({
           variant: "error",
           title: "Nie udało się wysłać e-maila",
           description: apiError.message,
         });
-      }
 
-      if (apiError.code === "conflict") {
-        await loadDetail();
+        if (apiError.code === "conflict" || apiError.status === 409) {
+          await loadDetail();
+        }
       }
     } finally {
-      setPendingAction(false);
+      setPendingResend(false);
     }
-  }, [canResend, loadDetail, pendingAction, pushToast, reportId]);
+  }, [canResend, loadDetail, pendingResend, pushToast, report]);
 
-  const resendDisabledReason = permissions?.sendEmailDisabledReason;
+  const shouldShowEmptyState = !loading && !report && !accessError && !showFetchError;
 
   return (
     <section className="space-y-6">
       {accessError ? <ErrorAlert error={accessError} /> : null}
-      {fetchError ? <ErrorAlert error={fetchError} /> : null}
+      {showFetchError && fetchError ? <ErrorAlert error={fetchError} /> : null}
+      {actionAccessError ? <ErrorAlert error={actionAccessError} /> : null}
 
       {loading ? <p className="text-sm text-muted-foreground">Ładowanie raportu…</p> : null}
 
-      {!loading && !report && !accessError ? (
-        <p className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-sm text-muted-foreground">
+      {shouldShowEmptyState ? (
+        <p className="rounded-md border border-dashed border-muted bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
           Nie znaleziono danych raportu.
         </p>
       ) : null}
 
       {report ? (
         <article className="space-y-6">
-          <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="space-y-1">
               <h2 className="text-2xl font-semibold text-foreground">{formatMonth(report.month)}</h2>
               <p className="text-sm text-muted-foreground">{formatStatus(report.status)}</p>
+              <p className="text-xs text-muted-foreground">
+                Kontrakt: <span className="font-medium text-foreground">{report.contractId}</span>
+              </p>
             </div>
-
-            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-              {canResend ? (
-                <Button disabled={pendingAction} onClick={handleResend} type="button">
-                  {pendingAction ? "Wysyłanie…" : "Wyślij ponownie"}
-                </Button>
-              ) : resendDisabledReason ? (
-                <span className="text-xs text-muted-foreground" title={resendDisabledReason ?? undefined}>
-                  {resendDisabledReason}
-                </span>
-              ) : null}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                disabled={pendingResend || !canResend}
+                onClick={() => {
+                  handleResend().catch(() => {
+                    /* obsłużone w handleResend */
+                  });
+                }}
+                title={resendDisabledReason ?? undefined}
+              >
+                {pendingResend ? "Wysyłanie…" : "Wyślij ponownie"}
+              </Button>
             </div>
           </header>
 
           <section className="rounded-lg border bg-card p-6 shadow-sm">
-            <h3 className="text-base font-semibold text-foreground">Podsumowanie</h3>
-            <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-1">
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground">Identyfikator umowy</dt>
-                <dd className="text-sm font-medium text-foreground">{report.contractId}</dd>
-              </div>
-              <div className="space-y-1">
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground">Status realizacji</dt>
-                <dd className="text-sm font-medium text-foreground">
-                  {report.realizedAt ? `Zaksięgowany ${formatDateTime(report.realizedAt)}` : "Nie zrealizowany"}
-                </dd>
-              </div>
-              <div className="space-y-1">
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground">Utworzono</dt>
-                <dd className="text-sm text-foreground">{formatDateTime(report.createdAt)}</dd>
-              </div>
-              <div className="space-y-1">
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground">Ostatnia aktualizacja</dt>
-                <dd className="text-sm text-foreground">{formatDateTime(report.updatedAt)}</dd>
-              </div>
+            <h3 className="text-base font-semibold text-foreground">Metadane</h3>
+            <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+              <MetadataItem label="Identyfikator raportu" value={report.id} />
+              <MetadataItem label="Utworzono" value={formatDateTime(report.createdAt)} />
+              <MetadataItem label="Ostatnia aktualizacja" value={formatDateTime(report.updatedAt)} />
+              <MetadataItem
+                label="Zaksięgowano"
+                value={report.realizedAt ? formatDateTime(report.realizedAt) : "Nie zaksięgowano"}
+              />
             </dl>
           </section>
 
           <section className="rounded-lg border bg-card p-6 shadow-sm">
-            <h3 className="text-base font-semibold text-foreground">Kwoty</h3>
-            <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <h3 className="text-base font-semibold text-foreground">Pozycje rozliczenia</h3>
+            <div className="mt-4 overflow-hidden rounded-md border">
+              {displayLineItems.length > 0 ? (
+                <table className="w-full border-separate border-spacing-0 text-sm">
+                  <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium">Pozycja</th>
+                      <th className="px-4 py-2 text-left font-medium">Opis</th>
+                      <th className="px-4 py-2 text-right font-medium">Kwota</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayLineItems.map((item) => (
+                      <tr key={item.id} className="border-t border-border bg-background/80">
+                        <td className="px-4 py-2">
+                          <div className="flex flex-col">
+                            <span className="font-medium text-foreground">{item.label}</span>
+                            {item.category ? (
+                              <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                                {item.category}
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 text-sm text-muted-foreground">
+                          {item.description ? item.description : "—"}
+                        </td>
+                        <td className="px-4 py-2 text-right text-sm font-medium text-foreground">
+                          {formatMoney(item.amountRaw)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="px-4 py-3 text-sm text-muted-foreground">Brak pozycji w raporcie.</p>
+              )}
+            </div>
+          </section>
+
+          <section className="rounded-lg border bg-card p-6 shadow-sm">
+            <h3 className="text-base font-semibold text-foreground">Podsumowanie kwot</h3>
+            <dl className="mt-4 grid gap-4 sm:grid-cols-2">
               <AmountItem label="Czynsz bieżący" value={report.actualRentRaw} />
               <AmountItem label="Koszty stałe" value={report.fixedCostRaw} />
-              <AmountItem label="Koszt zużycia wody zimnej" value={report.meterCostColdRaw} />
-              <AmountItem label="Koszt zużycia wody ciepłej" value={report.meterCostHotRaw} />
+              <AmountItem label="Koszt zużycia zimnej wody" value={report.meterCostColdRaw} />
+              <AmountItem label="Koszt zużycia ciepłej wody" value={report.meterCostHotRaw} />
               <AmountItem label="Koszt ogrzewania" value={report.meterCostHeatingRaw} />
               <AmountItem label="Saldo" value={report.balanceRaw} emphasize />
             </dl>
           </section>
 
-          <section className="rounded-lg border bg-card p-6 shadow-sm space-y-4">
-            <h3 className="text-base font-semibold text-foreground">Ostatnia wysyłka e-mail</h3>
+          <section className="rounded-lg border bg-card p-6 shadow-sm">
+            <h3 className="text-base font-semibold text-foreground">Ostatnia próba wysyłki e-mail</h3>
             {lastEmailAttempt ? (
-              <div className="space-y-1 text-sm">
+              <div className="mt-3 space-y-1 text-sm">
                 <p className="font-medium text-foreground">{formatDateTime(lastEmailAttempt.attemptedAt)}</p>
                 <p className="text-muted-foreground">
                   Status: {lastEmailAttempt.status}
@@ -222,7 +344,7 @@ export function TenantReportDetail({ reportId }: TenantReportDetailProps): JSX.E
                 </p>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">Brak informacji o próbach wysyłki.</p>
+              <p className="mt-3 text-sm text-muted-foreground">Brak wysyłek dla tego raportu.</p>
             )}
           </section>
         </article>
@@ -231,13 +353,15 @@ export function TenantReportDetail({ reportId }: TenantReportDetailProps): JSX.E
   );
 }
 
-export function TenantReportDetailView(props: TenantReportDetailProps): JSX.Element {
+export function TenantReportDetail(props: TenantReportDetailProps): JSX.Element {
   return (
     <ToastProvider>
-      <TenantReportDetail {...props} />
+      <TenantReportDetailContent {...props} />
     </ToastProvider>
   );
 }
+
+export const TenantReportDetailView = TenantReportDetail;
 
 interface AmountItemProps {
   label: string;
@@ -252,6 +376,20 @@ function AmountItem({ label, value, emphasize }: AmountItemProps): JSX.Element {
       <dd className={emphasize ? "text-base font-semibold text-foreground" : "text-sm text-foreground"}>
         {formatMoney(value)}
       </dd>
+    </div>
+  );
+}
+
+interface MetadataItemProps {
+  label: string;
+  value: string;
+}
+
+function MetadataItem({ label, value }: MetadataItemProps): JSX.Element {
+  return (
+    <div className="space-y-1">
+      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className="text-sm font-medium text-foreground">{value}</dd>
     </div>
   );
 }
@@ -275,17 +413,17 @@ function formatMonth(month: string): string {
     return month;
   }
 
-  return dateFormatter.format(date);
+  return monthFormatter.format(date);
 }
 
 function formatStatus(status: string): string {
   switch (status) {
+    case "pending":
+      return "Do wygenerowania";
     case "generated":
       return "Wygenerowany";
     case "realized":
       return "Zaksięgowany";
-    case "pending":
-      return "Do wygenerowania";
     default:
       return status;
   }
@@ -305,8 +443,16 @@ function formatDateTime(value: string | null | undefined): string {
 }
 
 function toApiError(error: unknown): ApiError {
-  if (error && typeof error === "object" && "code" in error && "message" in error) {
-    return error as ApiError;
+  if (error && typeof error === "object") {
+    const candidate = error as Partial<ApiError>;
+    if (typeof candidate.code === "string" && typeof candidate.message === "string") {
+      return {
+        code: candidate.code,
+        message: candidate.message,
+        details: candidate.details,
+        status: candidate.status,
+      };
+    }
   }
 
   return {
@@ -314,4 +460,5 @@ function toApiError(error: unknown): ApiError {
     message: error instanceof Error ? error.message : "Wystąpił nieoczekiwany błąd.",
   };
 }
+
 

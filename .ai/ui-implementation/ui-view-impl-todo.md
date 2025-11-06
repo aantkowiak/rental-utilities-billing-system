@@ -14,7 +14,7 @@
 - [x] `ui-view-impl-12-Login.md`
 - [x] `ui-view-impl-13-TenantReadings.md`
 - [x] `ui-view-impl-14-TenantReportsList.md`
-- [ ] `ui-view-impl-15-TenantReportDetail.md`
+- [x] `ui-view-impl-15-TenantReportDetail.md`
 - [ ] `ui-view-impl-16-AdminReadings.md`
 - [ ] `ui-view-impl-17-AdminMonthlyConditions.md`
 - [ ] `ui-view-impl-18-AdminReportsList.md`
