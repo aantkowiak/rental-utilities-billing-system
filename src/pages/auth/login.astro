@@ -1,42 +1,40 @@
 ---
 import Layout from "../../layouts/Layout.astro";
+import { LoginView } from "@/components/auth/LoginForm";
+
+const pageTitle = "Logowanie";
 ---
 
-<Layout title="Login">
-  <main style="display:grid;gap:1rem;padding:1rem;max-width:420px;margin:0 auto;">
-    <h1>Sign in</h1>
-    <form id="login-form" style="display:grid;gap:0.5rem" aria-label="Login form">
-      <label for="email">Email</label>
-      <input id="email" name="email" type="email" required placeholder="you@example.com" />
-      <button type="submit">Send magic link</button>
-      <div id="login-status" role="status" aria-live="polite"></div>
-    </form>
+<Layout title={pageTitle}>
+  <a
+    class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-primary-foreground"
+    href="#main-content"
+  >
+    Przejdź do treści
+  </a>
+
+  <main
+    id="main-content"
+    class="flex min-h-screen w-full items-center justify-center bg-background px-4 py-12"
+    role="main"
+  >
+    <div class="w-full max-w-md space-y-8">
+      <header class="space-y-4 text-center">
+        <div class="mx-auto flex size-12 items-center justify-center rounded-full border border-border bg-card shadow-sm">
+          <img alt="Rental Utilities Billing System" class="size-8" height="32" src="/favicon.png" width="32" />
+        </div>
+        <div class="space-y-2">
+          <p class="text-sm text-muted-foreground">Panel logowania</p>
+          <h1 class="text-3xl font-semibold tracking-tight">Zaloguj się</h1>
+          <p class="text-sm text-muted-foreground">
+            Wpisz adres e-mail, a wyślemy Ci link do zalogowania.
+          </p>
+        </div>
+      </header>
+
+      <LoginView client:load />
+    </div>
   </main>
-  <script>
-    const form = document.getElementById('login-form');
-    const statusEl = document.getElementById('login-status');
-    form?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const fd = new FormData(form);
-      const email = fd.get('email');
-      statusEl.textContent = '';
-      try {
-        const res = await fetch('/api/v1/auth/magic-link', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email }),
-        });
-        if (!res.ok) {
-          // still show success per API contract preventing enumeration
-          statusEl.textContent = 'If the email exists, a magic link was sent.';
-          return;
-        }
-        statusEl.textContent = 'Check your email for a magic link.';
-      } catch (err) {
-        statusEl.textContent = 'If the email exists, a magic link was sent.';
-      }
-    });
-  </script>
 </Layout>
 
 

@@ -27,6 +27,7 @@ export function RoleNav({ role, currentPath }: RoleNavProps): JSX.Element {
     return [
       { href: "/app/my-property", label: "My Property" },
       { href: "/app/readings", label: "My Readings" },
+      { href: "/app/reports", label: "My Reports" },
       { href: "/app/profile", label: "Profile" },
     ];
   }, [role]);
