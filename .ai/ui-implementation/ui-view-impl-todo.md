@@ -8,9 +8,9 @@
 - [x] `ui-view-impl-06-AdminMonthlyConditions.md`
 - [x] `ui-view-impl-07-AdminReportsList.md`
 - [x] `ui-view-impl-08-AdminReportDetail.md`
-- [ ] `ui-view-impl-09-AdminProperties.md`
-- [ ] `ui-view-impl-10-AdminContracts.md`
-- [ ] `ui-view-impl-11-AdminProfile.md`
+- [x] `ui-view-impl-09-AdminProperties.md`
+- [x] `ui-view-impl-10-AdminContracts.md`
+- [x] `ui-view-impl-11-AdminProfile.md`
 - [ ] `ui-view-impl-12-Login.md`
 - [ ] `ui-view-impl-13-TenantReadings.md`
 - [ ] `ui-view-impl-14-TenantReportsList.md`

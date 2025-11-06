@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import type { JSX } from "react";
 
 export type UserRole = "admin" | "tenant";
 
@@ -22,6 +23,7 @@ export function RoleNav({ role, currentPath }: RoleNavProps): JSX.Element {
         { href: "/admin/readings", label: "Odczyty" },
         { href: "/admin/reports", label: "Raporty" },
         { href: "/admin/tasks", label: "Zadania" },
+        { href: "/admin/profile", label: "Profil" },
       ];
     }
 
