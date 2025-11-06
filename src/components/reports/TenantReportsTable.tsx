@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
+import type { JSX } from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
@@ -37,7 +38,8 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
   const [loading, setLoading] = useState<boolean>(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
-  const [pendingAction, setPendingAction] = useState<boolean>(false);
+  const [pendingGenerateId, setPendingGenerateId] = useState<string | null>(null);
+  const [pendingResendId, setPendingResendId] = useState<string | null>(null);
 
   const listQuery = useMemo(() => buildListQuery(month), [month]);
 
@@ -83,17 +85,22 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
       return;
     }
 
-    window.localStorage.setItem(MONTH_STORAGE_KEY, month);
-    replaceMonthParam(month);
+    const sanitized = sanitizeMonth(month);
+    const next = sanitized ?? getCurrentMonth();
+
+    if (next !== month) {
+      setMonth(next);
+      return;
+    }
+
+    window.localStorage.setItem(MONTH_STORAGE_KEY, next);
+    replaceMonthParam(next);
   }, [month]);
 
-  const onMonthChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const nextMonth = event.target.value;
-      setMonth(nextMonth);
-    },
-    []
-  );
+  const onMonthChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const nextMonth = sanitizeMonth(event.target.value);
+    setMonth(nextMonth ?? getCurrentMonth());
+  }, []);
 
   const handleActionError = useCallback(
     (error: ApiError) => {
@@ -117,11 +124,11 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
 
   const handleGenerate = useCallback(
     async (item: TenantReportListItem) => {
-      if (pendingAction || !canGenerate(item)) {
+      if (!canGenerate(item) || pendingGenerateId || pendingResendId) {
         return;
       }
 
-      setPendingAction(true);
+      setPendingGenerateId(item.report.id);
 
       const payload: GenerateReportCmd = {
         contractId: item.report.contractId,
@@ -129,7 +136,7 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
       };
 
       try {
-        await apiPost<void>("/api/v1/reports/generate", payload);
+        await apiPost("/api/v1/reports/generate", payload);
         pushToast({
           variant: "success",
           title: "Raport generowany",
@@ -144,22 +151,22 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
           await loadReports();
         }
       } finally {
-        setPendingAction(false);
+        setPendingGenerateId(null);
       }
     },
-    [loadReports, month, pendingAction, pushToast]
+    [handleActionError, loadReports, month, pendingGenerateId, pendingResendId, pushToast]
   );
 
   const handleResend = useCallback(
     async (item: TenantReportListItem) => {
-      if (pendingAction || !canSendEmail(item)) {
+      if (!canSendEmail(item) || pendingResendId || pendingGenerateId) {
         return;
       }
 
-      setPendingAction(true);
+      setPendingResendId(item.report.id);
 
       try {
-        await apiPost<void>(`/api/v1/reports/${encodeURIComponent(item.report.id)}/send-email`);
+        await apiPost(`/api/v1/reports/${encodeURIComponent(item.report.id)}/send-email`);
         pushToast({
           variant: "success",
           title: "E-mail wysłany",
@@ -174,10 +181,10 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
           await loadReports();
         }
       } finally {
-        setPendingAction(false);
+        setPendingResendId(null);
       }
     },
-    [loadReports, pendingAction, pushToast]
+    [handleActionError, loadReports, pendingGenerateId, pendingResendId, pushToast]
   );
 
   const monthInputId = useMemo(() => `reports-month-${Math.random().toString(36).slice(2)}`, []);
@@ -195,7 +202,7 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
             className="w-48 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
             value={month}
             onChange={onMonthChange}
-            disabled={loading || pendingAction}
+            disabled={loading || Boolean(pendingGenerateId) || Boolean(pendingResendId)}
             aria-describedby={`${monthInputId}-help`}
           />
           <p className="text-xs text-muted-foreground" id={`${monthInputId}-help`}>
@@ -224,54 +231,53 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => {
-                  return (
-                    <tr key={item.report.id} className="rounded-lg border border-border bg-background/60 text-sm shadow-sm">
-                      <td className="px-4 py-3 align-top">
-                        <a className="font-medium text-foreground underline-offset-2 hover:underline" href={`/app/reports/${item.report.id}`}>
-                          {formatMonth(item.report.month)}
-                        </a>
-                      </td>
-                      <td className="px-4 py-3 align-top">{formatStatus(item.report.status)}</td>
-                      <td className="px-4 py-3 align-top text-xs text-muted-foreground">
-                        {renderEmailAttempt(item.lastEmailAttempt)}
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                        <div className="flex justify-end gap-2">
-                          {canGenerate(item) ? (
-                            <Button
-                              type="button"
-                              disabled={pendingAction}
-                              onClick={() => handleGenerate(item)}
-                              title={item.permissions?.generateDisabledReason ?? undefined}
-                            >
-                              Generuj
-                            </Button>
-                          ) : item.permissions?.generateDisabledReason ? (
-                            <span className="text-xs text-muted-foreground" title={item.permissions.generateDisabledReason ?? undefined}>
-                              {item.permissions.generateDisabledReason}
-                            </span>
-                          ) : null}
-                          {canSendEmail(item) ? (
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              disabled={pendingAction}
-                              onClick={() => handleResend(item)}
-                              title={item.permissions?.sendEmailDisabledReason ?? undefined}
-                            >
-                              Wyślij ponownie
-                            </Button>
-                          ) : item.permissions?.sendEmailDisabledReason ? (
-                            <span className="text-xs text-muted-foreground" title={item.permissions.sendEmailDisabledReason ?? undefined}>
-                              {item.permissions.sendEmailDisabledReason}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {items.map((item) => (
+                  <tr
+                    key={item.report.id}
+                    className="rounded-lg border border-border bg-background/60 text-sm shadow-sm"
+                  >
+                    <td className="px-4 py-3 align-top">
+                      <a
+                        className="font-medium text-foreground underline-offset-2 hover:underline"
+                        href={`/app/reports/${item.report.id}`}
+                      >
+                        {formatMonth(item.report.month)}
+                      </a>
+                    </td>
+                    <td className="px-4 py-3 align-top">{formatStatus(item.report.status)}</td>
+                    <td className="px-4 py-3 align-top text-xs text-muted-foreground">
+                      {renderEmailAttempt(item.lastEmailAttempt)}
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          disabled={
+                            !canGenerate(item) || pendingGenerateId === item.report.id || Boolean(pendingResendId)
+                          }
+                          onClick={() => handleGenerate(item)}
+                          title={item.permissions?.generateDisabledReason ?? undefined}
+                          variant="default"
+                          aria-disabled={!canGenerate(item)}
+                        >
+                          Generuj
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={
+                            !canSendEmail(item) || pendingResendId === item.report.id || Boolean(pendingGenerateId)
+                          }
+                          onClick={() => handleResend(item)}
+                          title={item.permissions?.sendEmailDisabledReason ?? undefined}
+                          aria-disabled={!canSendEmail(item)}
+                        >
+                          Wyślij ponownie
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -295,26 +301,33 @@ function getCurrentMonth(): string {
   const month = `${now.getMonth() + 1}`.padStart(2, "0");
   return `${year}-${month}`;
 }
-
 function resolveInitialMonth(initialMonth?: string): string {
-  if (initialMonth) {
-    return initialMonth;
-  }
+  const candidates: (string | null)[] = [
+    initialMonth ?? null,
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("month") : null,
+    typeof window !== "undefined" ? window.localStorage.getItem(MONTH_STORAGE_KEY) : null,
+  ];
 
-  if (typeof window !== "undefined") {
-    const params = new URLSearchParams(window.location.search);
-    const queryMonth = params.get("month");
-    if (queryMonth) {
-      return queryMonth;
-    }
-
-    const stored = window.localStorage.getItem(MONTH_STORAGE_KEY);
-    if (stored) {
-      return stored;
+  for (const candidate of candidates) {
+    const sanitized = sanitizeMonth(candidate);
+    if (sanitized) {
+      return sanitized;
     }
   }
 
   return getCurrentMonth();
+}
+
+function sanitizeMonth(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) {
+    return null;
+  }
+
+  return value;
 }
 
 function buildListQuery(month: string): string {
@@ -433,5 +446,3 @@ function toApiError(error: unknown): ApiError {
     message: error instanceof Error ? error.message : "Wystąpił nieoczekiwany błąd.",
   };
 }
-
-
