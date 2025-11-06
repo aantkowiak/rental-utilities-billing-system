@@ -7,13 +7,13 @@ import { Button } from "@/components/ui/button";
 import type { ApiError } from "@/lib/client/http";
 import { apiPost } from "@/lib/client/http";
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
+type FormStatus = "idle" | "pending" | "success" | "error";
 
 export function LoginForm(): JSX.Element {
   const [email, setEmail] = useState("");
-  const [pending, setPending] = useState(false);
+  const [status, setStatus] = useState<FormStatus>("idle");
   const [fieldError, setFieldError] = useState<string | null>(null);
-  const [formError, setFormError] = useState<ApiError | string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const emailFieldId = useId();
@@ -21,83 +21,82 @@ export function LoginForm(): JSX.Element {
   const emailInputRef = useRef<HTMLInputElement>(null);
   const { pushToast } = useToast();
 
-  const validateEmail = useCallback((value: string): string | null => {
-    if (!value) {
-      return "Podaj adres e-mail.";
-    }
-
-    if (!EMAIL_PATTERN.test(value)) {
-      return "Podaj poprawny adres e-mail.";
-    }
-
-    return null;
-  }, []);
-
-  const focusEmailField = useCallback(() => {
-    if (emailInputRef.current) {
-      emailInputRef.current.focus();
-      emailInputRef.current.select();
-    }
-  }, []);
+  const isDisabled = status === "pending";
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      if (pending) return;
-
-      const trimmedEmail = email.trim();
-      const validationError = validateEmail(trimmedEmail);
-
-      setFormError(null);
-      setSuccessMessage(null);
-
-      if (validationError) {
-        setFieldError(validationError);
-        focusEmailField();
+      if (status === "pending") {
         return;
       }
 
+      const form = event.currentTarget;
+      const emailInput = emailInputRef.current;
+      if (!emailInput) {
+        return;
+      }
+
+      setApiError(null);
+      setSuccessMessage(null);
       setFieldError(null);
-      setPending(true);
+
+      const trimmed = emailInput.value.trim();
+      emailInput.value = trimmed;
+      setEmail(trimmed);
+
+      emailInput.setCustomValidity("");
+      if (!trimmed) {
+        emailInput.setCustomValidity("Podaj adres e-mail.");
+      }
+
+      if (!form.reportValidity()) {
+        const message = emailInput.validationMessage || "Podaj poprawny adres e-mail.";
+        setFieldError(message);
+        setStatus("error");
+        emailInput.focus();
+        emailInput.select();
+        return;
+      }
+
+      setStatus("pending");
 
       try {
-        await apiPost<{ status: string }>("/api/v1/auth/magic-link", { email: trimmedEmail });
+        await apiPost<{ status: string }>("/api/v1/auth/magic-link", { email: trimmed });
+        setStatus("success");
         setSuccessMessage("Jeśli konto istnieje, wysłaliśmy link logowania na wskazany adres.");
-        setEmail(trimmedEmail);
       } catch (error) {
-        if (isApiError(error)) {
-          if (error.status === 400 || error.status === 422) {
-            setFieldError(error.message);
-            focusEmailField();
-            return;
-          }
-
-          setFormError(error);
-          focusEmailField();
+        const normalized = toApiError(error);
+        if (normalized.status === 400 || normalized.status === 422) {
+          setFieldError(normalized.message);
+          emailInput.focus();
+          emailInput.select();
+          setStatus("error");
           return;
         }
 
+        setApiError(normalized.message);
+        setStatus("error");
         pushToast({
           title: "Nie udało się wysłać linku",
-          description: "Spróbuj ponownie za chwilę.",
+          description: normalized.message,
           variant: "error",
         });
       } finally {
-        setPending(false);
+        setStatus((previous) => (previous === "pending" ? "idle" : previous));
       }
     },
-    [email, focusEmailField, pending, pushToast, validateEmail]
+    [pushToast, status]
   );
 
   const describedById = fieldError ? `${emailFieldId}-error` : `${emailFieldId}-hint`;
 
   return (
-    <form aria-labelledby="login-form-title" className="space-y-6" noValidate onSubmit={handleSubmit}>
+    <form aria-labelledby="login-form-title" className="space-y-4" noValidate onSubmit={handleSubmit}>
       <h2 className="sr-only" id="login-form-title">
         Formularz logowania
       </h2>
 
-      <ErrorAlert error={formError} />
+      <ErrorAlert error={apiError} />
 
       <div className="space-y-2">
         <label className="text-sm font-medium text-foreground" htmlFor={emailFieldId}>
@@ -109,14 +108,24 @@ export function LoginForm(): JSX.Element {
           aria-invalid={fieldError ? true : undefined}
           autoComplete="email"
           className={buildInputClasses(Boolean(fieldError))}
-          disabled={pending}
+          disabled={isDisabled}
           id={emailFieldId}
           inputMode="email"
           name="email"
           onChange={(event) => {
             setEmail(event.target.value);
+            emailInputRef.current?.setCustomValidity("");
             if (fieldError) {
               setFieldError(null);
+            }
+            if (apiError) {
+              setApiError(null);
+            }
+            if (successMessage) {
+              setSuccessMessage(null);
+            }
+            if (status !== "idle" && status !== "pending") {
+              setStatus("idle");
             }
           }}
           placeholder="nazwa@przyklad.pl"
@@ -136,8 +145,8 @@ export function LoginForm(): JSX.Element {
       </div>
 
       <div className="space-y-3">
-        <Button className="w-full" disabled={pending} type="submit">
-          {pending ? "Wysyłanie..." : "Wyślij link logowania"}
+        <Button className="w-full" disabled={isDisabled} type="submit">
+          {isDisabled ? "Wysyłanie..." : "Wyślij link logowania"}
         </Button>
 
         <div
@@ -165,12 +174,15 @@ export function LoginView(): JSX.Element {
   );
 }
 
-function isApiError(error: unknown): error is ApiError {
-  if (!error || typeof error !== "object") {
-    return false;
+function toApiError(error: unknown): ApiError {
+  if (error && typeof error === "object" && "code" in error && "message" in error) {
+    return error as ApiError;
   }
 
-  return "code" in error && "message" in error;
+  return {
+    code: "unexpected_error",
+    message: error instanceof Error ? error.message : "Wystąpił nieoczekiwany błąd.",
+  };
 }
 
 function buildInputClasses(hasError: boolean): string {

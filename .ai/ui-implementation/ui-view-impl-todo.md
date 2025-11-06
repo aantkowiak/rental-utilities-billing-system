@@ -11,8 +11,8 @@
 - [x] `ui-view-impl-09-AdminProperties.md`
 - [x] `ui-view-impl-10-AdminContracts.md`
 - [x] `ui-view-impl-11-AdminProfile.md`
-- [ ] `ui-view-impl-12-Login.md`
-- [ ] `ui-view-impl-13-TenantReadings.md`
+- [x] `ui-view-impl-12-Login.md`
+- [x] `ui-view-impl-13-TenantReadings.md`
 - [ ] `ui-view-impl-14-TenantReportsList.md`
 - [ ] `ui-view-impl-15-TenantReportDetail.md`
 - [ ] `ui-view-impl-16-AdminReadings.md`

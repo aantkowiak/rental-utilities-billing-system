@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import type { JSX } from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
@@ -224,7 +225,8 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
         return prev;
       }
 
-      const { [field as FieldName]: _removed, ...rest } = prev;
+      const { [field as FieldName]: removedValue, ...rest } = prev;
+      void removedValue;
       return rest;
     });
   }, []);
@@ -292,12 +294,16 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
         return;
       }
 
+      if (cold === null || hot === null || heating === null || !readingDate) {
+        return;
+      }
+
       const payload: CreateReadingCmd = {
         propertyId: resolvedPropertyId,
-        readingAt: readingDate!.toISOString(),
-        coldM3: cold!,
-        hotM3: hot!,
-        heatingGj: heating!,
+        readingAt: readingDate.toISOString(),
+        coldM3: cold,
+        hotM3: hot,
+        heatingGj: heating,
       };
 
       const trimmedComment = formState.commentText.trim();
@@ -475,7 +481,9 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
                 Data i godzina odczytu
               </label>
               <input
-                ref={(node) => (fieldRefs.current.readingAt = node)}
+                ref={(node) => {
+                  fieldRefs.current.readingAt = node;
+                }}
                 aria-invalid={Boolean(fieldErrors.readingAt)}
                 className={buildInputClasses(fieldErrors.readingAt)}
                 disabled={readingAtDisabled}
@@ -543,7 +551,9 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
                 Notatka (opcjonalnie)
               </label>
               <textarea
-                ref={(node) => (fieldRefs.current.commentText = node)}
+                ref={(node) => {
+                  fieldRefs.current.commentText = node;
+                }}
                 className={buildTextareaClasses(fieldErrors.commentText)}
                 disabled={pending || Boolean(accessError) || !resolvedPropertyId}
                 id="commentText"
@@ -605,10 +615,12 @@ const DecimalInputField = forwardRef<HTMLInputElement, DecimalInputFieldProps>(
           disabled={disabled}
           id={id}
           inputMode="decimal"
+          min="0"
           name={name}
           onBlur={onBlur}
           onChange={(event) => onChange(event.target.value)}
           placeholder="0"
+          step="0.001"
           value={value}
         />
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
