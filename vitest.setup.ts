@@ -1,3 +1,5 @@
+import "@testing-library/jest-dom/vitest";
+
 const env = (
   globalThis as typeof globalThis & {
     process?: { env?: Record<string, string | undefined> };

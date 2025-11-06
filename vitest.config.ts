@@ -11,5 +11,6 @@ export default defineConfig({
   test: {
     environment: "node",
     setupFiles: ["./vitest.setup.ts"],
+    environmentMatchGlobs: [["src/components/**/__tests__/**", "jsdom"]],
   },
 });

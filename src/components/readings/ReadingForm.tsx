@@ -1,112 +1,815 @@
-import { useMemo, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 
-import { apiPost } from "@/lib/client/http";
+import { ErrorAlert } from "@/components/common/ErrorAlert";
+import { ToastProvider, useToast } from "@/components/common/ToastProvider";
+import { Button } from "@/components/ui/button";
+import type { ApiError } from "@/lib/client/http";
+import { apiGet, apiPatch, apiPost } from "@/lib/client/http";
+import type { CreateReadingCmd, ReadingDTO, UpdateReadingCmd } from "@/types";
+import type { ReadingListResponse, ReadingResponse } from "@/types/readings";
 
-const getParam = (name: string): string => {
-  const url = new URL(window.location.href);
-  return url.searchParams.get(name) ?? "";
-};
+const TIME_ZONE = "Europe/Warsaw";
+const DECIMAL_PRECISION = 3;
+const MS_IN_DAY = 86_400_000;
 
-export function ReadingForm(): JSX.Element {
-  const [propertyId, setPropertyId] = useState<string>(getParam("propertyId"));
-  const [readingAt, setReadingAt] = useState<string>(new Date().toISOString());
-  const [coldM3, setColdM3] = useState<number>(0);
-  const [hotM3, setHotM3] = useState<number>(0);
-  const [heatingGj, setHeatingGj] = useState<number>(0);
-  const [commentText, setCommentText] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+const decimalFormatter = new Intl.NumberFormat("pl-PL", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: DECIMAL_PRECISION,
+});
 
-  const onSubmit = async (e: React.FormEvent): Promise<void> => {
-    e.preventDefault();
-    setSubmitting(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      await apiPost("/api/v1/readings", {
-        propertyId,
-        readingAt,
-        coldM3,
-        hotM3,
-        heatingGj,
-        commentText: commentText || null,
+const readingDateFormatter = new Intl.DateTimeFormat("pl-PL", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: TIME_ZONE,
+});
+
+type DecimalField = "coldM3" | "hotM3" | "heatingGj";
+type FieldName = DecimalField | "readingAt" | "commentText";
+
+interface FormState {
+  readingAt: string;
+  coldM3: string;
+  hotM3: string;
+  heatingGj: string;
+  commentText: string;
+}
+
+interface WindowStatus {
+  withinWindow: boolean;
+  message: string | null;
+}
+
+interface ReadingFormProps {
+  propertyId: string | null;
+  /** Inject custom clock for tests */
+  nowFactory?: () => Date;
+}
+
+type FieldErrors = Partial<Record<FieldName, string>>;
+
+export function ReadingForm(props: ReadingFormProps): JSX.Element {
+  const { propertyId, nowFactory } = props;
+  const { pushToast } = useToast();
+
+  const resolvedPropertyId = useMemo(() => propertyId ?? getPropertyIdFromLocation(), [propertyId]);
+  const [formState, setFormState] = useState<FormState>(() => createEmptyForm(nowFactory?.() ?? new Date()));
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [accessError, setAccessError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [currentReading, setCurrentReading] = useState<ReadingDTO | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [nowTick, setNowTick] = useState<number>(() => (nowFactory?.() ?? new Date()).getTime());
+
+  const isDirtyRef = useRef(isDirty);
+  useEffect(() => {
+    isDirtyRef.current = isDirty;
+  }, [isDirty]);
+
+  const nowDate = useMemo(() => new Date(nowTick), [nowTick]);
+  const windowStatus = useMemo(() => computeWindowStatus(formState.readingAt, nowDate), [formState.readingAt, nowDate]);
+
+  const fieldRefs = useRef({
+    coldM3: null as HTMLInputElement | null,
+    hotM3: null as HTMLInputElement | null,
+    heatingGj: null as HTMLInputElement | null,
+    readingAt: null as HTMLInputElement | null,
+    commentText: null as HTMLTextAreaElement | null,
+  });
+
+  const refocusOnErrors = useCallback(
+    (errors: FieldErrors) => {
+      const order: FieldName[] = ["coldM3", "hotM3", "heatingGj", "readingAt", "commentText"];
+      const firstInvalid = order.find((field) => Boolean(errors[field]));
+      if (!firstInvalid) {
+        return;
+      }
+
+      const target = fieldRefs.current[firstInvalid];
+      window.requestAnimationFrame(() => {
+        target?.focus({ preventScroll: false });
       });
-      setSuccess("Reading submitted");
-    } catch (e) {
-      const err = e as { code?: string; message?: string };
-      setError(err.message ?? "Failed to submit reading");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    },
+    []
+  );
 
-  const readingAtLocal = useMemo(() => toLocalInput(readingAt), [readingAt]);
+  useEffect(() => {
+    if (submitted) {
+      refocusOnErrors(fieldErrors);
+    }
+  }, [fieldErrors, refocusOnErrors, submitted]);
+
+  const loadLatest = useCallback(async () => {
+    if (!resolvedPropertyId) {
+      setCurrentReading(null);
+      return;
+    }
+
+    setLoading(true);
+    setServerError(null);
+    setAccessError(null);
+    try {
+      const referenceDate = nowFactory?.() ?? new Date();
+      const { from, to } = getUtcMonthRange(referenceDate);
+      const query = new URLSearchParams({ propertyId: resolvedPropertyId, from, to });
+      const response = await apiGet<ReadingListResponse>(`/api/v1/readings?${query.toString()}`);
+      const items = response.items ?? [];
+
+      const monthKey = buildMonthKey(referenceDate);
+      const readingForMonth = items.find((item) => buildMonthKey(new Date(item.readingAt)) === monthKey);
+      const latest = readingForMonth ?? items[0] ?? null;
+
+      setCurrentReading(latest ?? null);
+
+      if (!isDirtyRef.current) {
+        if (latest) {
+          setFormState({
+            readingAt: latest.readingAt,
+            coldM3: formatDecimal(latest.coldM3),
+            hotM3: formatDecimal(latest.hotM3),
+            heatingGj: formatDecimal(latest.heatingGj),
+            commentText: latest.commentText ?? "",
+          });
+        } else {
+          setFormState(createEmptyForm(referenceDate));
+        }
+        setIsDirty(false);
+      }
+    } catch (error) {
+      const apiError = toApiError(error);
+      if (apiError.code === "forbidden") {
+        setAccessError(apiError.message);
+        return;
+      }
+
+      setServerError(apiError.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [nowFactory, resolvedPropertyId]);
+
+  const refetchTimer = useRef<number | null>(null);
+  const scheduleRefetch = useCallback(() => {
+    if (typeof window === "undefined" || pending || isDirtyRef.current) {
+      return;
+    }
+
+    if (refetchTimer.current) {
+      window.clearTimeout(refetchTimer.current);
+    }
+
+    refetchTimer.current = window.setTimeout(() => {
+      loadLatest().catch(() => {
+        /* no-op */
+      });
+    }, 350);
+  }, [loadLatest, pending]);
+
+  useEffect(() => {
+    loadLatest().catch(() => {
+      /* handled internally */
+    });
+  }, [loadLatest]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const onFocus = (): void => {
+      setNowTick(Date.now());
+      scheduleRefetch();
+    };
+
+    const onVisibilityChange = (): void => {
+      if (document.visibilityState === "visible") {
+        setNowTick(Date.now());
+        scheduleRefetch();
+      }
+    };
+
+    const interval = window.setInterval(() => {
+      setNowTick(Date.now());
+      scheduleRefetch();
+    }, 60_000);
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.clearInterval(interval);
+    };
+  }, [scheduleRefetch]);
+
+  useEffect(() => {
+    return () => {
+      if (refetchTimer.current) {
+        window.clearTimeout(refetchTimer.current);
+      }
+    };
+  }, []);
+
+  const updateField = useCallback((field: keyof FormState, value: string) => {
+    setFormState((prev) => {
+      if (prev[field] === value) {
+        return prev;
+      }
+
+      return { ...prev, [field]: value };
+    });
+
+    setIsDirty((prev) => (prev ? prev : true));
+    setFieldErrors((prev) => {
+      if (!prev[field as FieldName]) {
+        return prev;
+      }
+
+      const { [field as FieldName]: _removed, ...rest } = prev;
+      return rest;
+    });
+  }, []);
+
+  const clampFieldPrecision = useCallback((field: DecimalField) => {
+    setFormState((prev) => {
+      const value = prev[field];
+      const clamped = clampDecimalInput(value);
+      if (value === clamped) {
+        return prev;
+      }
+
+      return { ...prev, [field]: clamped };
+    });
+  }, []);
+
+  const handleSubmit = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      setSubmitted(true);
+      setServerError(null);
+      setAccessError(null);
+
+      if (!resolvedPropertyId) {
+        setServerError("Brak przypisanej nieruchomości. Skontaktuj się z administratorem.");
+        return;
+      }
+
+      const validationErrors: FieldErrors = {};
+
+      const cold = parseDecimal(formState.coldM3);
+      if (cold === null) {
+        validationErrors.coldM3 = "Podaj prawidłowy odczyt zimnej wody.";
+      }
+
+      const hot = parseDecimal(formState.hotM3);
+      if (hot === null) {
+        validationErrors.hotM3 = "Podaj prawidłowy odczyt ciepłej wody.";
+      }
+
+      const heating = parseDecimal(formState.heatingGj);
+      if (heating === null) {
+        validationErrors.heatingGj = "Podaj prawidłowy odczyt ogrzewania.";
+      }
+
+      const readingIso = formState.readingAt;
+      let readingDate: Date | null = null;
+      if (!readingIso) {
+        validationErrors.readingAt = "Wybierz datę i godzinę odczytu.";
+      } else {
+        const parsed = new Date(readingIso);
+        if (Number.isNaN(parsed.getTime())) {
+          validationErrors.readingAt = "Nieprawidłowa data odczytu.";
+        } else {
+          readingDate = parsed;
+        }
+      }
+
+      if (!windowStatus.withinWindow) {
+        validationErrors.readingAt = windowStatus.message ?? "Wybrana data jest poza dozwolonym oknem zgłoszenia.";
+      }
+
+      if (Object.keys(validationErrors).length > 0) {
+        setFieldErrors(validationErrors);
+        return;
+      }
+
+      const payload: CreateReadingCmd = {
+        propertyId: resolvedPropertyId,
+        readingAt: readingDate!.toISOString(),
+        coldM3: cold!,
+        hotM3: hot!,
+        heatingGj: heating!,
+      };
+
+      const trimmedComment = formState.commentText.trim();
+      if (trimmedComment) {
+        payload.commentText = trimmedComment;
+      }
+
+      const command: UpdateReadingCmd = payload;
+
+      setPending(true);
+      try {
+        let saved: ReadingDTO;
+        if (currentReading) {
+          const response = await apiPatch<ReadingResponse>(`/api/v1/readings/${encodeURIComponent(currentReading.id)}`, command);
+          saved = response.reading;
+          pushToast({
+            variant: "success",
+            title: "Zmieniono odczyt",
+            description: "Aktualne wartości zostały zapisane.",
+          });
+        } else {
+          const response = await apiPost<ReadingResponse>("/api/v1/readings", payload);
+          saved = response.reading;
+          pushToast({
+            variant: "success",
+            title: "Dodano odczyt",
+            description: "Dziękujemy! Odczyt został zapisany.",
+          });
+        }
+
+        setCurrentReading(saved);
+        setFieldErrors({});
+        setIsDirty(false);
+        setSubmitted(false);
+        setFormState({
+          readingAt: saved.readingAt,
+          coldM3: formatDecimal(saved.coldM3),
+          hotM3: formatDecimal(saved.hotM3),
+          heatingGj: formatDecimal(saved.heatingGj),
+          commentText: saved.commentText ?? "",
+        });
+        setNowTick(Date.now());
+      } catch (error) {
+        const apiError = toApiError(error);
+
+        if (apiError.code === "conflict") {
+          pushToast({
+            variant: "error",
+            title: "Nie zapisano odczytu",
+            description: apiError.message,
+          });
+          setIsDirty(false);
+          await loadLatest();
+          return;
+        }
+
+        if (apiError.code === "forbidden") {
+          setAccessError(apiError.message);
+          return;
+        }
+
+        if (apiError.code === "validation_error") {
+          const extracted = extractFieldErrors(apiError.details);
+          if (Object.keys(extracted).length > 0) {
+            setFieldErrors(extracted);
+            return;
+          }
+        }
+
+        pushToast({
+          variant: "error",
+          title: "Błąd zapisu odczytu",
+          description: apiError.message,
+        });
+      } finally {
+        setPending(false);
+      }
+    },
+    [currentReading, formState, loadLatest, pushToast, resolvedPropertyId, windowStatus]
+  );
+
+  const numericDisabled = pending || Boolean(accessError) || !resolvedPropertyId || !windowStatus.withinWindow;
+  const readingAtDisabled = pending || Boolean(accessError) || !resolvedPropertyId;
+  const submitDisabled = pending || !windowStatus.withinWindow || Boolean(accessError) || !resolvedPropertyId;
 
   return (
-    <form aria-label="Reading Form" onSubmit={onSubmit} style={{ display: "grid", gap: "0.5rem" }}>
-      {error && (
-        <div role="alert" style={{ color: "#b00020" }}>
-          {error}
-        </div>
-      )}
-      {success && (
-        <div role="status" aria-live="polite" style={{ color: "#0b7" }}>
-          {success}
-        </div>
-      )}
+    <form className="space-y-6" noValidate onSubmit={handleSubmit}>
+      <section className="rounded-lg border bg-card p-6 shadow-sm">
+        <div className="space-y-4">
+          <header className="space-y-1">
+            <p className="text-sm text-muted-foreground">
+              Nieruchomość: <span className="font-medium text-foreground">{resolvedPropertyId ?? "—"}</span>
+            </p>
+            <h2 className="text-xl font-semibold text-foreground">Ostatni zapis</h2>
+          </header>
 
-      <div style={{ display: "grid", gap: "0.25rem" }}>
-        <label htmlFor="rf-property">Property ID</label>
-        <input id="rf-property" value={propertyId} onChange={(e) => setPropertyId(e.target.value)} placeholder="UUID" required />
-      </div>
+          {!resolvedPropertyId ? (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Brak przypisanej nieruchomości. Skontaktuj się z administratorem, aby uzyskać dostęp do formularza.
+            </p>
+          ) : null}
 
-      <div style={{ display: "grid", gap: "0.25rem" }}>
-        <label htmlFor="rf-at">Reading at</label>
+          {loading ? <p className="text-sm text-muted-foreground">Ładuję dane odczytu...</p> : null}
+
+          {!loading && !currentReading ? (
+            <p className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-sm text-muted-foreground">
+              Brak odczytu dla bieżącego miesiąca. Wprowadź nowe wartości, aby rozpocząć rozliczenie.
+            </p>
+          ) : null}
+
+          {currentReading ? (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-base font-medium text-foreground">
+                  {readingDateFormatter.format(new Date(currentReading.readingAt))}
+                </p>
+                {isAnchoredReading(currentReading) ? (
+                  <span className="rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-semibold uppercase text-amber-900">
+                    Kotwica
+                  </span>
+                ) : null}
+              </div>
+
+              <dl className="grid gap-4 text-sm sm:grid-cols-3">
+                <div className="space-y-1">
+                  <dt className="text-muted-foreground">Zimna woda</dt>
+                  <dd className="font-semibold text-foreground">{formatDecimal(currentReading.coldM3)} m³</dd>
+                </div>
+                <div className="space-y-1">
+                  <dt className="text-muted-foreground">Ciepła woda</dt>
+                  <dd className="font-semibold text-foreground">{formatDecimal(currentReading.hotM3)} m³</dd>
+                </div>
+                <div className="space-y-1">
+                  <dt className="text-muted-foreground">Ogrzewanie</dt>
+                  <dd className="font-semibold text-foreground">{formatDecimal(currentReading.heatingGj)} GJ</dd>
+                </div>
+              </dl>
+
+              {currentReading.commentText ? (
+                <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  {currentReading.commentText}
+                </p>
+              ) : null}
+        </div>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="rounded-lg border bg-card p-6 shadow-sm">
+        <div className="space-y-6">
+          <header className="space-y-1">
+            <h2 className="text-lg font-semibold text-foreground">
+              {currentReading ? "Zaktualizuj odczyt" : "Dodaj odczyt"}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Akceptujemy wartości z dokładnością do trzech miejsc po przecinku. Możesz używać kropki lub przecinka.
+            </p>
+          </header>
+
+          {accessError ? <ErrorAlert error={accessError} /> : null}
+          {serverError ? <ErrorAlert error={serverError} /> : null}
+
+          {!windowStatus.withinWindow ? (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {windowStatus.message}
+            </p>
+          ) : null}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              <label className="text-sm font-medium text-foreground" htmlFor="readingAt">
+                Data i godzina odczytu
+              </label>
         <input
-          id="rf-at"
+                ref={(node) => (fieldRefs.current.readingAt = node)}
+                aria-invalid={Boolean(fieldErrors.readingAt)}
+                className={buildInputClasses(fieldErrors.readingAt)}
+                disabled={readingAtDisabled}
+                id="readingAt"
+                name="readingAt"
+                onBlur={(event) => {
+                  updateField("readingAt", parseLocalInput(event.target.value));
+                }}
+                onChange={(event) => {
+                  updateField("readingAt", parseLocalInput(event.target.value));
+                }}
+                required
           type="datetime-local"
-          value={readingAtLocal}
-          onChange={(e) => setReadingAt(fromLocalInput(e.target.value))}
-          required
+                value={toLocalInput(formState.readingAt)}
         />
+              {fieldErrors.readingAt ? (
+                <p className="text-sm text-destructive">{fieldErrors.readingAt}</p>
+              ) : windowStatus.withinWindow && windowStatus.message ? (
+                <p className="text-sm text-muted-foreground">{windowStatus.message}</p>
+              ) : null}
       </div>
 
-      <div style={{ display: "grid", gap: "0.25rem" }}>
-        <label htmlFor="rf-cold">Cold m3</label>
-        <input id="rf-cold" type="number" step="0.001" value={coldM3} onChange={(e) => setColdM3(Number(e.target.value))} required />
+            <DecimalInputField
+              ref={(node) => {
+                fieldRefs.current.coldM3 = node;
+              }}
+              disabled={numericDisabled}
+              error={fieldErrors.coldM3}
+              id="coldM3"
+              label="Zimna woda (m³)"
+              name="coldM3"
+              onBlur={() => clampFieldPrecision("coldM3")}
+              onChange={(value) => updateField("coldM3", value)}
+              value={formState.coldM3}
+            />
+            <DecimalInputField
+              ref={(node) => {
+                fieldRefs.current.hotM3 = node;
+              }}
+              disabled={numericDisabled}
+              error={fieldErrors.hotM3}
+              id="hotM3"
+              label="Ciepła woda (m³)"
+              name="hotM3"
+              onBlur={() => clampFieldPrecision("hotM3")}
+              onChange={(value) => updateField("hotM3", value)}
+              value={formState.hotM3}
+            />
+            <DecimalInputField
+              ref={(node) => {
+                fieldRefs.current.heatingGj = node;
+              }}
+              disabled={numericDisabled}
+              error={fieldErrors.heatingGj}
+              id="heatingGj"
+              label="Ogrzewanie (GJ)"
+              name="heatingGj"
+              onBlur={() => clampFieldPrecision("heatingGj")}
+              onChange={(value) => updateField("heatingGj", value)}
+              value={formState.heatingGj}
+            />
+
+            <div className="space-y-2 sm:col-span-2">
+              <label className="text-sm font-medium text-foreground" htmlFor="commentText">
+                Notatka (opcjonalnie)
+              </label>
+              <textarea
+                ref={(node) => (fieldRefs.current.commentText = node)}
+                className={buildTextareaClasses(fieldErrors.commentText)}
+                disabled={pending || Boolean(accessError) || !resolvedPropertyId}
+                id="commentText"
+                maxLength={2000}
+                name="commentText"
+                onChange={(event) => updateField("commentText", event.target.value)}
+                value={formState.commentText}
+              />
+              {fieldErrors.commentText ? (
+                <p className="text-sm text-destructive">{fieldErrors.commentText}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">Wiadomość będzie widoczna dla administratora.</p>
+              )}
+      </div>
       </div>
 
-      <div style={{ display: "grid", gap: "0.25rem" }}>
-        <label htmlFor="rf-hot">Hot m3</label>
-        <input id="rf-hot" type="number" step="0.001" value={hotM3} onChange={(e) => setHotM3(Number(e.target.value))} required />
+          <div className="flex justify-end">
+            <Button className="min-w-40" disabled={submitDisabled} type="submit">
+              {pending ? "Zapisywanie..." : currentReading ? "Zapisz zmiany" : "Zapisz odczyt"}
+            </Button>
       </div>
-
-      <div style={{ display: "grid", gap: "0.25rem" }}>
-        <label htmlFor="rf-heat">Heating GJ</label>
-        <input id="rf-heat" type="number" step="0.001" value={heatingGj} onChange={(e) => setHeatingGj(Number(e.target.value))} required />
       </div>
-
-      <div style={{ display: "grid", gap: "0.25rem" }}>
-        <label htmlFor="rf-comment">Comment</label>
-        <textarea id="rf-comment" value={commentText} onChange={(e) => setCommentText(e.target.value)} />
-      </div>
-
-      <div>
-        <button type="submit" disabled={submitting}>{submitting ? "Submitting..." : "Submit"}</button>
-      </div>
+      </section>
     </form>
   );
 }
 
-const toLocalInput = (iso: string): string => {
-  const d = new Date(iso);
-  const pad = (n: number): string => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
+export function TenantReadingsView(props: ReadingFormProps): JSX.Element {
+  return (
+    <ToastProvider>
+      <ReadingForm {...props} />
+    </ToastProvider>
+  );
+}
 
-const fromLocalInput = (local: string): string => {
-  const d = new Date(local);
-  return d.toISOString();
-};
+interface DecimalInputFieldProps {
+  id: string;
+  name: string;
+  label: string;
+  value: string;
+  disabled: boolean;
+  error?: string;
+  onChange: (value: string) => void;
+  onBlur: () => void;
+}
 
+const DecimalInputField = forwardRef<HTMLInputElement, DecimalInputFieldProps>(
+  ({ id, name, label, value, disabled, error, onChange, onBlur }, ref): JSX.Element => {
+    return (
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-foreground" htmlFor={id}>
+          {label}
+        </label>
+        <input
+          ref={ref}
+          aria-invalid={Boolean(error)}
+          autoComplete="off"
+          className={buildInputClasses(error)}
+          disabled={disabled}
+          id={id}
+          inputMode="decimal"
+          name={name}
+          onBlur={onBlur}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="0"
+          value={value}
+        />
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      </div>
+    );
+  }
+);
+DecimalInputField.displayName = "DecimalInputField";
+
+function buildInputClasses(error?: string): string {
+  return [
+    "w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+    error ? "border-destructive focus-visible:ring-destructive/40" : "border-input",
+  ].join(" ");
+}
+
+function buildTextareaClasses(error?: string): string {
+  return [
+    "min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+    error ? "border-destructive focus-visible:ring-destructive/40" : "border-input",
+  ].join(" ");
+}
+
+function createEmptyForm(now: Date): FormState {
+  return {
+    readingAt: now.toISOString(),
+    coldM3: "",
+    hotM3: "",
+    heatingGj: "",
+    commentText: "",
+  };
+}
+
+function computeWindowStatus(readingAtIso: string, now: Date): WindowStatus {
+  if (!readingAtIso) {
+    return {
+      withinWindow: false,
+      message: "Podaj datę odczytu, aby sprawdzić dostępność okna zgłoszenia.",
+    };
+  }
+
+  const readingAt = new Date(readingAtIso);
+  if (Number.isNaN(readingAt.getTime())) {
+    return {
+      withinWindow: false,
+      message: "Nieprawidłowa data odczytu.",
+    };
+  }
+
+  const diffDays = (readingAt.getTime() - now.getTime()) / MS_IN_DAY;
+
+  if (diffDays < -3) {
+    return {
+      withinWindow: false,
+      message: "Odczyt można zgłosić maksymalnie 3 dni wstecz.",
+    };
+  }
+
+  if (diffDays > 5) {
+    return {
+      withinWindow: false,
+      message: "Odczyt można zgłosić maksymalnie 5 dni naprzód.",
+    };
+  }
+
+  return {
+    withinWindow: true,
+    message: "Okno zgłoszenia jest otwarte: 3 dni wstecz i 5 dni naprzód od wybranej daty.",
+  };
+}
+
+function clampDecimalInput(value: string): string {
+  const numeric = parseDecimal(value);
+  if (numeric === null) {
+    return value;
+  }
+
+  const factor = 10 ** DECIMAL_PRECISION;
+  const clamped = Math.round(numeric * factor) / factor;
+  return formatDecimal(clamped);
+}
+
+function parseDecimal(value: string): number | null {
+  const normalized = value.replace(/\s+/g, "").replace(/,/g, ".").trim();
+  if (normalized === "") {
+    return null;
+  }
+
+  const numeric = Number(normalized);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return null;
+  }
+
+  return numeric;
+}
+
+function formatDecimal(value: number): string {
+  return decimalFormatter.format(value);
+}
+
+function toLocalInput(iso: string): string {
+  if (!iso) {
+    return "";
+  }
+
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  const hours = `${date.getHours()}`.padStart(2, "0");
+  const minutes = `${date.getMinutes()}`.padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function parseLocalInput(value: string): string {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toISOString();
+}
+
+function getUtcMonthRange(date: Date): { from: string; to: string } {
+  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1, 0, 0, 0));
+  const end = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+  return { from: start.toISOString(), to: end.toISOString() };
+}
+
+function buildMonthKey(date: Date): string {
+  return `${date.getUTCFullYear()}-${date.getUTCMonth()}`;
+}
+
+function extractFieldErrors(details: unknown): FieldErrors {
+  if (!details || typeof details !== "object") {
+    return {};
+  }
+
+  const record = details as Record<string, unknown>;
+  const errors = record.errors;
+  if (!errors || typeof errors !== "object") {
+    return {};
+  }
+
+  const fieldErrors: FieldErrors = {};
+  for (const [field, value] of Object.entries(errors as Record<string, unknown>)) {
+    if (!value || typeof value !== "object") {
+      continue;
+    }
+
+    const firstError = Array.isArray((value as { _errors?: string[] })._errors)
+      ? (value as { _errors: string[] })._errors[0]
+      : undefined;
+
+    if (firstError) {
+      fieldErrors[field as FieldName] = firstError;
+    }
+  }
+
+  return fieldErrors;
+}
+
+function toApiError(error: unknown): ApiError & { details?: unknown } {
+  if (error && typeof error === "object" && "code" in error && "message" in error) {
+    return error as ApiError & { details?: unknown };
+  }
+
+  return {
+    code: "unexpected_error",
+    message: error instanceof Error ? error.message : "Wystąpił nieoczekiwany błąd.",
+  };
+}
+
+function getPropertyIdFromLocation(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const url = new URL(window.location.href);
+  return url.searchParams.get("propertyId");
+}
+
+function isAnchoredReading(reading: ReadingDTO): boolean {
+  return Boolean(reading.effectiveMonth);
+}
