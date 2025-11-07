@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
@@ -82,7 +82,8 @@ function TenantReportDetailContent({ reportId }: TenantReportDetailProps): JSX.E
     try {
       const response = await apiGet<TenantReportDetailResponse>(`/api/v1/reports/${encodeURIComponent(reportId)}`);
       setReport(response.report);
-      setLineItems(Array.isArray(response.lineItems) ? response.lineItems : []);
+      const normalizedLineItems = Array.isArray(response.lineItems) ? response.lineItems : [];
+      setLineItems((previous) => (areLineItemsEqual(previous, normalizedLineItems) ? previous : normalizedLineItems));
       setLastEmailAttempt(response.lastEmailAttempt ?? null);
       setPermissions(response.permissions ?? null);
     } catch (error) {
@@ -188,6 +189,21 @@ function TenantReportDetailContent({ reportId }: TenantReportDetailProps): JSX.E
     ];
   }, [lineItems, report]);
 
+  const totals = useMemo(
+    () =>
+      report
+        ? {
+            actualRentRaw: report.actualRentRaw,
+            fixedCostRaw: report.fixedCostRaw,
+            meterCostColdRaw: report.meterCostColdRaw,
+            meterCostHotRaw: report.meterCostHotRaw,
+            meterCostHeatingRaw: report.meterCostHeatingRaw,
+            balanceRaw: report.balanceRaw,
+          }
+        : null,
+    [report]
+  );
+
   const handleResend = useCallback(async () => {
     if (!report || pendingResend || !canResend) {
       return;
@@ -225,6 +241,12 @@ function TenantReportDetailContent({ reportId }: TenantReportDetailProps): JSX.E
     }
   }, [canResend, loadDetail, pendingResend, pushToast, report]);
 
+  const handleResendClick = useCallback(() => {
+    handleResend().catch(() => {
+      /* obsłużone w handleResend */
+    });
+  }, [handleResend]);
+
   const shouldShowEmptyState = !loading && !report && !accessError && !showFetchError;
 
   return (
@@ -255,11 +277,7 @@ function TenantReportDetailContent({ reportId }: TenantReportDetailProps): JSX.E
               <Button
                 type="button"
                 disabled={pendingResend || !canResend}
-                onClick={() => {
-                  handleResend().catch(() => {
-                    /* obsłużone w handleResend */
-                  });
-                }}
+                onClick={handleResendClick}
                 title={resendDisabledReason ?? undefined}
               >
                 {pendingResend ? "Wysyłanie…" : "Wyślij ponownie"}
@@ -280,58 +298,9 @@ function TenantReportDetailContent({ reportId }: TenantReportDetailProps): JSX.E
             </dl>
           </section>
 
-          <section className="rounded-lg border bg-card p-6 shadow-sm">
-            <h3 className="text-base font-semibold text-foreground">Pozycje rozliczenia</h3>
-            <div className="mt-4 overflow-hidden rounded-md border">
-              {displayLineItems.length > 0 ? (
-                <table className="w-full border-separate border-spacing-0 text-sm">
-                  <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium">Pozycja</th>
-                      <th className="px-4 py-2 text-left font-medium">Opis</th>
-                      <th className="px-4 py-2 text-right font-medium">Kwota</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayLineItems.map((item) => (
-                      <tr key={item.id} className="border-t border-border bg-background/80">
-                        <td className="px-4 py-2">
-                          <div className="flex flex-col">
-                            <span className="font-medium text-foreground">{item.label}</span>
-                            {item.category ? (
-                              <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                                {item.category}
-                              </span>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td className="px-4 py-2 text-sm text-muted-foreground">
-                          {item.description ? item.description : "—"}
-                        </td>
-                        <td className="px-4 py-2 text-right text-sm font-medium text-foreground">
-                          {formatMoney(item.amountRaw)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <p className="px-4 py-3 text-sm text-muted-foreground">Brak pozycji w raporcie.</p>
-              )}
-            </div>
-          </section>
+          <TenantReportLineItems items={displayLineItems} />
 
-          <section className="rounded-lg border bg-card p-6 shadow-sm">
-            <h3 className="text-base font-semibold text-foreground">Podsumowanie kwot</h3>
-            <dl className="mt-4 grid gap-4 sm:grid-cols-2">
-              <AmountItem label="Czynsz bieżący" value={report.actualRentRaw} />
-              <AmountItem label="Koszty stałe" value={report.fixedCostRaw} />
-              <AmountItem label="Koszt zużycia zimnej wody" value={report.meterCostColdRaw} />
-              <AmountItem label="Koszt zużycia ciepłej wody" value={report.meterCostHotRaw} />
-              <AmountItem label="Koszt ogrzewania" value={report.meterCostHeatingRaw} />
-              <AmountItem label="Saldo" value={report.balanceRaw} emphasize />
-            </dl>
-          </section>
+          {totals ? <TenantReportTotals totals={totals} /> : null}
 
           <section className="rounded-lg border bg-card p-6 shadow-sm">
             <h3 className="text-base font-semibold text-foreground">Ostatnia próba wysyłki e-mail</h3>
@@ -393,6 +362,76 @@ function MetadataItem({ label, value }: MetadataItemProps): JSX.Element {
     </div>
   );
 }
+
+interface LineItemsProps {
+  items: TenantReportLineItem[];
+}
+
+const TenantReportLineItems = memo(function TenantReportLineItems({ items }: LineItemsProps): JSX.Element {
+  return (
+    <section className="rounded-lg border bg-card p-6 shadow-sm">
+      <h3 className="text-base font-semibold text-foreground">Pozycje rozliczenia</h3>
+      <div className="mt-4 overflow-hidden rounded-md border">
+        {items.length > 0 ? (
+          <table className="w-full border-separate border-spacing-0 text-sm">
+            <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-4 py-2 text-left font-medium">Pozycja</th>
+                <th className="px-4 py-2 text-left font-medium">Opis</th>
+                <th className="px-4 py-2 text-right font-medium">Kwota</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id} className="border-t border-border bg-background/80">
+                  <td className="px-4 py-2">
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">{item.label}</span>
+                      {item.category ? (
+                        <span className="text-xs uppercase tracking-wide text-muted-foreground">{item.category}</span>
+                      ) : null}
+                    </div>
+                  </td>
+                  <td className="px-4 py-2 text-sm text-muted-foreground">{item.description ? item.description : "—"}</td>
+                  <td className="px-4 py-2 text-right text-sm font-medium text-foreground">{formatMoney(item.amountRaw)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="px-4 py-3 text-sm text-muted-foreground">Brak pozycji w raporcie.</p>
+        )}
+      </div>
+    </section>
+  );
+});
+
+interface TenantReportTotalsProps {
+  totals: {
+    actualRentRaw: number | null | undefined;
+    fixedCostRaw: number | null | undefined;
+    meterCostColdRaw: number | null | undefined;
+    meterCostHotRaw: number | null | undefined;
+    meterCostHeatingRaw: number | null | undefined;
+    balanceRaw: number | null | undefined;
+  };
+}
+
+const TenantReportTotals = memo(function TenantReportTotals({ totals }: TenantReportTotalsProps): JSX.Element {
+  return (
+    <section className="rounded-lg border bg-card p-6 shadow-sm">
+      <h3 className="text-base font-semibold text-foreground">Podsumowanie kwot</h3>
+      <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+        <AmountItem label="Czynsz bieżący" value={totals.actualRentRaw} />
+        <AmountItem label="Koszty stałe" value={totals.fixedCostRaw} />
+        <AmountItem label="Koszt zużycia zimnej wody" value={totals.meterCostColdRaw} />
+        <AmountItem label="Koszt zużycia ciepłej wody" value={totals.meterCostHotRaw} />
+        <AmountItem label="Koszt ogrzewania" value={totals.meterCostHeatingRaw} />
+        <AmountItem label="Saldo" value={totals.balanceRaw} emphasize />
+      </dl>
+    </section>
+  );
+});
 
 function formatMoney(raw: number | null | undefined): string {
   if (typeof raw !== "number" || Number.isNaN(raw)) {
@@ -459,6 +498,36 @@ function toApiError(error: unknown): ApiError {
     code: "unexpected_error",
     message: error instanceof Error ? error.message : "Wystąpił nieoczekiwany błąd.",
   };
+}
+
+function areLineItemsEqual(previous: TenantReportLineItem[], next: TenantReportLineItem[]): boolean {
+  if (previous === next) {
+    return true;
+  }
+
+  if (previous.length !== next.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previous.length; index += 1) {
+    const prev = previous[index];
+    const nextItem = next[index];
+    if (!prev || !nextItem) {
+      return false;
+    }
+
+    if (
+      prev.id !== nextItem.id ||
+      prev.amountRaw !== nextItem.amountRaw ||
+      prev.label !== nextItem.label ||
+      prev.description !== nextItem.description ||
+      prev.category !== nextItem.category
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 

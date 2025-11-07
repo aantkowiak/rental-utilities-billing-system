@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
@@ -190,7 +190,9 @@ function getCurrentMonth(): string {
 function AdminReadingsContent(): JSX.Element {
   const { pushToast } = useToast();
 
-  const [filters, setFilters] = useState<FiltersState>(() => resolveInitialFilters());
+  const initialFilters = useMemo(() => resolveInitialFilters(), []);
+  const [filters, setFilters] = useState<FiltersState>(initialFilters);
+  const [filterInputs, setFilterInputs] = useState<FiltersState>(initialFilters);
   const [items, setItems] = useState<ReadingDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [formPending, setFormPending] = useState(false);
@@ -206,6 +208,55 @@ function AdminReadingsContent(): JSX.Element {
   const [formState, setFormState] = useState<FormState>(() => buildDefaultFormState());
   const [editing, setEditing] = useState<ReadingDTO | null>(null);
   const [replacementSource, setReplacementSource] = useState<ReadingDTO | null>(null);
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastLoadedFiltersRef = useRef<FiltersState | null>(null);
+  const deletePendingByIdRef = useRef<Record<string, boolean>>({});
+
+  useEffect(() => {
+    deletePendingByIdRef.current = deletePendingById;
+  }, [deletePendingById]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+
+    debounceTimeoutRef.current = setTimeout(() => {
+      const nextFilters: FiltersState = {
+        propertyId: filterInputs.propertyId.trim(),
+        month: normalizeMonth(filterInputs.month, getCurrentMonth()),
+      };
+
+      setFilters((prev) => {
+        if (prev.propertyId === nextFilters.propertyId && prev.month === nextFilters.month) {
+          return prev;
+        }
+        return nextFilters;
+      });
+
+      if (
+        filterInputs.propertyId !== nextFilters.propertyId ||
+        filterInputs.month !== nextFilters.month
+      ) {
+        setFilterInputs(nextFilters);
+      }
+    }, 300);
+
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+        debounceTimeoutRef.current = null;
+      }
+    };
+  }, [filterInputs]);
 
   const monthRange = useMemo(() => computeMonthRange(filters.month), [filters.month]);
 
@@ -250,49 +301,66 @@ function AdminReadingsContent(): JSX.Element {
     window.localStorage.setItem(MONTH_STORAGE_KEY, normalizeMonth(filters.month, getCurrentMonth()));
   }, [filters.propertyId, filters.month]);
 
-  const loadReadings = useCallback(async () => {
-    if (!filters.propertyId) {
-      setItems([]);
-      setFetchError(null);
-      setAccessError(null);
-      setActionAccessError(null);
-      return;
-    }
+  const loadReadings = useCallback(
+    async ({ force = false }: { force?: boolean } = {}) => {
+      const currentFilters: FiltersState = {
+        propertyId: filters.propertyId,
+        month: filters.month,
+      };
 
-    setLoading(true);
-    setFetchError(null);
-    setAccessError(null);
-    setActionAccessError(null);
-
-    try {
-      const search = new URLSearchParams();
-      search.set("propertyId", filters.propertyId);
-      if (monthRange) {
-        search.set("from", monthRange.from);
-        search.set("to", monthRange.to);
-      }
-
-      const response = await apiGet<ReadingListResponse>(`/api/v1/readings?${search.toString()}`);
-      setItems(Array.isArray(response.items) ? response.items : []);
-    } catch (error) {
-      const apiError = toApiError(error);
-
-      if (apiError.code === "forbidden") {
-        setAccessError(apiError.message);
+      if (!filters.propertyId) {
         setItems([]);
+        setFetchError(null);
+        setAccessError(null);
+        setActionAccessError(null);
+        lastLoadedFiltersRef.current = currentFilters;
         return;
       }
 
-      setFetchError(apiError.message);
-      pushToast({
-        variant: "error",
-        title: "Nie udało się pobrać odczytów",
-        description: apiError.message,
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [filters.propertyId, monthRange, pushToast]);
+      if (!force) {
+        const last = lastLoadedFiltersRef.current;
+        if (last && last.propertyId === currentFilters.propertyId && last.month === currentFilters.month) {
+          return;
+        }
+      }
+
+      setLoading(true);
+      setFetchError(null);
+      setAccessError(null);
+      setActionAccessError(null);
+
+      try {
+        const search = new URLSearchParams();
+        search.set("propertyId", filters.propertyId);
+        if (monthRange) {
+          search.set("from", monthRange.from);
+          search.set("to", monthRange.to);
+        }
+
+        const response = await apiGet<ReadingListResponse>(`/api/v1/readings?${search.toString()}`);
+        const normalizedItems = Array.isArray(response.items) ? response.items : [];
+        setItems((previous) => mergeReadings(previous, normalizedItems));
+      } catch (error) {
+        const apiError = toApiError(error);
+
+        if (apiError.code === "forbidden") {
+          setAccessError(apiError.message);
+          setItems([]);
+        } else {
+          setFetchError(apiError.message);
+          pushToast({
+            variant: "error",
+            title: "Nie udało się pobrać odczytów",
+            description: apiError.message,
+          });
+        }
+      } finally {
+        setLoading(false);
+        lastLoadedFiltersRef.current = currentFilters;
+      }
+    },
+    [filters.propertyId, filters.month, monthRange, pushToast]
+  );
 
   useEffect(() => {
     loadReadings().catch(() => {
@@ -308,8 +376,8 @@ function AdminReadingsContent(): JSX.Element {
   }, []);
 
   const handleFiltersPropertyChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    const value = event.target.value.trim();
-    setFilters((prev) => ({
+    const value = event.target.value;
+    setFilterInputs((prev) => ({
       ...prev,
       propertyId: value,
     }));
@@ -317,9 +385,9 @@ function AdminReadingsContent(): JSX.Element {
 
   const handleFiltersMonthChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const value = event.target.value;
-    setFilters((prev) => ({
+    setFilterInputs((prev) => ({
       ...prev,
-      month: normalizeMonth(value, getCurrentMonth()),
+      month: value,
     }));
   }, []);
 
@@ -356,9 +424,14 @@ function AdminReadingsContent(): JSX.Element {
     []
   );
 
+  const handleReplacementStart = useCallback((reading: ReadingDTO) => {
+    setActionAccessError(null);
+    setReplacementSource(reading);
+  }, []);
+
   const handleDelete = useCallback(
     async (reading: ReadingDTO) => {
-      if (deletePendingById[reading.id]) {
+      if (deletePendingByIdRef.current[reading.id]) {
         return;
       }
 
@@ -377,7 +450,7 @@ function AdminReadingsContent(): JSX.Element {
           title: "Usunięto odczyt",
           description: "Rekord został pomyślnie usunięty.",
         });
-        await loadReadings();
+        await loadReadings({ force: true });
         if (editing?.id === reading.id) {
           resetForm();
         }
@@ -395,7 +468,7 @@ function AdminReadingsContent(): JSX.Element {
           });
 
           if (isNotFound || apiError.code === "conflict" || apiError.status === 409) {
-            await loadReadings();
+            await loadReadings({ force: true });
           }
         }
       } finally {
@@ -406,7 +479,7 @@ function AdminReadingsContent(): JSX.Element {
         });
       }
     },
-    [deletePendingById, editing?.id, loadReadings, pushToast, resetForm]
+    [editing?.id, loadReadings, pushToast, resetForm]
   );
 
   const handleSubmit = useCallback(
@@ -497,7 +570,7 @@ function AdminReadingsContent(): JSX.Element {
           });
         }
 
-        await loadReadings();
+        await loadReadings({ force: true });
         setEditing(null);
         setFormState({
           ...buildDefaultFormState(),
@@ -530,7 +603,7 @@ function AdminReadingsContent(): JSX.Element {
               title: "Dane zostały zmienione",
               description: apiError.message,
             });
-            await loadReadings();
+            await loadReadings({ force: true });
           } else if (!apiError.status || apiError.status >= 500) {
             pushToast({
               variant: "error",
@@ -575,10 +648,16 @@ function AdminReadingsContent(): JSX.Element {
       description: "Rekalkulacja kotwic została zaplanowana.",
     });
     closeReplacementModal();
-    await loadReadings();
+    await loadReadings({ force: true });
   }, [closeReplacementModal, loadReadings, pushToast]);
 
   const replacementModalPending = replacementSource ? Boolean(replacementPendingById[replacementSource.id]) : false;
+
+  const handleRecalcSuccess = useCallback(() => {
+    loadReadings({ force: true }).catch(() => {
+      /* obsłużone w loadReadings */
+    });
+  }, [loadReadings]);
 
   return (
     <section aria-busy={recalcPending} className="space-y-8">
@@ -594,7 +673,7 @@ function AdminReadingsContent(): JSX.Element {
               id="admin-readings-property"
               inputMode="text"
               placeholder="UUID nieruchomości"
-              value={filters.propertyId}
+              value={filterInputs.propertyId}
               onChange={handleFiltersPropertyChange}
             />
             <p className="text-xs text-muted-foreground">Wymagany do pobrania odczytów oraz zapisów.</p>
@@ -607,7 +686,7 @@ function AdminReadingsContent(): JSX.Element {
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
               id="admin-readings-month"
               type="month"
-              value={filters.month}
+              value={filterInputs.month}
               onChange={handleFiltersMonthChange}
             />
             <p className="text-xs text-muted-foreground">Zapisywane w adresie URL i w pamięci przeglądarki.</p>
@@ -764,7 +843,11 @@ function AdminReadingsContent(): JSX.Element {
             <Button
               variant="secondary"
               type="button"
-              onClick={() => loadReadings().catch(() => {})}
+              onClick={() =>
+                loadReadings({ force: true }).catch(() => {
+                  /* obsłużone w loadReadings */
+                })
+              }
               disabled={loading || !filters.propertyId}
             >
               Odśwież
@@ -796,78 +879,19 @@ function AdminReadingsContent(): JSX.Element {
                     </td>
                   </tr>
                 ) : (
-                  items.map((item) => {
-                    const deletePending = Boolean(deletePendingById[item.id]);
-                    const replacementPending = Boolean(replacementPendingById[item.id]);
-                    const updatePending = formPending && formPendingTargetId === item.id;
-                    const rowBusy = deletePending || replacementPending || updatePending;
-
-                    return (
-                      <Fragment key={item.id}>
-                      <tr className="rounded-lg border border-border bg-background/80 align-top shadow-sm">
-                        <td className="px-4 py-3">
-                          <div className="flex flex-col gap-1">
-                            <span className="font-medium text-foreground">{formatDateTime(item.readingAt)}</span>
-                            <span className="text-xs text-muted-foreground">
-                              Utworzono {formatDateTime(item.createdAt)} • Aktualizacja {formatDateTime(item.updatedAt)}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="grid gap-1 text-sm">
-                            <span>Zimna woda: {formatNumber(item.coldM3)} m³</span>
-                            <span>Ciepła woda: {formatNumber(item.hotM3)} m³</span>
-                            <span>Energia: {formatNumber(item.heatingGj)} GJ</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="space-y-1">
-                            <span className="inline-flex items-center rounded-full border border-input bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
-                              {item.origin === "admin_replacement" ? "Zastępczy" : "Regularny"}
-                            </span>
-                            <div className="text-xs text-muted-foreground">
-                              {item.readingType === "baseline" ? "Kotwica" : "Odczyt cykliczny"}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">
-                          {item.commentText ? item.commentText : "—"}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap justify-end gap-2">
-                            <Button
-                              variant="secondary"
-                              type="button"
-                              disabled={rowBusy || recalcPending}
-                              onClick={() => handleEdit(item)}
-                            >
-                              Edytuj
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              type="button"
-                              disabled={replacementPending || recalcPending}
-                              onClick={() => {
-                                setActionAccessError(null);
-                                setReplacementSource(item);
-                              }}
-                            >
-                              Zastąp
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              type="button"
-                              disabled={deletePending || recalcPending}
-                              onClick={() => handleDelete(item)}
-                            >
-                              Usuń
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    </Fragment>
-                    );
-                  })
+                  items.map((item) => (
+                    <AdminReadingRow
+                      key={item.id}
+                      item={item}
+                      deletePending={Boolean(deletePendingById[item.id])}
+                      replacementPending={Boolean(replacementPendingById[item.id])}
+                      updatePending={formPending && formPendingTargetId === item.id}
+                      recalcPending={recalcPending}
+                      onEdit={handleEdit}
+                      onReplace={handleReplacementStart}
+                      onDelete={handleDelete}
+                    />
+                  ))
                 )}
               </tbody>
             </table>
@@ -879,11 +903,7 @@ function AdminReadingsContent(): JSX.Element {
         propertyId={filters.propertyId}
         defaultMonth={filters.month}
         disabled={!filters.propertyId}
-        onSuccess={() => {
-          loadReadings().catch(() => {
-            /* handled elsewhere */
-          });
-        }}
+        onSuccess={handleRecalcSuccess}
         onPendingChange={setRecalcPending}
       />
 
@@ -954,6 +974,138 @@ function AdminReadingsContent(): JSX.Element {
         </div>
       ) : null}
     </section>
+  );
+}
+
+interface AdminReadingRowProps {
+  item: ReadingDTO;
+  deletePending: boolean;
+  replacementPending: boolean;
+  updatePending: boolean;
+  recalcPending: boolean;
+  onEdit: (reading: ReadingDTO) => void;
+  onReplace: (reading: ReadingDTO) => void;
+  onDelete: (reading: ReadingDTO) => void;
+}
+
+const AdminReadingRow = memo(function AdminReadingRow({
+  item,
+  deletePending,
+  replacementPending,
+  updatePending,
+  recalcPending,
+  onEdit,
+  onReplace,
+  onDelete,
+}: AdminReadingRowProps): JSX.Element {
+  const handleEditClick = useCallback(() => {
+    onEdit(item);
+  }, [item, onEdit]);
+
+  const handleReplaceClick = useCallback(() => {
+    onReplace(item);
+  }, [item, onReplace]);
+
+  const handleDeleteClick = useCallback(() => {
+    onDelete(item);
+  }, [item, onDelete]);
+
+  const rowBusy = deletePending || replacementPending || updatePending;
+
+  return (
+    <tr className="rounded-lg border border-border bg-background/80 align-top shadow-sm">
+      <td className="px-4 py-3">
+        <div className="flex flex-col gap-1">
+          <span className="font-medium text-foreground">{formatDateTime(item.readingAt)}</span>
+          <span className="text-xs text-muted-foreground">
+            Utworzono {formatDateTime(item.createdAt)} • Aktualizacja {formatDateTime(item.updatedAt)}
+          </span>
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <div className="grid gap-1 text-sm">
+          <span>Zimna woda: {formatNumber(item.coldM3)} m³</span>
+          <span>Ciepła woda: {formatNumber(item.hotM3)} m³</span>
+          <span>Energia: {formatNumber(item.heatingGj)} GJ</span>
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <div className="space-y-1">
+          <span className="inline-flex items-center rounded-full border border-input bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+            {item.origin === "admin_replacement" ? "Zastępczy" : "Regularny"}
+          </span>
+          <div className="text-xs text-muted-foreground">
+            {item.readingType === "baseline" ? "Kotwica" : "Odczyt cykliczny"}
+          </div>
+        </div>
+      </td>
+      <td className="px-4 py-3 text-sm text-muted-foreground">{item.commentText ? item.commentText : "—"}</td>
+      <td className="px-4 py-3">
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="secondary" type="button" disabled={rowBusy || recalcPending} onClick={handleEditClick}>
+            Edytuj
+          </Button>
+          <Button
+            variant="ghost"
+            type="button"
+            disabled={replacementPending || recalcPending}
+            onClick={handleReplaceClick}
+          >
+            Zastąp
+          </Button>
+          <Button variant="destructive" type="button" disabled={deletePending || recalcPending} onClick={handleDeleteClick}>
+            Usuń
+          </Button>
+        </div>
+      </td>
+    </tr>
+  );
+});
+
+function mergeReadings(previous: ReadingDTO[], next: ReadingDTO[]): ReadingDTO[] {
+  if (previous.length === 0) {
+    return next;
+  }
+
+  const previousById = new Map(previous.map((item) => [item.id, item]));
+  let didChange = previous.length !== next.length;
+
+  const merged = next.map((item, index) => {
+    const existing = previousById.get(item.id);
+    if (!existing) {
+      didChange = true;
+      return item;
+    }
+
+    if (areReadingsEqual(existing, item)) {
+      if (existing === previous[index]) {
+        return existing;
+      }
+      return existing;
+    }
+
+    didChange = true;
+    return item;
+  });
+
+  if (!didChange) {
+    return previous;
+  }
+
+  return merged;
+}
+
+function areReadingsEqual(a: ReadingDTO, b: ReadingDTO): boolean {
+  return (
+    a.updatedAt === b.updatedAt &&
+    a.createdAt === b.createdAt &&
+    a.readingAt === b.readingAt &&
+    a.coldM3 === b.coldM3 &&
+    a.hotM3 === b.hotM3 &&
+    a.heatingGj === b.heatingGj &&
+    a.origin === b.origin &&
+    a.readingType === b.readingType &&
+    a.commentText === b.commentText
   );
 }
 
