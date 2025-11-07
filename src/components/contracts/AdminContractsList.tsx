@@ -26,6 +26,10 @@ type FormField = keyof FormState;
 
 const FILTERS_STORAGE_KEY = "admin-contracts:filters";
 
+const DATE_FORMATTER = new Intl.DateTimeFormat("pl-PL", {
+  dateStyle: "medium",
+});
+
 function resolveInitialFilters(): FiltersState {
   if (typeof window === "undefined") {
     return {
@@ -73,7 +77,50 @@ function toApiError(error: unknown): ApiError {
   return {
     code: "unexpected_error",
     message: error instanceof Error ? error.message : "Wystąpił nieoczekiwany błąd.",
+    details: error && typeof error === "object" && "details" in error ? (error as ApiError).details : undefined,
+    status: error && typeof error === "object" && "status" in error ? (error as ApiError).status : undefined,
   };
+}
+
+function isForbiddenError(error: ApiError): boolean {
+  return error.code === "forbidden" || error.status === 403;
+}
+
+function shouldRefetchAfterAction(error: ApiError): boolean {
+  if (!error) {
+    return false;
+  }
+
+  const refetchCodes = new Set([
+    "contract_overlap",
+    "conflict",
+    "too_many_requests",
+    "rate_limited",
+    "internal_error",
+    "not_found",
+  ]);
+  if (refetchCodes.has(error.code)) {
+    return true;
+  }
+
+  if (!error.status) {
+    return false;
+  }
+
+  return [400, 404, 409, 429, 500].includes(error.status);
+}
+
+function periodsOverlap(a: { from: string; to: string }, b: { from: string; to: string }): boolean {
+  const fromA = new Date(a.from).getTime();
+  const toA = new Date(a.to).getTime();
+  const fromB = new Date(b.from).getTime();
+  const toB = new Date(b.to).getTime();
+
+  if ([fromA, toA, fromB, toB].some((value) => Number.isNaN(value))) {
+    return false;
+  }
+
+  return Math.max(fromA, fromB) <= Math.min(toA, toB);
 }
 
 function formatDate(value: string | null | undefined): string {
@@ -86,9 +133,7 @@ function formatDate(value: string | null | undefined): string {
     return value;
   }
 
-  return new Intl.DateTimeFormat("pl-PL", {
-    dateStyle: "medium",
-  }).format(date);
+  return DATE_FORMATTER.format(date);
 }
 
 function isActive(period: ContractPeriod | undefined | null): boolean {
@@ -120,9 +165,11 @@ function AdminContractsContent(): JSX.Element {
   const [filters, setFilters] = useState<FiltersState>(() => resolveInitialFilters());
   const [items, setItems] = useState<ContractDTO[]>([]);
   const [loading, setLoading] = useState(false);
-  const [pendingAction, setPendingAction] = useState(false);
+  const [formPending, setFormPending] = useState(false);
+  const [deletePendingById, setDeletePendingById] = useState<Record<string, boolean>>({});
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
+  const [actionAccessError, setActionAccessError] = useState<string | null>(null);
   const [formError, setFormError] = useState<ApiError | string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FormField, string>>>({});
   const [formState, setFormState] = useState<FormState>(() => buildDefaultFormState());
@@ -145,6 +192,38 @@ function AdminContractsContent(): JSX.Element {
 
     return params.toString();
   }, [filters]);
+
+  const propertyOptions = useMemo(() => {
+    const unique = new Set<string>();
+    for (const contract of items) {
+      if (contract.propertyId) {
+        unique.add(contract.propertyId);
+      }
+    }
+    return Array.from(unique).sort();
+  }, [items]);
+
+  const tenantOptions = useMemo(() => {
+    const unique = new Set<string>();
+    for (const contract of items) {
+      if (contract.tenantUserId) {
+        unique.add(contract.tenantUserId);
+      }
+    }
+    return Array.from(unique).sort();
+  }, [items]);
+
+  const tableItems = useMemo(
+    () =>
+      items.map((contract) => ({
+        contract,
+        deletePending: Boolean(deletePendingById[contract.id]),
+      })),
+    [deletePendingById, items]
+  );
+
+  const actionsLocked = Boolean(actionAccessError);
+  const submitDisabled = formPending || actionsLocked;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -180,12 +259,14 @@ function AdminContractsContent(): JSX.Element {
     setLoading(true);
     setFetchError(null);
     setAccessError(null);
+    setActionAccessError(null);
 
     try {
       const response = await apiGet<ListContractsResponse>(
         queryString ? `/api/v1/contracts?${queryString}` : "/api/v1/contracts"
       );
       setItems(Array.isArray(response.items) ? response.items : []);
+      setDeletePendingById({});
     } catch (error) {
       const apiError = toApiError(error);
 
@@ -238,45 +319,67 @@ function AdminContractsContent(): JSX.Element {
     setFormError(null);
   }, []);
 
-  const validateForm = useCallback(
-    (state: FormState): Partial<Record<FormField, string>> => {
-      const errors: Partial<Record<FormField, string>> = {};
-
-      if (!state.propertyId.trim()) {
-        errors.propertyId = "Wprowadź identyfikator nieruchomości.";
+  const handleMutationFailure = useCallback(
+    async (error: ApiError, context: "save" | "delete") => {
+      if (isForbiddenError(error)) {
+        setActionAccessError(error.message);
+        return;
       }
 
-      if (!state.tenantUserId.trim()) {
-        errors.tenantUserId = "Wprowadź identyfikator najemcy.";
+      const titles: Record<typeof context, string> = {
+        save: "Nie udało się zapisać umowy",
+        delete: "Nie udało się usunąć umowy",
+      };
+
+      pushToast({
+        variant: "error",
+        title: titles[context],
+        description: error.message,
+      });
+
+      if (shouldRefetchAfterAction(error)) {
+        await loadContracts();
       }
-
-      if (!state.periodFrom) {
-        errors.periodFrom = "Podaj datę rozpoczęcia umowy.";
-      }
-
-      if (!state.periodTo) {
-        errors.periodTo = "Podaj datę zakończenia umowy.";
-      }
-
-      if (state.periodFrom && state.periodTo) {
-        const from = new Date(state.periodFrom).getTime();
-        const to = new Date(state.periodTo).getTime();
-
-        if (!Number.isNaN(from) && !Number.isNaN(to) && from > to) {
-          errors.periodTo = "Data zakończenia musi być późniejsza niż rozpoczęcia.";
-        }
-      }
-
-      return errors;
     },
-    []
+    [loadContracts, pushToast]
   );
+
+  const validateForm = useCallback((state: FormState): Partial<Record<FormField, string>> => {
+    const errors: Partial<Record<FormField, string>> = {};
+
+    if (!state.propertyId.trim()) {
+      errors.propertyId = "Wprowadź identyfikator nieruchomości.";
+    }
+
+    if (!state.tenantUserId.trim()) {
+      errors.tenantUserId = "Wprowadź identyfikator najemcy.";
+    }
+
+    if (!state.periodFrom) {
+      errors.periodFrom = "Podaj datę rozpoczęcia umowy.";
+    }
+
+    if (!state.periodTo) {
+      errors.periodTo = "Podaj datę zakończenia umowy.";
+    }
+
+    if (state.periodFrom && state.periodTo) {
+      const from = new Date(state.periodFrom).getTime();
+      const to = new Date(state.periodTo).getTime();
+
+      if (!Number.isNaN(from) && !Number.isNaN(to) && from > to) {
+        errors.periodTo = "Data zakończenia musi być późniejsza niż rozpoczęcia.";
+      }
+    }
+
+    return errors;
+  }, []);
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
 
-      if (pendingAction) {
+      if (formPending || actionsLocked) {
         return;
       }
 
@@ -295,8 +398,36 @@ function AdminContractsContent(): JSX.Element {
         },
       };
 
-      setPendingAction(true);
+      setFormPending(true);
       setFormError(null);
+      setActionAccessError(null);
+
+      const candidatePeriod = payload.period;
+
+      const overlapExists = items.some((contract) => {
+        if (editing && contract.id === editing.id) {
+          return false;
+        }
+        if (contract.propertyId !== payload.propertyId || contract.tenantUserId !== payload.tenantUserId) {
+          return false;
+        }
+        if (!contract.period?.from || !contract.period?.to) {
+          return false;
+        }
+        return periodsOverlap(candidatePeriod, {
+          from: contract.period.from,
+          to: contract.period.to,
+        });
+      });
+
+      if (overlapExists) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          periodTo: "Okres umowy nakłada się z istniejącą umową.",
+        }));
+        setFormPending(false);
+        return;
+      }
 
       try {
         if (editing) {
@@ -305,10 +436,7 @@ function AdminContractsContent(): JSX.Element {
             tenantUserId: payload.tenantUserId,
             period: payload.period,
           };
-          await apiPatch<ContractResponse>(
-            `/api/v1/contracts/${encodeURIComponent(editing.id)}`,
-            updatePayload
-          );
+          await apiPatch<ContractResponse>(`/api/v1/contracts/${encodeURIComponent(editing.id)}`, updatePayload);
           pushToast({
             variant: "success",
             title: "Zaktualizowano umowę",
@@ -336,13 +464,18 @@ function AdminContractsContent(): JSX.Element {
           return;
         }
 
-        if (apiError.code === "foreign_key_violation") {
-          setFormError("Podano nieprawidłowy identyfikator nieruchomości lub najemcy.");
+        if (apiError.code === "foreign_key_violation" || apiError.status === 400) {
+          const message = apiError.message || "Podano nieprawidłowy identyfikator nieruchomości lub najemcy.";
+          setFieldErrors((prev) => ({
+            ...prev,
+            propertyId: prev.propertyId ?? message,
+            tenantUserId: prev.tenantUserId ?? message,
+          }));
           return;
         }
 
-        if (apiError.code === "forbidden") {
-          setAccessError(apiError.message);
+        if (isForbiddenError(apiError)) {
+          setActionAccessError(apiError.message);
           return;
         }
 
@@ -351,17 +484,35 @@ function AdminContractsContent(): JSX.Element {
           return;
         }
 
+        if (editing && (apiError.code === "not_found" || apiError.status === 404)) {
+          pushToast({
+            variant: "info",
+            title: "Umowa już nie istnieje",
+            description: apiError.message,
+          });
+          await loadContracts();
+          resetForm();
+          return;
+        }
+
         setFormError(apiError);
-        pushToast({
-          variant: "error",
-          title: "Nie udało się zapisać umowy",
-          description: apiError.message,
-        });
+        await handleMutationFailure(apiError, "save");
       } finally {
-        setPendingAction(false);
+        setFormPending(false);
       }
     },
-    [editing, formState, loadContracts, pendingAction, pushToast, resetForm, validateForm]
+    [
+      actionsLocked,
+      editing,
+      formPending,
+      formState,
+      handleMutationFailure,
+      items,
+      loadContracts,
+      pushToast,
+      resetForm,
+      validateForm,
+    ]
   );
 
   const handleEdit = useCallback((contract: ContractDTO) => {
@@ -378,16 +529,37 @@ function AdminContractsContent(): JSX.Element {
 
   const handleDelete = useCallback(
     async (contract: ContractDTO) => {
-      if (pendingAction) {
+      if (actionsLocked) {
+        return;
+      }
+
+      let shouldProceed = true;
+      setDeletePendingById((prev) => {
+        if (prev[contract.id]) {
+          shouldProceed = false;
+          return prev;
+        }
+        return { ...prev, [contract.id]: true };
+      });
+
+      if (!shouldProceed) {
         return;
       }
 
       const confirmed = window.confirm("Czy na pewno chcesz usunąć tę umowę?");
       if (!confirmed) {
+        setDeletePendingById((prev) => {
+          if (!prev[contract.id]) {
+            return prev;
+          }
+          const next = { ...prev };
+          delete next[contract.id];
+          return next;
+        });
         return;
       }
 
-      setPendingAction(true);
+      setActionAccessError(null);
 
       try {
         await apiDelete(`/api/v1/contracts/${encodeURIComponent(contract.id)}`);
@@ -402,21 +574,29 @@ function AdminContractsContent(): JSX.Element {
         }
       } catch (error) {
         const apiError = toApiError(error);
-        if (apiError.code === "forbidden") {
-          setAccessError(apiError.message);
-          return;
-        }
 
-        pushToast({
-          variant: "error",
-          title: "Nie udało się usunąć umowy",
-          description: apiError.message,
-        });
+        if (apiError.code === "not_found" || apiError.status === 404) {
+          pushToast({
+            variant: "info",
+            title: "Umowa już nie istnieje",
+            description: apiError.message,
+          });
+          await loadContracts();
+        } else {
+          await handleMutationFailure(apiError, "delete");
+        }
       } finally {
-        setPendingAction(false);
+        setDeletePendingById((prev) => {
+          if (!prev[contract.id]) {
+            return prev;
+          }
+          const next = { ...prev };
+          delete next[contract.id];
+          return next;
+        });
       }
     },
-    [editing?.id, loadContracts, pendingAction, pushToast, resetForm]
+    [actionsLocked, editing?.id, handleMutationFailure, loadContracts, pushToast, resetForm]
   );
 
   return (
@@ -433,6 +613,7 @@ function AdminContractsContent(): JSX.Element {
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
               placeholder="UUID nieruchomości"
               value={filters.propertyId}
+              list="admin-contract-property-options"
               onChange={(event: ChangeEvent<HTMLInputElement>) => handleFiltersChange("propertyId", event.target.value)}
               disabled={loading}
             />
@@ -446,6 +627,7 @@ function AdminContractsContent(): JSX.Element {
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
               placeholder="UUID użytkownika"
               value={filters.tenantUserId}
+              list="admin-contract-tenant-options"
               onChange={(event: ChangeEvent<HTMLInputElement>) =>
                 handleFiltersChange("tenantUserId", event.target.value)
               }
@@ -475,6 +657,7 @@ function AdminContractsContent(): JSX.Element {
 
       {accessError ? <ErrorAlert error={accessError} /> : null}
       {fetchError ? <ErrorAlert error={fetchError} /> : null}
+      {actionAccessError ? <ErrorAlert error={actionAccessError} /> : null}
 
       <div className="rounded-lg border bg-card p-6 shadow-sm">
         <header className="flex items-start justify-between gap-4">
@@ -505,10 +688,9 @@ function AdminContractsContent(): JSX.Element {
                 id="admin-contract-property-id"
                 className={buildInputClasses(fieldErrors.propertyId)}
                 value={formState.propertyId}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  handleFormChange("propertyId", event.target.value)
-                }
-                disabled={pendingAction}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => handleFormChange("propertyId", event.target.value)}
+                disabled={submitDisabled}
+                list="admin-contract-property-options"
                 required
               />
               {fieldErrors.propertyId ? <p className="text-sm text-destructive">{fieldErrors.propertyId}</p> : null}
@@ -524,12 +706,11 @@ function AdminContractsContent(): JSX.Element {
                 onChange={(event: ChangeEvent<HTMLInputElement>) =>
                   handleFormChange("tenantUserId", event.target.value)
                 }
-                disabled={pendingAction}
+                disabled={submitDisabled}
+                list="admin-contract-tenant-options"
                 required
               />
-              {fieldErrors.tenantUserId ? (
-                <p className="text-sm text-destructive">{fieldErrors.tenantUserId}</p>
-              ) : null}
+              {fieldErrors.tenantUserId ? <p className="text-sm text-destructive">{fieldErrors.tenantUserId}</p> : null}
             </div>
           </div>
 
@@ -543,10 +724,8 @@ function AdminContractsContent(): JSX.Element {
                 type="date"
                 className={buildInputClasses(fieldErrors.periodFrom)}
                 value={formState.periodFrom}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  handleFormChange("periodFrom", event.target.value)
-                }
-                disabled={pendingAction}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => handleFormChange("periodFrom", event.target.value)}
+                disabled={submitDisabled}
                 required
               />
               {fieldErrors.periodFrom ? <p className="text-sm text-destructive">{fieldErrors.periodFrom}</p> : null}
@@ -560,10 +739,8 @@ function AdminContractsContent(): JSX.Element {
                 type="date"
                 className={buildInputClasses(fieldErrors.periodTo)}
                 value={formState.periodTo}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  handleFormChange("periodTo", event.target.value)
-                }
-                disabled={pendingAction}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => handleFormChange("periodTo", event.target.value)}
+                disabled={submitDisabled}
                 required
               />
               {fieldErrors.periodTo ? <p className="text-sm text-destructive">{fieldErrors.periodTo}</p> : null}
@@ -571,8 +748,8 @@ function AdminContractsContent(): JSX.Element {
           </div>
 
           <div className="flex justify-end">
-            <Button disabled={pendingAction} type="submit">
-              {pendingAction ? "Zapisywanie…" : editing ? "Zapisz umowę" : "Dodaj umowę"}
+            <Button disabled={submitDisabled} type="submit">
+              {formPending ? "Zapisywanie…" : editing ? "Zapisz umowę" : "Dodaj umowę"}
             </Button>
           </div>
         </form>
@@ -623,7 +800,7 @@ function AdminContractsContent(): JSX.Element {
                   </td>
                 </tr>
               ) : (
-                items.map((contract) => {
+                tableItems.map(({ contract, deletePending }) => {
                   const active = isActive(contract.period);
                   return (
                     <tr key={contract.id} className="border-t border-border bg-background/80">
@@ -658,7 +835,7 @@ function AdminContractsContent(): JSX.Element {
                           <Button
                             type="button"
                             variant="secondary"
-                            disabled={pendingAction}
+                            disabled={actionsLocked}
                             onClick={() => handleEdit(contract)}
                           >
                             Edytuj
@@ -666,7 +843,7 @@ function AdminContractsContent(): JSX.Element {
                           <Button
                             type="button"
                             variant="destructive"
-                            disabled={pendingAction}
+                            disabled={deletePending || actionsLocked}
                             onClick={() => {
                               handleDelete(contract).catch(() => {
                                 /* obsłużone w handleDelete */
@@ -685,6 +862,17 @@ function AdminContractsContent(): JSX.Element {
           </table>
         </div>
       </div>
+
+      <datalist id="admin-contract-property-options">
+        {propertyOptions.map((option) => (
+          <option key={option} value={option} />
+        ))}
+      </datalist>
+      <datalist id="admin-contract-tenant-options">
+        {tenantOptions.map((option) => (
+          <option key={option} value={option} />
+        ))}
+      </datalist>
     </section>
   );
 }
@@ -696,5 +884,3 @@ export function AdminContractsList(): JSX.Element {
     </ToastProvider>
   );
 }
-
-

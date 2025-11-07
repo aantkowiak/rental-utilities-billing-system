@@ -801,6 +801,8 @@ function toApiError(error: unknown): ApiError & { details?: unknown } {
   return {
     code: "unexpected_error",
     message: error instanceof Error ? error.message : "Wystąpił nieoczekiwany błąd.",
+    details: error && typeof error === "object" && "details" in error ? (error as ApiError).details : undefined,
+    status: error && typeof error === "object" && "status" in error ? (error as ApiError).status : undefined,
   };
 }
 

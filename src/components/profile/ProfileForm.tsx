@@ -1,4 +1,4 @@
-import { useCallback, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
@@ -18,7 +18,27 @@ function toApiError(error: unknown): ApiError {
   return {
     code: "unexpected_error",
     message: error instanceof Error ? error.message : "Wystąpił nieoczekiwany błąd.",
+    details: error && typeof error === "object" && "details" in error ? (error as ApiError).details : undefined,
+    status: error && typeof error === "object" && "status" in error ? (error as ApiError).status : undefined,
   };
+}
+
+function extractDisplayNameError(details: unknown): string | null {
+  if (!details || typeof details !== "object") {
+    return null;
+  }
+
+  const displayName = (details as Record<string, unknown>).displayName;
+  if (typeof displayName === "string") {
+    return displayName;
+  }
+
+  if (Array.isArray(displayName)) {
+    const [first] = displayName;
+    return typeof first === "string" ? first : null;
+  }
+
+  return null;
 }
 
 function ProfileFormContent(): JSX.Element {
@@ -28,6 +48,18 @@ function ProfileFormContent(): JSX.Element {
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<ApiError | string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (fieldError) {
+      inputRef.current?.focus();
+    }
+  }, [fieldError]);
+
+  const handleDisplayNameChange = useCallback((value: string) => {
+    setDisplayName(value);
+    setFieldError(null);
+  }, []);
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -69,12 +101,13 @@ function ProfileFormContent(): JSX.Element {
         const apiError = toApiError(error);
 
         if (apiError.code === "validation_error") {
-          setFieldError("Wprowadzone dane są nieprawidłowe.");
+          const validationMessage = extractDisplayNameError(apiError.details) ?? "Wprowadzone dane są nieprawidłowe.";
+          setFieldError(validationMessage);
           return;
         }
 
-        if (apiError.code === "profile_not_found") {
-          setFormError("Nie znaleziono profilu użytkownika.");
+        if (apiError.code === "profile_not_found" || apiError.status === 404) {
+          setFormError(apiError.message || "Nie znaleziono profilu użytkownika.");
           return;
         }
 
@@ -111,21 +144,26 @@ function ProfileFormContent(): JSX.Element {
             </label>
             <input
               id="admin-profile-display-name"
+              ref={inputRef}
               className={[
                 "w-full rounded-md border bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
                 fieldError ? "border-destructive focus-visible:ring-destructive/40" : "border-input",
               ].join(" ")}
               type="text"
               value={displayName}
-              onChange={(event) => {
-                setDisplayName(event.target.value);
-                setFieldError(null);
-              }}
+              onChange={(event) => handleDisplayNameChange(event.target.value)}
               disabled={pending}
               minLength={3}
               required
+              aria-invalid={fieldError ? "true" : undefined}
+              aria-describedby={fieldError ? "admin-profile-display-name-error" : undefined}
+              autoComplete="name"
             />
-            {fieldError ? <p className="text-sm text-destructive">{fieldError}</p> : null}
+            {fieldError ? (
+              <p className="text-sm text-destructive" id="admin-profile-display-name-error">
+                {fieldError}
+              </p>
+            ) : null}
             <p className="text-xs text-muted-foreground">
               Nazwa będzie widoczna w e-mailach i raportach wysyłanych do najemców.
             </p>
@@ -149,5 +187,3 @@ export function ProfileForm(): JSX.Element {
     </ToastProvider>
   );
 }
-
-

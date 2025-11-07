@@ -34,6 +34,8 @@ interface AdminReportDetailProps {
   reportId: string;
 }
 
+type ActionKind = "regenerate" | "resend" | "toggle";
+
 const currencyFormatter = new Intl.NumberFormat("pl-PL", {
   currency: "PLN",
   style: "currency",
@@ -51,6 +53,27 @@ const dateTimeFormatter = new Intl.DateTimeFormat("pl-PL", {
   timeStyle: "short",
 });
 
+function isForbiddenError(error: ApiError): boolean {
+  return error.code === "forbidden" || error.status === 403;
+}
+
+function shouldRefetchAfterAction(error: ApiError): boolean {
+  if (!error) {
+    return false;
+  }
+
+  const refetchCodes = new Set(["conflict", "too_many_requests", "rate_limited", "internal_error", "not_found"]);
+  if (refetchCodes.has(error.code)) {
+    return true;
+  }
+
+  if (!error.status) {
+    return false;
+  }
+
+  return [404, 409, 429, 500].includes(error.status);
+}
+
 function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Element {
   const { pushToast } = useToast();
 
@@ -62,7 +85,9 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [actionAccessError, setActionAccessError] = useState<string | null>(null);
-  const [pendingAction, setPendingAction] = useState(false);
+  const [regeneratePending, setRegeneratePending] = useState(false);
+  const [resendPending, setResendPending] = useState(false);
+  const [togglePending, setTogglePending] = useState(false);
 
   const loadDetail = useCallback(async () => {
     if (!reportId) {
@@ -187,12 +212,53 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
     ];
   }, [lineItems, report]);
 
+  const summaryItems = useMemo(() => {
+    if (!report) {
+      return [] as { id: string; label: string; value: number | null | undefined; emphasize?: boolean }[];
+    }
+
+    return [
+      { id: "actualRent", label: "Czynsz bieżący", value: report.actualRentRaw },
+      { id: "fixedCost", label: "Koszty stałe", value: report.fixedCostRaw },
+      { id: "cold", label: "Koszt zużycia zimnej wody", value: report.meterCostColdRaw },
+      { id: "hot", label: "Koszt zużycia ciepłej wody", value: report.meterCostHotRaw },
+      { id: "heating", label: "Koszt ogrzewania", value: report.meterCostHeatingRaw },
+      { id: "balance", label: "Saldo", value: report.balanceRaw, emphasize: true },
+    ];
+  }, [report]);
+
+  const handleActionFailure = useCallback(
+    async (error: ApiError, action: ActionKind) => {
+      if (isForbiddenError(error)) {
+        setActionAccessError(error.message);
+        return;
+      }
+
+      const actionTitles: Record<ActionKind, string> = {
+        regenerate: "Nie udało się przeliczyć raportu",
+        resend: "Nie udało się wysłać e-maila",
+        toggle: "Nie udało się zmienić statusu raportu",
+      };
+
+      pushToast({
+        variant: "error",
+        title: actionTitles[action],
+        description: error.message,
+      });
+
+      if (shouldRefetchAfterAction(error)) {
+        await loadDetail();
+      }
+    },
+    [loadDetail, pushToast]
+  );
+
   const handleRegenerate = useCallback(async () => {
-    if (!report || pendingAction || !canRegenerate) {
+    if (!report || regeneratePending || !canRegenerate) {
       return;
     }
 
-    setPendingAction(true);
+    setRegeneratePending(true);
     setActionAccessError(null);
 
     try {
@@ -204,32 +270,18 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
       });
       await loadDetail();
     } catch (error) {
-      const apiError = toApiError(error);
-
-      if (apiError.code === "forbidden") {
-        setActionAccessError(apiError.message);
-      } else {
-        pushToast({
-          variant: "error",
-          title: "Nie udało się przeliczyć raportu",
-          description: apiError.message,
-        });
-
-        if (apiError.code === "conflict") {
-          await loadDetail();
-        }
-      }
+      await handleActionFailure(toApiError(error), "regenerate");
     } finally {
-      setPendingAction(false);
+      setRegeneratePending(false);
     }
-  }, [canRegenerate, loadDetail, pendingAction, pushToast, report]);
+  }, [canRegenerate, handleActionFailure, loadDetail, pushToast, regeneratePending, report]);
 
   const handleResend = useCallback(async () => {
-    if (!report || pendingAction || !canSendEmail) {
+    if (!report || resendPending || !canSendEmail) {
       return;
     }
 
-    setPendingAction(true);
+    setResendPending(true);
     setActionAccessError(null);
 
     try {
@@ -241,28 +293,14 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
       });
       await loadDetail();
     } catch (error) {
-      const apiError = toApiError(error);
-
-      if (apiError.code === "forbidden") {
-        setActionAccessError(apiError.message);
-      } else {
-        pushToast({
-          variant: "error",
-          title: "Nie udało się wysłać e-maila",
-          description: apiError.message,
-        });
-
-        if (apiError.code === "conflict") {
-          await loadDetail();
-        }
-      }
+      await handleActionFailure(toApiError(error), "resend");
     } finally {
-      setPendingAction(false);
+      setResendPending(false);
     }
-  }, [canSendEmail, loadDetail, pendingAction, pushToast, report]);
+  }, [canSendEmail, handleActionFailure, loadDetail, pushToast, report, resendPending]);
 
   const handleToggleRealized = useCallback(async () => {
-    if (!report || pendingAction || !canToggleRealized) {
+    if (!report || togglePending || !canToggleRealized) {
       return;
     }
 
@@ -277,7 +315,7 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
       }
     }
 
-    setPendingAction(true);
+    setTogglePending(true);
     setActionAccessError(null);
 
     try {
@@ -292,25 +330,11 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
       });
       await loadDetail();
     } catch (error) {
-      const apiError = toApiError(error);
-
-      if (apiError.code === "forbidden") {
-        setActionAccessError(apiError.message);
-      } else {
-        pushToast({
-          variant: "error",
-          title: "Nie udało się zmienić statusu raportu",
-          description: apiError.message,
-        });
-
-        if (apiError.code === "conflict") {
-          await loadDetail();
-        }
-      }
+      await handleActionFailure(toApiError(error), "toggle");
     } finally {
-      setPendingAction(false);
+      setTogglePending(false);
     }
-  }, [canToggleRealized, loadDetail, pendingAction, pushToast, report]);
+  }, [canToggleRealized, handleActionFailure, loadDetail, pushToast, report, togglePending]);
 
   return (
     <section className="space-y-6">
@@ -341,7 +365,7 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
                 <Button
                   type="button"
                   variant="secondary"
-                  disabled={pendingAction || !canRegenerate}
+                  disabled={regeneratePending || !canRegenerate}
                   onClick={() => {
                     handleRegenerate().catch(() => {
                       /* obsłużone w handleRegenerate */
@@ -355,7 +379,7 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
               <Button
                 type="button"
                 variant="outline"
-                disabled={pendingAction || !canSendEmail}
+                disabled={resendPending || !canSendEmail}
                 onClick={() => {
                   handleResend().catch(() => {
                     /* obsłużone w handleResend */
@@ -368,7 +392,7 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
               <Button
                 type="button"
                 variant={isRealized ? "destructive" : "default"}
-                disabled={pendingAction || !canToggleRealized}
+                disabled={togglePending || !canToggleRealized}
                 onClick={() => {
                   handleToggleRealized().catch(() => {
                     /* obsłużone w handleToggleRealized */
@@ -440,12 +464,9 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
           <section className="rounded-lg border bg-card p-6 shadow-sm">
             <h3 className="text-base font-semibold text-foreground">Podsumowanie kwot</h3>
             <dl className="mt-4 grid gap-4 sm:grid-cols-2">
-              <AmountItem label="Czynsz bieżący" value={report.actualRentRaw} />
-              <AmountItem label="Koszty stałe" value={report.fixedCostRaw} />
-              <AmountItem label="Koszt zużycia zimnej wody" value={report.meterCostColdRaw} />
-              <AmountItem label="Koszt zużycia ciepłej wody" value={report.meterCostHotRaw} />
-              <AmountItem label="Koszt ogrzewania" value={report.meterCostHeatingRaw} />
-              <AmountItem label="Saldo" value={report.balanceRaw} emphasize />
+              {summaryItems.map((item) => (
+                <AmountItem key={item.id} label={item.label} value={item.value} emphasize={item.emphasize} />
+              ))}
             </dl>
           </section>
 
@@ -564,7 +585,7 @@ function toApiError(error: unknown): ApiError {
   return {
     code: "unexpected_error",
     message: error instanceof Error ? error.message : "Wystąpił nieoczekiwany błąd.",
+    details: error && typeof error === "object" && "details" in error ? (error as ApiError).details : undefined,
+    status: error && typeof error === "object" && "status" in error ? (error as ApiError).status : undefined,
   };
 }
-
-

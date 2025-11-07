@@ -57,11 +57,11 @@ function resolveInitialFilters(): FiltersState {
   const paramMonth = params.get("month") ?? "";
 
   const storedProperty = window.localStorage.getItem(PROPERTY_STORAGE_KEY) ?? "";
-  const storedMonth = window.localStorage.getItem(MONTH_STORAGE_KEY) ?? currentMonth;
+  const storedMonth = window.localStorage.getItem(MONTH_STORAGE_KEY);
 
   return {
     propertyId: paramProperty || storedProperty,
-    month: paramMonth || storedMonth || currentMonth,
+    month: normalizeMonth(paramMonth || storedMonth, currentMonth),
   };
 }
 
@@ -120,6 +120,13 @@ function computeMonthRange(month: string): { from: string; to: string } | null {
     from: from.toISOString(),
     to: to.toISOString(),
   };
+}
+
+function normalizeMonth(value: string | null | undefined, fallback: string): string {
+  if (value && /^\d{4}-\d{2}$/.test(value)) {
+    return value;
+  }
+  return fallback;
 }
 
 function toApiError(error: unknown): ApiError {
@@ -186,9 +193,14 @@ function AdminReadingsContent(): JSX.Element {
   const [filters, setFilters] = useState<FiltersState>(() => resolveInitialFilters());
   const [items, setItems] = useState<ReadingDTO[]>([]);
   const [loading, setLoading] = useState(false);
-  const [pendingAction, setPendingAction] = useState(false);
+  const [formPending, setFormPending] = useState(false);
+  const [formPendingTargetId, setFormPendingTargetId] = useState<string | null>(null);
+  const [deletePendingById, setDeletePendingById] = useState<Record<string, boolean>>({});
+  const [replacementPendingById, setReplacementPendingById] = useState<Record<string, boolean>>({});
+  const [recalcPending, setRecalcPending] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
+  const [actionAccessError, setActionAccessError] = useState<string | null>(null);
   const [formError, setFormError] = useState<ApiError | string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FormField, string>>>({});
   const [formState, setFormState] = useState<FormState>(() => buildDefaultFormState());
@@ -196,6 +208,17 @@ function AdminReadingsContent(): JSX.Element {
   const [replacementSource, setReplacementSource] = useState<ReadingDTO | null>(null);
 
   const monthRange = useMemo(() => computeMonthRange(filters.month), [filters.month]);
+
+  const clearReplacementPending = useCallback((id: string) => {
+    setReplacementPendingById((prev) => {
+      if (!prev[id]) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -224,7 +247,7 @@ function AdminReadingsContent(): JSX.Element {
     }
 
     window.localStorage.setItem(PROPERTY_STORAGE_KEY, filters.propertyId);
-    window.localStorage.setItem(MONTH_STORAGE_KEY, filters.month || getCurrentMonth());
+    window.localStorage.setItem(MONTH_STORAGE_KEY, normalizeMonth(filters.month, getCurrentMonth()));
   }, [filters.propertyId, filters.month]);
 
   const loadReadings = useCallback(async () => {
@@ -232,12 +255,14 @@ function AdminReadingsContent(): JSX.Element {
       setItems([]);
       setFetchError(null);
       setAccessError(null);
+      setActionAccessError(null);
       return;
     }
 
     setLoading(true);
     setFetchError(null);
     setAccessError(null);
+    setActionAccessError(null);
 
     try {
       const search = new URLSearchParams();
@@ -294,7 +319,7 @@ function AdminReadingsContent(): JSX.Element {
     const value = event.target.value;
     setFilters((prev) => ({
       ...prev,
-      month: value || getCurrentMonth(),
+      month: normalizeMonth(value, getCurrentMonth()),
     }));
   }, []);
 
@@ -314,22 +339,26 @@ function AdminReadingsContent(): JSX.Element {
     element?.focus();
   }, []);
 
-  const handleEdit = useCallback((reading: ReadingDTO) => {
-    setEditing(reading);
-    setFormState({
-      readingAt: toLocalDateTimeInput(reading.readingAt),
-      coldM3: reading.coldM3.toString(),
-      hotM3: reading.hotM3.toString(),
-      heatingGj: reading.heatingGj.toString(),
-      commentText: reading.commentText ?? "",
-    });
-    setFieldErrors({});
-    setFormError(null);
-  }, []);
+  const handleEdit = useCallback(
+    (reading: ReadingDTO) => {
+      setEditing(reading);
+      setFormState({
+        readingAt: toLocalDateTimeInput(reading.readingAt),
+        coldM3: reading.coldM3.toString(),
+        hotM3: reading.hotM3.toString(),
+        heatingGj: reading.heatingGj.toString(),
+        commentText: reading.commentText ?? "",
+      });
+      setFieldErrors({});
+      setFormError(null);
+      setActionAccessError(null);
+    },
+    []
+  );
 
   const handleDelete = useCallback(
     async (reading: ReadingDTO) => {
-      if (pendingAction) {
+      if (deletePendingById[reading.id]) {
         return;
       }
 
@@ -338,7 +367,9 @@ function AdminReadingsContent(): JSX.Element {
         return;
       }
 
-      setPendingAction(true);
+      setDeletePendingById((prev) => ({ ...prev, [reading.id]: true }));
+      setActionAccessError(null);
+
       try {
         await apiDelete(`/api/v1/readings/${encodeURIComponent(reading.id)}`);
         pushToast({
@@ -352,22 +383,36 @@ function AdminReadingsContent(): JSX.Element {
         }
       } catch (error) {
         const apiError = toApiError(error);
-        pushToast({
-          variant: "error",
-          title: "Nie udało się usunąć odczytu",
-          description: apiError.message,
-        });
+
+        if (apiError.code === "forbidden" || apiError.status === 403) {
+          setActionAccessError(apiError.message);
+        } else {
+          const isNotFound = apiError.code === "not_found" || apiError.status === 404;
+          pushToast({
+            variant: isNotFound ? "info" : "error",
+            title: isNotFound ? "Odczyt już nie istnieje" : "Nie udało się usunąć odczytu",
+            description: apiError.message,
+          });
+
+          if (isNotFound || apiError.code === "conflict" || apiError.status === 409) {
+            await loadReadings();
+          }
+        }
       } finally {
-        setPendingAction(false);
+        setDeletePendingById((prev) => {
+          const next = { ...prev };
+          delete next[reading.id];
+          return next;
+        });
       }
     },
-    [editing?.id, loadReadings, pendingAction, pushToast, resetForm]
+    [deletePendingById, editing?.id, loadReadings, pushToast, resetForm]
   );
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      if (pendingAction) {
+      if (formPending) {
         return;
       }
 
@@ -421,9 +466,11 @@ function AdminReadingsContent(): JSX.Element {
         basePayload.commentVisibleToTenant = false;
       }
 
-      setPendingAction(true);
+      setFormPending(true);
+      setFormPendingTargetId(editing ? editing.id : null);
       setFormError(null);
       setFieldErrors({});
+      setActionAccessError(null);
 
       try {
         let response: ReadingResponse;
@@ -474,18 +521,37 @@ function AdminReadingsContent(): JSX.Element {
           }
         }
 
-        setFormError(apiError);
+        if (apiError.code === "forbidden" || apiError.status === 403) {
+          setActionAccessError(apiError.message);
+        } else {
+          if (apiError.code === "conflict" || apiError.status === 409) {
+            pushToast({
+              variant: "info",
+              title: "Dane zostały zmienione",
+              description: apiError.message,
+            });
+            await loadReadings();
+          } else if (!apiError.status || apiError.status >= 500) {
+            pushToast({
+              variant: "error",
+              title: "Nie udało się zapisać odczytu",
+              description: apiError.message,
+            });
+          }
+          setFormError(apiError);
+        }
       } finally {
-        setPendingAction(false);
+        setFormPending(false);
+        setFormPendingTargetId(null);
       }
     },
     [
       editing,
       filters.propertyId,
       focusFieldRef,
+      formPending,
       formState,
       loadReadings,
-      pendingAction,
       pushToast,
     ]
   );
@@ -494,18 +560,28 @@ function AdminReadingsContent(): JSX.Element {
     resetForm();
   }, [resetForm]);
 
+  const closeReplacementModal = useCallback(() => {
+    if (replacementSource) {
+      clearReplacementPending(replacementSource.id);
+    }
+    setReplacementSource(null);
+    setActionAccessError(null);
+  }, [clearReplacementPending, replacementSource]);
+
   const handleReplacementSuccess = useCallback(async () => {
     pushToast({
       variant: "success",
       title: "Dodano odczyt zastępczy",
       description: "Rekalkulacja kotwic została zaplanowana.",
     });
-    setReplacementSource(null);
+    closeReplacementModal();
     await loadReadings();
-  }, [loadReadings, pushToast]);
+  }, [closeReplacementModal, loadReadings, pushToast]);
+
+  const replacementModalPending = replacementSource ? Boolean(replacementPendingById[replacementSource.id]) : false;
 
   return (
-    <section className="space-y-8">
+    <section aria-busy={recalcPending} className="space-y-8">
       <div className="rounded-lg border bg-card p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-foreground">Filtry</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -541,6 +617,7 @@ function AdminReadingsContent(): JSX.Element {
 
       {accessError ? <ErrorAlert error={accessError} /> : null}
       {fetchError ? <ErrorAlert error={fetchError} /> : null}
+      {actionAccessError ? <ErrorAlert error={actionAccessError} /> : null}
 
       <div className="grid gap-8 lg:grid-cols-[2fr_3fr]">
         <section className="space-y-4 rounded-lg border bg-card p-6 shadow-sm">
@@ -572,7 +649,7 @@ function AdminReadingsContent(): JSX.Element {
               <input
                 className={buildInputClasses(fieldErrors.readingAt)}
                 data-admin-reading-field="readingAt"
-                disabled={pendingAction || !filters.propertyId}
+                disabled={formPending || !filters.propertyId || recalcPending}
                 id="admin-reading-at"
                 type="datetime-local"
                 value={formState.readingAt}
@@ -596,7 +673,7 @@ function AdminReadingsContent(): JSX.Element {
                 <input
                   className={buildInputClasses(fieldErrors.coldM3)}
                   data-admin-reading-field="coldM3"
-                  disabled={pendingAction || !filters.propertyId}
+                  disabled={formPending || !filters.propertyId || recalcPending}
                   id="admin-reading-cold"
                   inputMode="decimal"
                   value={formState.coldM3}
@@ -614,7 +691,7 @@ function AdminReadingsContent(): JSX.Element {
                 <input
                   className={buildInputClasses(fieldErrors.hotM3)}
                   data-admin-reading-field="hotM3"
-                  disabled={pendingAction || !filters.propertyId}
+                  disabled={formPending || !filters.propertyId || recalcPending}
                   id="admin-reading-hot"
                   inputMode="decimal"
                   value={formState.hotM3}
@@ -632,7 +709,7 @@ function AdminReadingsContent(): JSX.Element {
                 <input
                   className={buildInputClasses(fieldErrors.heatingGj)}
                   data-admin-reading-field="heatingGj"
-                  disabled={pendingAction || !filters.propertyId}
+                  disabled={formPending || !filters.propertyId || recalcPending}
                   id="admin-reading-heating"
                   inputMode="decimal"
                   value={formState.heatingGj}
@@ -651,7 +728,7 @@ function AdminReadingsContent(): JSX.Element {
               <textarea
                 className={buildTextareaClasses(fieldErrors.commentText)}
                 data-admin-reading-field="commentText"
-                disabled={pendingAction}
+                disabled={formPending || recalcPending}
                 id="admin-reading-comment"
                 maxLength={2000}
                 onChange={(event) => handleFormChange("commentText", event.target.value)}
@@ -665,8 +742,8 @@ function AdminReadingsContent(): JSX.Element {
             </div>
 
             <div className="flex justify-end">
-              <Button disabled={pendingAction || !filters.propertyId} type="submit">
-                {pendingAction ? "Zapisywanie..." : editing ? "Zapisz zmiany" : "Dodaj odczyt"}
+              <Button disabled={formPending || !filters.propertyId || recalcPending} type="submit">
+                {formPending ? "Zapisywanie..." : editing ? "Zapisz zmiany" : "Dodaj odczyt"}
               </Button>
             </div>
           </form>
@@ -719,8 +796,14 @@ function AdminReadingsContent(): JSX.Element {
                     </td>
                   </tr>
                 ) : (
-                  items.map((item) => (
-                    <Fragment key={item.id}>
+                  items.map((item) => {
+                    const deletePending = Boolean(deletePendingById[item.id]);
+                    const replacementPending = Boolean(replacementPendingById[item.id]);
+                    const updatePending = formPending && formPendingTargetId === item.id;
+                    const rowBusy = deletePending || replacementPending || updatePending;
+
+                    return (
+                      <Fragment key={item.id}>
                       <tr className="rounded-lg border border-border bg-background/80 align-top shadow-sm">
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-1">
@@ -755,7 +838,7 @@ function AdminReadingsContent(): JSX.Element {
                             <Button
                               variant="secondary"
                               type="button"
-                              disabled={pendingAction}
+                              disabled={rowBusy || recalcPending}
                               onClick={() => handleEdit(item)}
                             >
                               Edytuj
@@ -763,15 +846,18 @@ function AdminReadingsContent(): JSX.Element {
                             <Button
                               variant="ghost"
                               type="button"
-                              disabled={pendingAction}
-                              onClick={() => setReplacementSource(item)}
+                              disabled={replacementPending || recalcPending}
+                              onClick={() => {
+                                setActionAccessError(null);
+                                setReplacementSource(item);
+                              }}
                             >
                               Zastąp
                             </Button>
                             <Button
                               variant="destructive"
                               type="button"
-                              disabled={pendingAction}
+                              disabled={deletePending || recalcPending}
                               onClick={() => handleDelete(item)}
                             >
                               Usuń
@@ -780,7 +866,8 @@ function AdminReadingsContent(): JSX.Element {
                         </td>
                       </tr>
                     </Fragment>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -797,30 +884,71 @@ function AdminReadingsContent(): JSX.Element {
             /* handled elsewhere */
           });
         }}
+        onPendingChange={setRecalcPending}
       />
 
+      {recalcPending ? (
+        <div
+          aria-live="assertive"
+          className="fixed inset-0 z-40 flex items-center justify-center bg-background/75 p-4 backdrop-blur-sm"
+          role="status"
+        >
+          <div className="flex flex-col items-center gap-3 rounded-lg border bg-card px-6 py-4 shadow-xl">
+            <div aria-hidden="true" className="size-10 animate-spin rounded-full border-2 border-muted border-t-transparent" />
+            <p className="text-sm font-medium text-foreground">Planowanie przeliczenia kotwic…</p>
+            <p className="text-xs text-muted-foreground text-center">
+              Poczekaj na zakończenie operacji, aby uniknąć konfliktów danych.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       {replacementSource ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-lg border bg-card p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm" role="presentation">
+          <div
+            aria-busy={replacementModalPending}
+            aria-labelledby="replacement-modal-title"
+            aria-modal="true"
+            role="dialog"
+            className="relative w-full max-w-lg rounded-lg border bg-card p-6 shadow-xl"
+          >
+            {replacementModalPending ? (
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/60">
+                <div className="flex flex-col items-center gap-3" aria-live="assertive">
+                  <div aria-hidden="true" className="size-8 animate-spin rounded-full border-2 border-muted border-t-transparent" />
+                  <p className="text-sm font-medium text-foreground">Zapisywanie odczytu zastępczego…</p>
+                </div>
+              </div>
+            ) : null}
             <header className="mb-4 flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold text-foreground">Odczyt zastępczy</h2>
+                <h2 className="text-lg font-semibold text-foreground" id="replacement-modal-title">
+                  Odczyt zastępczy
+                </h2>
                 <p className="text-sm text-muted-foreground">
                   Wprowadź wartości zastępcze. Po zapisaniu zostanie uruchomione ponowne wyliczenie kotwic.
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Źródło: {formatDate(replacementSource.readingAt)} • {formatNumber(replacementSource.coldM3)} /{" "}
-                  {formatNumber(replacementSource.hotM3)} / {formatNumber(replacementSource.heatingGj)}
+                  Źródło: {formatDate(replacementSource.readingAt)} • {formatNumber(replacementSource.coldM3)} / {formatNumber(replacementSource.hotM3)} /{" "}
+                  {formatNumber(replacementSource.heatingGj)}
                 </p>
               </div>
-              <Button variant="ghost" type="button" onClick={() => setReplacementSource(null)}>
+              <Button variant="ghost" type="button" onClick={closeReplacementModal} disabled={replacementModalPending}>
                 Zamknij
               </Button>
             </header>
             <ReplacementForm
               source={replacementSource}
-              onClose={() => setReplacementSource(null)}
+              onClose={closeReplacementModal}
               onSuccess={handleReplacementSuccess}
+              onPendingChange={(pending) => {
+                const id = replacementSource.id;
+                if (pending) {
+                  setReplacementPendingById((prev) => ({ ...prev, [id]: true }));
+                } else {
+                  clearReplacementPending(id);
+                }
+              }}
             />
           </div>
         </div>

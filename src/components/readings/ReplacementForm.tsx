@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ interface ReplacementFormProps {
   source: ReadingDTO;
   onSuccess?: () => void;
   onClose?: () => void;
+  onPendingChange?: (pending: boolean) => void;
 }
 
 interface ReplacementFormState {
@@ -80,12 +81,16 @@ function toApiError(error: unknown): ApiError {
   };
 }
 
-export function ReplacementForm({ source, onClose, onSuccess }: ReplacementFormProps): JSX.Element {
+export function ReplacementForm({ source, onClose, onSuccess, onPendingChange }: ReplacementFormProps): JSX.Element {
   const [formState, setFormState] = useState<ReplacementFormState>(() => buildInitialState(source));
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<ApiError | string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<ReplacementFormField, string>>>({});
+
+  useEffect(() => {
+    onPendingChange?.(pending);
+  }, [onPendingChange, pending]);
 
   const handleChange = useCallback((field: ReplacementFormField, value: string) => {
     setFormState((prev) => ({

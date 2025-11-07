@@ -149,12 +149,7 @@ export function LoginForm(): JSX.Element {
           {isDisabled ? "Wysyłanie..." : "Wyślij link logowania"}
         </Button>
 
-        <div
-          aria-live="polite"
-          className="min-h-[1.5rem] text-sm text-emerald-700"
-          id={statusMessageId}
-          role="status"
-        >
+        <div aria-live="polite" className="min-h-[1.5rem] text-sm text-emerald-700" id={statusMessageId} role="status">
           {successMessage ? (
             <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
               {successMessage}
@@ -182,6 +177,8 @@ function toApiError(error: unknown): ApiError {
   return {
     code: "unexpected_error",
     message: error instanceof Error ? error.message : "Wystąpił nieoczekiwany błąd.",
+    details: error && typeof error === "object" && "details" in error ? (error as ApiError).details : undefined,
+    status: error && typeof error === "object" && "status" in error ? (error as ApiError).status : undefined,
   };
 }
 
@@ -192,4 +189,3 @@ function buildInputClasses(hasError: boolean): string {
     hasError ? "border-destructive focus-visible:ring-destructive/40" : "border-input",
   ].join(" ");
 }
-

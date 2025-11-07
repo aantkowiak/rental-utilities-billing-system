@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type Dispatch, type SetStateAction } from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
@@ -12,6 +12,42 @@ import type {
 } from "@/types";
 
 const MONTH_STORAGE_KEY = "admin-reports:month";
+const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+type PendingMap = Record<string, boolean>;
+
+function getCurrentMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, "0")}`;
+}
+
+function normalizeMonth(value: string | null | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  return MONTH_PATTERN.test(value) ? value : null;
+}
+
+function ensureMonth(value: string | null | undefined): string {
+  return normalizeMonth(value) ?? getCurrentMonth();
+}
+
+function setPending(setter: Dispatch<SetStateAction<PendingMap>>, id: string): void {
+  setter((prev) => ({ ...prev, [id]: true }));
+}
+
+function clearPending(setter: Dispatch<SetStateAction<PendingMap>>, id: string): void {
+  setter((prev) => {
+    if (!prev[id]) {
+      return prev;
+    }
+
+    const next = { ...prev };
+    delete next[id];
+    return next;
+  });
+}
 
 interface AdminReportPermissions {
   canGenerate?: boolean;
@@ -36,19 +72,14 @@ interface AdminReportsResponse {
 
 function resolveInitialMonth(): string {
   if (typeof window === "undefined") {
-    const now = new Date();
-    return `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, "0")}`;
+    return getCurrentMonth();
   }
 
   const params = new URLSearchParams(window.location.search);
-  const param = params.get("month");
-  const stored = window.localStorage.getItem(MONTH_STORAGE_KEY);
-  const fallback = (() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, "0")}`;
-  })();
+  const param = normalizeMonth(params.get("month"));
+  const stored = normalizeMonth(window.localStorage.getItem(MONTH_STORAGE_KEY));
 
-  return param || stored || fallback;
+  return param ?? stored ?? getCurrentMonth();
 }
 
 function toApiError(error: unknown): ApiError {
@@ -59,6 +90,8 @@ function toApiError(error: unknown): ApiError {
   return {
     code: "unexpected_error",
     message: error instanceof Error ? error.message : "Wystąpił nieoczekiwany błąd.",
+    details: error && typeof error === "object" && "details" in error ? (error as ApiError).details : undefined,
+    status: error && typeof error === "object" && "status" in error ? (error as ApiError).status : undefined,
   };
 }
 
@@ -116,15 +149,40 @@ function shouldToast(code: string | undefined): boolean {
   return ["unexpected_error", "internal_error", "conflict", "too_many_requests", "rate_limited"].includes(code);
 }
 
+function isForbiddenError(error: ApiError): boolean {
+  return error.code === "forbidden" || error.status === 403;
+}
+
+function shouldRefetchAfterAction(error: ApiError): boolean {
+  if (!error) {
+    return false;
+  }
+
+  const refetchCodes = new Set(["conflict", "too_many_requests", "rate_limited", "internal_error", "not_found"]);
+  if (refetchCodes.has(error.code)) {
+    return true;
+  }
+
+  if (!error.status) {
+    return false;
+  }
+
+  return [404, 409, 429, 500].includes(error.status);
+}
+
 function AdminReportsContent(): JSX.Element {
   const { pushToast } = useToast();
 
   const [month, setMonth] = useState<string>(() => resolveInitialMonth());
   const [items, setItems] = useState<AdminReportListItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [pendingAction, setPendingAction] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
+  const [actionAccessError, setActionAccessError] = useState<string | null>(null);
+  const [generatePendingById, setGeneratePendingById] = useState<PendingMap>({});
+  const [regeneratePendingById, setRegeneratePendingById] = useState<PendingMap>({});
+  const [resendPendingById, setResendPendingById] = useState<PendingMap>({});
+  const [togglePendingById, setTogglePendingById] = useState<PendingMap>({});
 
   const listQuery = useMemo(() => {
     const params = new URLSearchParams();
@@ -159,6 +217,7 @@ function AdminReportsContent(): JSX.Element {
     setLoading(true);
     setFetchError(null);
     setAccessError(null);
+     setActionAccessError(null);
 
     try {
       const path = listQuery ? `/api/v1/reports?${listQuery}` : "/api/v1/reports";
@@ -194,28 +253,35 @@ function AdminReportsContent(): JSX.Element {
   }, [loadReports]);
 
   const handleMonthChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    const next = event.target.value;
+    const next = ensureMonth(event.target.value);
     setMonth(next);
   }, []);
 
-  const handleActionError = useCallback(
-    (error: ApiError) => {
+  const handleActionFailure = useCallback(
+    async (error: ApiError) => {
+      if (isForbiddenError(error)) {
+        setActionAccessError(error.message);
+        return;
+      }
+
       pushToast({
         variant: "error",
         title: "Nie udało się wykonać akcji",
         description: error.message,
       });
+
+      if (shouldRefetchAfterAction(error)) {
+        await loadReports();
+      }
     },
-    [pushToast]
+    [loadReports, pushToast]
   );
 
   const handleGenerate = useCallback(
     async (item: AdminReportListItem) => {
-      if (pendingAction) {
-        return;
-      }
+      const reportId = item.report.id;
+      const permissions = item.permissions ?? null;
 
-      const permissions = item.permissions;
       if (permissions && (!permissions.canGenerate || permissions.generateDisabledReason)) {
         if (permissions.generateDisabledReason) {
           pushToast({
@@ -227,7 +293,20 @@ function AdminReportsContent(): JSX.Element {
         return;
       }
 
-      setPendingAction(true);
+      let shouldProceed = true;
+      setGeneratePendingById((prev) => {
+        if (prev[reportId]) {
+          shouldProceed = false;
+          return prev;
+        }
+        return { ...prev, [reportId]: true };
+      });
+
+      if (!shouldProceed) {
+        return;
+      }
+
+      setActionAccessError(null);
 
       const payload: GenerateReportCmd = {
         contractId: item.report.contractId,
@@ -243,23 +322,21 @@ function AdminReportsContent(): JSX.Element {
         });
         await loadReports();
       } catch (error) {
-        handleActionError(toApiError(error));
+        await handleActionFailure(toApiError(error));
       } finally {
-        setPendingAction(false);
+        clearPending(setGeneratePendingById, reportId);
       }
     },
-    [handleActionError, loadReports, month, pendingAction, pushToast]
+    [handleActionFailure, loadReports, month, pushToast]
   );
 
   const handleRegenerate = useCallback(
     async (item: AdminReportListItem) => {
-      if (pendingAction) {
-        return;
-      }
+      const reportId = item.report.id;
+      const permissions = item.permissions ?? null;
 
-      const permissions = item.permissions;
       if (permissions && (!permissions.canRegenerate || permissions.regenerateDisabledReason)) {
-        if (permissions?.regenerateDisabledReason) {
+        if (permissions.regenerateDisabledReason) {
           pushToast({
             variant: "info",
             title: "Nie można przeliczyć raportu",
@@ -269,10 +346,23 @@ function AdminReportsContent(): JSX.Element {
         return;
       }
 
-      setPendingAction(true);
+      let shouldProceed = true;
+      setRegeneratePendingById((prev) => {
+        if (prev[reportId]) {
+          shouldProceed = false;
+          return prev;
+        }
+        return { ...prev, [reportId]: true };
+      });
+
+      if (!shouldProceed) {
+        return;
+      }
+
+      setActionAccessError(null);
 
       try {
-        await apiPost<void>(`/api/v1/reports/${encodeURIComponent(item.report.id)}/regenerate`);
+        await apiPost<void>(`/api/v1/reports/${encodeURIComponent(reportId)}/regenerate`);
         pushToast({
           variant: "success",
           title: "Przeliczanie zaplanowane",
@@ -280,23 +370,21 @@ function AdminReportsContent(): JSX.Element {
         });
         await loadReports();
       } catch (error) {
-        handleActionError(toApiError(error));
+        await handleActionFailure(toApiError(error));
       } finally {
-        setPendingAction(false);
+        clearPending(setRegeneratePendingById, reportId);
       }
     },
-    [handleActionError, loadReports, pendingAction, pushToast]
+    [handleActionFailure, loadReports, pushToast]
   );
 
   const handleResend = useCallback(
     async (item: AdminReportListItem) => {
-      if (pendingAction) {
-        return;
-      }
+      const reportId = item.report.id;
+      const permissions = item.permissions ?? null;
 
-      const permissions = item.permissions;
       if (permissions && (!permissions.canSendEmail || permissions.sendEmailDisabledReason)) {
-        if (permissions?.sendEmailDisabledReason) {
+        if (permissions.sendEmailDisabledReason) {
           pushToast({
             variant: "info",
             title: "Nie można wysłać wiadomości",
@@ -306,10 +394,23 @@ function AdminReportsContent(): JSX.Element {
         return;
       }
 
-      setPendingAction(true);
+      let shouldProceed = true;
+      setResendPendingById((prev) => {
+        if (prev[reportId]) {
+          shouldProceed = false;
+          return prev;
+        }
+        return { ...prev, [reportId]: true };
+      });
+
+      if (!shouldProceed) {
+        return;
+      }
+
+      setActionAccessError(null);
 
       try {
-        await apiPost<void>(`/api/v1/reports/${encodeURIComponent(item.report.id)}/send-email`);
+        await apiPost<void>(`/api/v1/reports/${encodeURIComponent(reportId)}/send-email`);
         pushToast({
           variant: "success",
           title: "E-mail wysłany",
@@ -317,23 +418,21 @@ function AdminReportsContent(): JSX.Element {
         });
         await loadReports();
       } catch (error) {
-        handleActionError(toApiError(error));
+        await handleActionFailure(toApiError(error));
       } finally {
-        setPendingAction(false);
+        clearPending(setResendPendingById, reportId);
       }
     },
-    [handleActionError, loadReports, pendingAction, pushToast]
+    [handleActionFailure, loadReports, pushToast]
   );
 
   const handleToggleRealized = useCallback(
     async (item: AdminReportListItem) => {
-      if (pendingAction) {
-        return;
-      }
+      const reportId = item.report.id;
+      const permissions = item.permissions ?? null;
 
-      const permissions = item.permissions;
       if (permissions && (!permissions.canToggleRealized || permissions.toggleRealizedDisabledReason)) {
-        if (permissions?.toggleRealizedDisabledReason) {
+        if (permissions.toggleRealizedDisabledReason) {
           pushToast({
             variant: "info",
             title: "Operacja zablokowana",
@@ -347,15 +446,31 @@ function AdminReportsContent(): JSX.Element {
       const nextStatus: UpdateReportStatusCmd["status"] = currentStatus === "realized" ? "unlocked" : "realized";
 
       if (nextStatus === "unlocked") {
-        const confirmed = window.confirm("Czy na pewno chcesz odblokować raport? Zmiany staną się widoczne dla najemcy.");
+        const confirmed = window.confirm(
+          "Czy na pewno chcesz odblokować raport? Zmiany staną się widoczne dla najemcy."
+        );
         if (!confirmed) {
           return;
         }
       }
 
-      setPendingAction(true);
+      let shouldProceed = true;
+      setTogglePendingById((prev) => {
+        if (prev[reportId]) {
+          shouldProceed = false;
+          return prev;
+        }
+        return { ...prev, [reportId]: true };
+      });
+
+      if (!shouldProceed) {
+        return;
+      }
+
+      setActionAccessError(null);
+
       try {
-        await apiPost<void>(`/api/v1/reports/${encodeURIComponent(item.report.id)}`, {
+        await apiPost<void>(`/api/v1/reports/${encodeURIComponent(reportId)}`, {
           status: nextStatus,
         });
 
@@ -369,12 +484,12 @@ function AdminReportsContent(): JSX.Element {
         });
         await loadReports();
       } catch (error) {
-        handleActionError(toApiError(error));
+        await handleActionFailure(toApiError(error));
       } finally {
-        setPendingAction(false);
+        clearPending(setTogglePendingById, reportId);
       }
     },
-    [handleActionError, loadReports, pendingAction, pushToast]
+    [handleActionFailure, loadReports, pushToast]
   );
 
   return (
@@ -398,8 +513,9 @@ function AdminReportsContent(): JSX.Element {
         </div>
       </div>
 
-      {accessError ? <ErrorAlert error={accessError} /> : null}
-      {fetchError ? <ErrorAlert error={fetchError} /> : null}
+              {accessError ? <ErrorAlert error={accessError} /> : null}
+              {actionAccessError ? <ErrorAlert error={actionAccessError} /> : null}
+              {fetchError ? <ErrorAlert error={fetchError} /> : null}
 
       <div className="rounded-lg border bg-card p-6 shadow-sm">
         <header className="flex items-center justify-between">
@@ -447,6 +563,24 @@ function AdminReportsContent(): JSX.Element {
                 items.map((item) => {
                   const report = item.report;
                   const permissions = item.permissions ?? {};
+                  const reportId = report.id;
+                  const generatePending = Boolean(generatePendingById[reportId]);
+                  const regeneratePending = Boolean(regeneratePendingById[reportId]);
+                  const resendPending = Boolean(resendPendingById[reportId]);
+                  const togglePending = Boolean(togglePendingById[reportId]);
+
+                  const canGenerate = permissions.canGenerate !== false && !permissions.generateDisabledReason;
+                  const canRegenerate = permissions.canRegenerate !== false && !permissions.regenerateDisabledReason;
+                  const canSendEmail = permissions.canSendEmail !== false && !permissions.sendEmailDisabledReason;
+                  const canToggle = permissions.canToggleRealized !== false && !permissions.toggleRealizedDisabledReason;
+
+                  const generateDisabled = loading || generatePending || !canGenerate;
+                  const regenerateDisabled =
+                    loading || regeneratePending || !canRegenerate;
+                  const resendDisabled = loading || resendPending || !canSendEmail;
+                  const toggleDisabled = loading || togglePending || !canToggle;
+
+                  const showRegenerate = report.status !== "realized";
 
                   return (
                     <tr key={report.id} className="rounded-lg border border-border bg-background/80 align-top shadow-sm">
@@ -506,25 +640,27 @@ function AdminReportsContent(): JSX.Element {
                           <Button
                             type="button"
                             variant="secondary"
-                            disabled={pendingAction}
+                            disabled={generateDisabled}
                             onClick={() => handleGenerate(item)}
                             title={permissions.generateDisabledReason ?? undefined}
                           >
                             Generuj
                           </Button>
+                          {showRegenerate ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              disabled={regenerateDisabled}
+                              onClick={() => handleRegenerate(item)}
+                              title={permissions.regenerateDisabledReason ?? undefined}
+                            >
+                              Przelicz
+                            </Button>
+                          ) : null}
                           <Button
                             type="button"
                             variant="ghost"
-                            disabled={pendingAction}
-                            onClick={() => handleRegenerate(item)}
-                            title={permissions.regenerateDisabledReason ?? undefined}
-                          >
-                            Przelicz
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            disabled={pendingAction}
+                            disabled={resendDisabled}
                             onClick={() => handleResend(item)}
                             title={permissions.sendEmailDisabledReason ?? undefined}
                           >
@@ -533,7 +669,7 @@ function AdminReportsContent(): JSX.Element {
                           <Button
                             type="button"
                             variant={report.status === "realized" ? "destructive" : "default"}
-                            disabled={pendingAction}
+                            disabled={toggleDisabled}
                             onClick={() => handleToggleRealized(item)}
                             title={permissions.toggleRealizedDisabledReason ?? undefined}
                           >

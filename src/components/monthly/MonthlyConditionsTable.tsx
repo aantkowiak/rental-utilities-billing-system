@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type InputHTMLAttributes } from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
 import { Button } from "@/components/ui/button";
-import { apiGet, apiPatch, apiPost, type ApiError } from "@/lib/client/http";
+import { apiDelete, apiGet, apiPatch, apiPost, type ApiError } from "@/lib/client/http";
 import type { MonthlyConditionDTO } from "@/types";
 import type {
   MonthlyConditionListResponse,
@@ -33,12 +33,46 @@ interface FormState {
 
 type FormField = keyof FormState;
 
+type DraftMap = Record<string, FormState>;
+type DraftErrorsMap = Record<string, Partial<Record<FormField, string>>>;
+type PendingMap = Record<string, boolean>;
+
+const DRAFT_FIELDS: FormField[] = [
+  "month",
+  "managerFee",
+  "priceCold",
+  "priceHotHeating",
+  "priceHeating",
+  "forecastCold",
+  "forecastHot",
+  "forecastHeating",
+  "advancePayment",
+];
+
+const NUMERIC_FIELDS: FormField[] = [
+  "managerFee",
+  "priceCold",
+  "priceHotHeating",
+  "priceHeating",
+  "forecastCold",
+  "forecastHot",
+  "forecastHeating",
+  "advancePayment",
+];
+
 function resolveInitialMonth(value?: string): string {
   if (value && /^\d{4}-\d{2}$/.test(value)) {
     return value;
   }
   const now = new Date();
   return `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, "0")}`;
+}
+
+function normalizeMonth(value: string, fallback: string): string {
+  if (value && /^\d{4}-\d{2}$/.test(value)) {
+    return value;
+  }
+  return fallback;
 }
 
 function resolveInitialFilters(): FiltersState {
@@ -60,40 +94,6 @@ function resolveInitialFilters(): FiltersState {
     propertyId: propertyParam || storedProperty,
     month: resolveInitialMonth(monthParam || storedMonth),
   };
-}
-
-function toApiError(error: unknown): ApiError {
-  if (error && typeof error === "object" && "code" in error && "message" in error) {
-    return error as ApiError;
-  }
-  return {
-    code: "unexpected_error",
-    message: error instanceof Error ? error.message : "Wystąpił nieoczekiwany błąd.",
-  };
-}
-
-function formatCurrency(value: number | string): string {
-  const numeric = typeof value === "string" ? Number.parseFloat(value) : value;
-  if (!Number.isFinite(numeric)) {
-    return "—";
-  }
-  return new Intl.NumberFormat("pl-PL", {
-    style: "currency",
-    currency: "PLN",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(numeric);
-}
-
-function formatNumber(value: number | string): string {
-  const numeric = typeof value === "string" ? Number.parseFloat(value) : value;
-  if (!Number.isFinite(numeric)) {
-    return "—";
-  }
-  return new Intl.NumberFormat("pl-PL", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 3,
-  }).format(numeric);
 }
 
 function buildFormState(dto: MonthlyConditionDTO): FormState {
@@ -125,11 +125,80 @@ function buildEmptyFormState(month: string): FormState {
   };
 }
 
-function buildInputClasses(error?: string): string {
-  return [
-    "w-full rounded-md border bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
-    error ? "border-destructive focus-visible:ring-destructive/40" : "border-input",
-  ].join(" ");
+function toApiError(error: unknown): ApiError {
+  if (error && typeof error === "object" && "code" in error && "message" in error) {
+    return error as ApiError;
+  }
+
+  return {
+    code: "unexpected_error",
+    message: error instanceof Error ? error.message : "Wystąpił nieoczekiwany błąd.",
+  };
+}
+
+function extractFieldErrors(details: unknown): Partial<Record<FormField, string>> {
+  if (!details || typeof details !== "object") {
+    return {};
+  }
+
+  const result: Partial<Record<FormField, string>> = {};
+  for (const [key, value] of Object.entries(details as Record<string, unknown>)) {
+    if (DRAFT_FIELDS.includes(key as FormField) && typeof value === "string") {
+      result[key as FormField] = value;
+    }
+  }
+  return result;
+}
+
+function areDraftsEqual(a: FormState | undefined, b: FormState | undefined): boolean {
+  if (!a || !b) {
+    return false;
+  }
+
+  return DRAFT_FIELDS.every((field) => (a[field] ?? "") === (b[field] ?? ""));
+}
+
+function isCreateDraftDirty(draft: FormState, referenceMonth: string): boolean {
+  if (draft.month !== referenceMonth) {
+    return true;
+  }
+
+  return NUMERIC_FIELDS.some((field) => draft[field]?.trim());
+}
+
+function mapDraftToPayload(draft: FormState, propertyId: string) {
+  return {
+    propertyId,
+    month: draft.month,
+    managerFee: Number.parseFloat(draft.managerFee),
+    priceCold: Number.parseFloat(draft.priceCold),
+    priceHotHeating: Number.parseFloat(draft.priceHotHeating),
+    priceHeating: Number.parseFloat(draft.priceHeating),
+    forecastCold: Number.parseFloat(draft.forecastCold),
+    forecastHot: Number.parseFloat(draft.forecastHot),
+    forecastHeating: Number.parseFloat(draft.forecastHeating),
+    advancePayment: Number.parseFloat(draft.advancePayment),
+  };
+}
+
+function validateDraft(draft: FormState, requireMonth = true): Partial<Record<FormField, string>> {
+  const errors: Partial<Record<FormField, string>> = {};
+
+  if (requireMonth && (!draft.month || !/^\d{4}-\d{2}$/.test(draft.month))) {
+    errors.month = "Podaj miesiąc w formacie RRRR-MM.";
+  }
+
+  for (const field of NUMERIC_FIELDS) {
+    const raw = draft[field];
+    const parsed = Number.parseFloat(raw);
+    if (raw === "" || raw === undefined) {
+      errors[field] = "Pole jest wymagane.";
+    } else if (!Number.isFinite(parsed)) {
+      errors[field] = "Wprowadź liczbę.";
+    }
+  }
+
+  return errors;
 }
 
 interface MonthlyConditionsContentProps {
@@ -141,18 +210,30 @@ function MonthlyConditionsContent(): JSX.Element {
 
   const [filters, setFilters] = useState<FiltersState>(() => resolveInitialFilters());
   const [items, setItems] = useState<MonthlyConditionDTO[]>([]);
+
+  const [draftsById, setDraftsById] = useState<DraftMap>({});
+  const [draftErrorsById, setDraftErrorsById] = useState<DraftErrorsMap>({});
+  const [pendingById, setPendingById] = useState<PendingMap>({});
+  const [deletePendingById, setDeletePendingById] = useState<PendingMap>({});
+  const [lockedById, setLockedById] = useState<Record<string, string>>({});
+
+  const [createDraft, setCreateDraft] = useState<FormState>(() => buildEmptyFormState(resolveInitialMonth()));
+  const [createErrors, setCreateErrors] = useState<Partial<Record<FormField, string>>>({});
+  const [pendingCreate, setPendingCreate] = useState(false);
+  const [createLockedMessage, setCreateLockedMessage] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
-  const [lockMessage, setLockMessage] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
-  const [formState, setFormState] = useState<FormState>(() => buildEmptyFormState(resolveInitialMonth()));
-  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FormField, string>>>({});
+  const [actionAccessError, setActionAccessError] = useState<string | null>(null);
 
-  const editing = useMemo(() => (formState.id ? items.find((item) => item.id === formState.id) ?? null : null), [
-    formState.id,
-    items,
-  ]);
+  const baselineDrafts = useMemo(() => {
+    const map: DraftMap = {};
+    for (const item of items) {
+      map[item.id] = buildFormState(item);
+    }
+    return map;
+  }, [items]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -170,8 +251,9 @@ function MonthlyConditionsContent(): JSX.Element {
     } else {
       url.searchParams.delete("month");
     }
+
     window.history.replaceState(null, "", url.toString());
-  }, [filters]);
+  }, [filters.propertyId, filters.month]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -185,6 +267,9 @@ function MonthlyConditionsContent(): JSX.Element {
   const loadConditions = useCallback(async () => {
     if (!filters.propertyId) {
       setItems([]);
+      setDraftsById({});
+      setDraftErrorsById({});
+      setLockedById({});
       setFetchError(null);
       setAccessError(null);
       return;
@@ -193,7 +278,7 @@ function MonthlyConditionsContent(): JSX.Element {
     setLoading(true);
     setFetchError(null);
     setAccessError(null);
-    setLockMessage(null);
+    setActionAccessError(null);
 
     try {
       const params = new URLSearchParams();
@@ -203,13 +288,28 @@ function MonthlyConditionsContent(): JSX.Element {
       }
 
       const response = await apiGet<MonthlyConditionListResponse>(`/api/v1/monthly-conditions?${params.toString()}`);
-      setItems(Array.isArray(response.items) ? response.items : []);
+      const sorted = Array.isArray(response.items)
+        ? [...response.items].sort((a, b) => b.month.localeCompare(a.month))
+        : [];
+
+      setItems(sorted);
+      const nextDrafts: DraftMap = {};
+      for (const item of sorted) {
+        nextDrafts[item.id] = buildFormState(item);
+      }
+      setDraftsById(nextDrafts);
+      setDraftErrorsById({});
+      setLockedById({});
+      setCreateLockedMessage(null);
+      setCreateDraft(buildEmptyFormState(filters.month));
+      setCreateErrors({});
     } catch (error) {
       const apiError = toApiError(error);
 
       if (apiError.code === "forbidden") {
         setAccessError(apiError.message);
         setItems([]);
+        setDraftsById({});
         return;
       }
 
@@ -226,185 +326,371 @@ function MonthlyConditionsContent(): JSX.Element {
 
   useEffect(() => {
     loadConditions().catch(() => {
-      // handled in loadConditions
+      /* obsługa w loadConditions */
     });
   }, [loadConditions]);
 
-  const handleFiltersPropertyChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    setFilters((prev) => ({
-      ...prev,
-      propertyId: event.target.value.trim(),
-    }));
-  }, []);
-
-  const handleFiltersMonthChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    const nextMonth = resolveInitialMonth(event.target.value);
-    setFilters((prev) => ({
-      ...prev,
-      month: nextMonth,
-    }));
-    if (!formState.id) {
-      setFormState((prev) => ({
-        ...prev,
-        month: nextMonth,
-      }));
+  const hasUnsavedChanges = useMemo(() => {
+    if (filters.propertyId === "") {
+      return false;
     }
-  }, [formState.id]);
 
-  const beginCreate = useCallback(() => {
-    setFormState(buildEmptyFormState(filters.month));
-    setFieldErrors({});
-    setLockMessage(null);
-  }, [filters.month]);
+    for (const item of items) {
+      const baseline = baselineDrafts[item.id];
+      const current = draftsById[item.id];
+      if (!areDraftsEqual(current, baseline)) {
+        return true;
+      }
+    }
 
-  const beginEdit = useCallback((item: MonthlyConditionDTO) => {
-    setFormState(buildFormState(item));
-    setFieldErrors({});
-    setLockMessage(null);
+    return isCreateDraftDirty(createDraft, filters.month);
+  }, [baselineDrafts, createDraft, draftsById, filters.month, filters.propertyId, items]);
+
+  const confirmDiscardChanges = useCallback(() => {
+    if (!hasUnsavedChanges) {
+      return true;
+    }
+    return window.confirm("Masz niezapisane zmiany. Czy na pewno chcesz je odrzucić?");
+  }, [hasUnsavedChanges]);
+
+  const handleFiltersPropertyChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const value = event.target.value.trim();
+      if (value === filters.propertyId) {
+        return;
+      }
+      if (!confirmDiscardChanges()) {
+        return;
+      }
+
+      setFilters((prev) => ({
+        ...prev,
+        propertyId: value,
+      }));
+      setDraftsById({});
+      setDraftErrorsById({});
+      setLockedById({});
+      setCreateLockedMessage(null);
+      setCreateDraft(buildEmptyFormState(filters.month));
+      setCreateErrors({});
+    },
+    [confirmDiscardChanges, filters.month, filters.propertyId]
+  );
+
+  const handleFiltersMonthChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const sanitized = normalizeMonth(event.target.value, filters.month);
+      if (sanitized === filters.month) {
+        return;
+      }
+
+      if (!confirmDiscardChanges()) {
+        return;
+      }
+
+      setFilters((prev) => ({
+        ...prev,
+        month: sanitized,
+      }));
+      setCreateDraft(buildEmptyFormState(sanitized));
+      setCreateErrors({});
+      setLockedById({});
+      setCreateLockedMessage(null);
+    },
+    [confirmDiscardChanges, filters.month]
+  );
+
+  const handleDraftChange = useCallback((id: string, field: FormField, value: string) => {
+    setDraftsById((prev) => ({
+      ...prev,
+      [id]: {
+        ...prev[id],
+        id,
+        [field]: value,
+      },
+    }));
+    setDraftErrorsById((prev) => {
+      const next = { ...prev };
+      if (next[id]) {
+        next[id] = { ...next[id], [field]: undefined };
+      }
+      return next;
+    });
   }, []);
 
-  const cancelEdit = useCallback(() => {
-    setFormState(buildEmptyFormState(filters.month));
-    setFieldErrors({});
-    setLockMessage(null);
-  }, [filters.month]);
-
-  const handleFormChange = useCallback((field: FormField, value: string) => {
-    setFormState((prev) => ({
+  const handleCreateDraftChange = useCallback((field: FormField, value: string) => {
+    setCreateDraft((prev) => ({
       ...prev,
       [field]: value,
     }));
-    setFieldErrors((prev) => ({
+    setCreateErrors((prev) => ({
       ...prev,
       [field]: undefined,
     }));
   }, []);
 
-  const validateForm = useCallback((): Partial<Record<FormField, string>> => {
-    const nextErrors: Partial<Record<FormField, string>> = {};
-
-    if (!filters.propertyId) {
-      nextErrors.month = "Wybierz nieruchomość przed zapisem.";
-    }
-
-    if (!formState.month || !/^\d{4}-\d{2}$/.test(formState.month)) {
-      nextErrors.month = "Podaj miesiąc w formacie RRRR-MM.";
-    }
-
-    const numericFields: Array<{ field: FormField; label: string }> = [
-      { field: "managerFee", label: "Opłata administracyjna" },
-      { field: "priceCold", label: "Cena zimnej wody" },
-      { field: "priceHotHeating", label: "Cena ciepłej wody" },
-      { field: "priceHeating", label: "Cena ogrzewania" },
-      { field: "forecastCold", label: "Prognoza zimnej wody" },
-      { field: "forecastHot", label: "Prognoza ciepłej wody" },
-      { field: "forecastHeating", label: "Prognoza ogrzewania" },
-      { field: "advancePayment", label: "Zaliczka" },
-    ];
-
-    for (const { field, label } of numericFields) {
-      const value = formState[field];
-      const parsed = Number.parseFloat(value);
-      if (!value && value !== "0") {
-        nextErrors[field] = `${label} jest wymagana.`;
-      } else if (!Number.isFinite(parsed)) {
-        nextErrors[field] = `${label} musi być liczbą.`;
+  const lockMessages = useMemo(() => {
+    const messages = new Set<string>();
+    Object.values(lockedById).forEach((message) => {
+      if (message) {
+        messages.add(message);
       }
+    });
+    if (createLockedMessage) {
+      messages.add(createLockedMessage);
     }
+    return Array.from(messages);
+  }, [createLockedMessage, lockedById]);
 
-    return nextErrors;
-  }, [filters.propertyId, formState]);
-
-  const handleSubmit = useCallback(
-    async (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      if (pending) {
-        return;
-      }
-
-      const validationErrors = validateForm();
-      if (Object.keys(validationErrors).length > 0) {
-        setFieldErrors(validationErrors);
-        return;
-      }
-
+  const handleSave = useCallback(
+    async (id: string) => {
       if (!filters.propertyId) {
-        setFieldErrors((prev) => ({
+        return;
+      }
+
+      const draft = draftsById[id];
+      if (!draft) {
+        return;
+      }
+
+      const validationErrors = validateDraft(draft);
+      if (Object.keys(validationErrors).length > 0) {
+        setDraftErrorsById((prev) => ({
           ...prev,
-          month: "Wybierz nieruchomość przed zapisem.",
+          [id]: validationErrors,
         }));
         return;
       }
 
-      const payload = {
-        propertyId: filters.propertyId,
-        month: formState.month,
-        managerFee: Number.parseFloat(formState.managerFee),
-        priceCold: Number.parseFloat(formState.priceCold),
-        priceHotHeating: Number.parseFloat(formState.priceHotHeating),
-        priceHeating: Number.parseFloat(formState.priceHeating),
-        forecastCold: Number.parseFloat(formState.forecastCold),
-        forecastHot: Number.parseFloat(formState.forecastHot),
-        forecastHeating: Number.parseFloat(formState.forecastHeating),
-        advancePayment: Number.parseFloat(formState.advancePayment),
-      };
-
-      setPending(true);
-      setFieldErrors({});
-      setLockMessage(null);
+      setPendingById((prev) => ({ ...prev, [id]: true }));
+      setActionAccessError(null);
 
       try {
-        if (formState.id) {
-          await apiPatch<MonthlyConditionResponse>(
-            `/api/v1/monthly-conditions/${encodeURIComponent(formState.id)}`,
-            payload
-          );
-          pushToast({
-            variant: "success",
-            title: "Zaktualizowano warunki",
-            description: `Zapisano wartości dla miesiąca ${formState.month}.`,
-          });
-        } else {
-          await apiPost<MonthlyConditionResponse>("/api/v1/monthly-conditions", payload);
-          pushToast({
-            variant: "success",
-            title: "Dodano warunki",
-            description: `Utworzono warunki dla miesiąca ${formState.month}.`,
-          });
-        }
+        await apiPatch<MonthlyConditionResponse>(`/api/v1/monthly-conditions/${encodeURIComponent(id)}`, {
+          ...mapDraftToPayload(draft, filters.propertyId),
+        });
 
+        pushToast({
+          variant: "success",
+          title: "Zapisano warunki",
+          description: `Zmiany dla miesiąca ${draft.month} zostały zapisane.`,
+        });
         await loadConditions();
-        cancelEdit();
       } catch (error) {
         const apiError = toApiError(error);
 
-        if (apiError.code === "monthly_condition_locked") {
-          setLockMessage(apiError.message || "Warunki są zablokowane przez zrealizowany raport.");
-          return;
-        }
-
-        if (apiError.code === "validation_error" && typeof apiError.details === "object" && apiError.details) {
-          const nextErrors: Partial<Record<FormField, string>> = {};
-          for (const [key, value] of Object.entries(apiError.details as Record<string, string>)) {
-            if (key in formState && typeof value === "string") {
-              nextErrors[key as FormField] = value;
-            }
-          }
-          if (Object.keys(nextErrors).length > 0) {
-            setFieldErrors(nextErrors);
+        if (apiError.code === "forbidden") {
+          setActionAccessError(apiError.message);
+        } else if (apiError.code === "monthly_condition_locked") {
+          setLockedById((prev) => ({
+            ...prev,
+            [id]: apiError.message || "Warunki są zablokowane przez zaksięgowane raporty.",
+          }));
+        } else if (apiError.code === "validation_error") {
+          const extracted = extractFieldErrors(apiError.details);
+          if (Object.keys(extracted).length > 0) {
+            setDraftErrorsById((prev) => ({
+              ...prev,
+              [id]: extracted,
+            }));
             return;
           }
+          setDraftErrorsById((prev) => ({
+            ...prev,
+            [id]: { month: apiError.message },
+          }));
+        } else {
+          const isConflict = apiError.code === "conflict" || apiError.status === 409;
+          const isNotFound = apiError.code === "monthly_condition_not_found" || apiError.status === 404;
+          if (isConflict) {
+            pushToast({
+              variant: "info",
+              title: "Wartości uległy zmianie",
+              description: apiError.message,
+            });
+            await loadConditions();
+          } else if (isNotFound) {
+            pushToast({
+              variant: "info",
+              title: "Rekord nie istnieje",
+              description: "Warunki zostały zaktualizowane lub usunięte przez innego użytkownika.",
+            });
+            await loadConditions();
+          } else if (!apiError.status || apiError.status >= 500) {
+            pushToast({
+              variant: "error",
+              title: "Nie udało się zapisać warunków",
+              description: apiError.message,
+            });
+          }
         }
-
-        setFetchError(apiError.message);
       } finally {
-        setPending(false);
+        setPendingById((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
       }
     },
-    [cancelEdit, filters.propertyId, formState, loadConditions, pending, pushToast, validateForm]
+    [draftsById, filters.propertyId, loadConditions, pushToast]
   );
 
-  const formTitle = formState.id ? "Edytuj warunki" : "Dodaj warunki";
+  const handleDelete = useCallback(
+    async (id: string) => {
+      if (deletePendingById[id]) {
+        return;
+      }
+
+      const confirmed = window.confirm("Czy na pewno chcesz usunąć te warunki?");
+      if (!confirmed) {
+        return;
+      }
+
+      setDeletePendingById((prev) => ({ ...prev, [id]: true }));
+      setActionAccessError(null);
+
+      try {
+        await apiDelete(`/api/v1/monthly-conditions/${encodeURIComponent(id)}`);
+        pushToast({
+          variant: "success",
+          title: "Usunięto warunki",
+          description: "Rekord został pomyślnie usunięty.",
+        });
+        await loadConditions();
+      } catch (error) {
+        const apiError = toApiError(error);
+
+        if (apiError.code === "forbidden") {
+          setActionAccessError(apiError.message);
+        } else if (apiError.code === "monthly_condition_locked") {
+          setLockedById((prev) => ({
+            ...prev,
+            [id]: apiError.message || "Nie można usunąć warunków powiązanych z raportami.",
+          }));
+          pushToast({
+            variant: "info",
+            title: "Warunki zablokowane",
+            description: apiError.message,
+          });
+        } else {
+          const isNotFound = apiError.code === "monthly_condition_not_found" || apiError.status === 404;
+          if (isNotFound) {
+            pushToast({
+              variant: "info",
+              title: "Rekord nie istnieje",
+              description: "Warunki zostały już usunięte.",
+            });
+            await loadConditions();
+          } else if (!apiError.status || apiError.status >= 500) {
+            pushToast({
+              variant: "error",
+              title: "Nie udało się usunąć warunków",
+              description: apiError.message,
+            });
+          }
+        }
+      } finally {
+        setDeletePendingById((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
+    },
+    [deletePendingById, loadConditions, pushToast]
+  );
+
+  const handleCreate = useCallback(async () => {
+    if (!filters.propertyId) {
+      setCreateErrors((prev) => ({
+        ...prev,
+        month: "Wybierz nieruchomość przed dodaniem warunków.",
+      }));
+      return;
+    }
+
+    const validationErrors = validateDraft(createDraft);
+    if (Object.keys(validationErrors).length > 0) {
+      setCreateErrors(validationErrors);
+      return;
+    }
+
+    setPendingCreate(true);
+    setActionAccessError(null);
+    setCreateLockedMessage(null);
+
+    try {
+      await apiPost<MonthlyConditionResponse>("/api/v1/monthly-conditions", mapDraftToPayload(createDraft, filters.propertyId));
+
+      pushToast({
+        variant: "success",
+        title: "Dodano warunki",
+        description: `Warunki dla miesiąca ${createDraft.month} zostały utworzone.`,
+      });
+
+      setCreateDraft(buildEmptyFormState(filters.month));
+      setCreateErrors({});
+      await loadConditions();
+    } catch (error) {
+      const apiError = toApiError(error);
+
+      if (apiError.code === "forbidden") {
+        setActionAccessError(apiError.message);
+      } else if (apiError.code === "monthly_condition_locked") {
+        setCreateLockedMessage(apiError.message || "Nie można dodać warunków z powodu zablokowanych raportów.");
+      } else if (apiError.code === "validation_error") {
+        const extracted = extractFieldErrors(apiError.details);
+        if (Object.keys(extracted).length > 0) {
+          setCreateErrors(extracted);
+        } else {
+          setCreateErrors({ month: apiError.message });
+        }
+      } else if (apiError.code === "conflict" || apiError.status === 409) {
+        pushToast({
+          variant: "info",
+          title: "Warunki już istnieją",
+          description: apiError.message,
+        });
+        await loadConditions();
+      } else if (!apiError.status || apiError.status >= 500) {
+        pushToast({
+          variant: "error",
+          title: "Nie udało się dodać warunków",
+          description: apiError.message,
+        });
+      }
+    } finally {
+      setPendingCreate(false);
+    }
+  }, [createDraft, filters.month, filters.propertyId, loadConditions, pushToast]);
+
+  const handleRefresh = useCallback(() => {
+    loadConditions().catch(() => {
+      /* obsługa w loadConditions */
+    });
+  }, [loadConditions]);
+
+  const renderInput = (
+    value: string,
+    onChange: (value: string) => void,
+    disabled: boolean,
+    error?: string,
+    props?: Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "disabled">
+  ): JSX.Element => (
+    <div className="space-y-1">
+      <input
+        {...props}
+        className={[
+          "w-full rounded-md border bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+          error ? "border-destructive focus-visible:ring-destructive/40" : "border-input",
+        ].join(" ")}
+        disabled={disabled}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </div>
+  );
 
   return (
     <section className="space-y-8">
@@ -412,301 +698,347 @@ function MonthlyConditionsContent(): JSX.Element {
         <h2 className="text-lg font-semibold text-foreground">Filtry</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground" htmlFor="monthly-property">
+            <label className="text-sm font-medium text-foreground" htmlFor="monthly-filter-property">
               Identyfikator nieruchomości
             </label>
             <input
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-              id="monthly-property"
+              id="monthly-filter-property"
               placeholder="UUID nieruchomości"
               value={filters.propertyId}
               onChange={handleFiltersPropertyChange}
             />
-            <p className="text-xs text-muted-foreground">Wymagany do ładowania i zapisu warunków.</p>
+            <p className="text-xs text-muted-foreground">Wymagany do wczytania danych i wykonywania operacji.</p>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground" htmlFor="monthly-month">
+            <label className="text-sm font-medium text-foreground" htmlFor="monthly-filter-month">
               Miesiąc rozliczeniowy
             </label>
             <input
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-              id="monthly-month"
+              id="monthly-filter-month"
               type="month"
               value={filters.month}
               onChange={handleFiltersMonthChange}
             />
-            <p className="text-xs text-muted-foreground">Zapisywane w URL oraz w pamięci przeglądarki.</p>
+            <p className="text-xs text-muted-foreground">Przechowywane w adresie URL i pamięci przeglądarki.</p>
           </div>
         </div>
       </div>
 
       {accessError ? <ErrorAlert error={accessError} /> : null}
       {fetchError ? <ErrorAlert error={fetchError} /> : null}
-      {lockMessage ? (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
-          {lockMessage}
+      {actionAccessError ? <ErrorAlert error={actionAccessError} /> : null}
+
+      {lockMessages.length > 0 ? (
+        <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" role="status">
+          {lockMessages.map((message) => (
+            <p key={message}>{message}</p>
+          ))}
         </div>
       ) : null}
 
-      <div className="grid gap-8 lg:grid-cols-[2fr_3fr]">
-        <section className="space-y-4 rounded-lg border bg-card p-6 shadow-sm">
-          <header className="flex items-start justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">{formTitle}</h2>
-              <p className="text-sm text-muted-foreground">
-                Ustal wartości stawek i prognoz dla danego miesiąca. Wprowadzane kwoty powinny być podawane w złotówkach.
-              </p>
-            </div>
-            {formState.id ? (
-              <Button variant="secondary" type="button" onClick={beginCreate}>
-                Dodaj nowe
-              </Button>
-            ) : null}
-          </header>
+      <div className="space-y-4 rounded-lg border bg-card p-6 shadow-sm">
+        <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Warunki miesięczne</h2>
+            <p className="text-sm text-muted-foreground">
+              {filters.propertyId
+                ? `Zarządzaj warunkami dla nieruchomości ${filters.propertyId}.`
+                : "Wybierz nieruchomość, aby rozpocząć edycję warunków."}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleRefresh}
+            disabled={loading || !filters.propertyId}
+          >
+            Odśwież
+          </Button>
+        </header>
 
-          <form className="space-y-4" noValidate onSubmit={handleSubmit}>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground" htmlFor="monthly-form-month">
-                  Miesiąc
-                </label>
-                <input
-                  className={buildInputClasses(fieldErrors.month)}
-                  id="monthly-form-month"
-                  type="month"
-                  value={formState.month}
-                  onChange={(event) => handleFormChange("month", event.target.value)}
-                  disabled={pending}
-                  required
-                />
-                {fieldErrors.month ? <p className="text-sm text-destructive">{fieldErrors.month}</p> : null}
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground" htmlFor="monthly-form-managerFee">
-                  Opłata administracyjna (PLN)
-                </label>
-                <input
-                  className={buildInputClasses(fieldErrors.managerFee)}
-                  id="monthly-form-managerFee"
-                  inputMode="decimal"
-                  placeholder="0.00"
-                  value={formState.managerFee}
-                  onChange={(event) => handleFormChange("managerFee", event.target.value)}
-                  disabled={pending}
-                  required
-                />
-                {fieldErrors.managerFee ? <p className="text-sm text-destructive">{fieldErrors.managerFee}</p> : null}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <span className="text-sm font-medium text-foreground">Ceny jednostkowe (PLN)</span>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div>
-                  <input
-                    className={buildInputClasses(fieldErrors.priceCold)}
-                    inputMode="decimal"
-                    placeholder="Zimna woda"
-                    value={formState.priceCold}
-                    onChange={(event) => handleFormChange("priceCold", event.target.value)}
-                    disabled={pending}
-                    required
-                  />
-                  {fieldErrors.priceCold ? <p className="mt-1 text-sm text-destructive">{fieldErrors.priceCold}</p> : null}
-                </div>
-                <div>
-                  <input
-                    className={buildInputClasses(fieldErrors.priceHotHeating)}
-                    inputMode="decimal"
-                    placeholder="Ciepła woda"
-                    value={formState.priceHotHeating}
-                    onChange={(event) => handleFormChange("priceHotHeating", event.target.value)}
-                    disabled={pending}
-                    required
-                  />
-                  {fieldErrors.priceHotHeating ? (
-                    <p className="mt-1 text-sm text-destructive">{fieldErrors.priceHotHeating}</p>
-                  ) : null}
-                </div>
-                <div>
-                  <input
-                    className={buildInputClasses(fieldErrors.priceHeating)}
-                    inputMode="decimal"
-                    placeholder="Ogrzewanie"
-                    value={formState.priceHeating}
-                    onChange={(event) => handleFormChange("priceHeating", event.target.value)}
-                    disabled={pending}
-                    required
-                  />
-                  {fieldErrors.priceHeating ? (
-                    <p className="mt-1 text-sm text-destructive">{fieldErrors.priceHeating}</p>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <span className="text-sm font-medium text-foreground">Prognozy (m³ / GJ)</span>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div>
-                  <input
-                    className={buildInputClasses(fieldErrors.forecastCold)}
-                    inputMode="decimal"
-                    placeholder="Zimna woda"
-                    value={formState.forecastCold}
-                    onChange={(event) => handleFormChange("forecastCold", event.target.value)}
-                    disabled={pending}
-                    required
-                  />
-                  {fieldErrors.forecastCold ? (
-                    <p className="mt-1 text-sm text-destructive">{fieldErrors.forecastCold}</p>
-                  ) : null}
-                </div>
-                <div>
-                  <input
-                    className={buildInputClasses(fieldErrors.forecastHot)}
-                    inputMode="decimal"
-                    placeholder="Ciepła woda"
-                    value={formState.forecastHot}
-                    onChange={(event) => handleFormChange("forecastHot", event.target.value)}
-                    disabled={pending}
-                    required
-                  />
-                  {fieldErrors.forecastHot ? <p className="mt-1 text-sm text-destructive">{fieldErrors.forecastHot}</p> : null}
-                </div>
-                <div>
-                  <input
-                    className={buildInputClasses(fieldErrors.forecastHeating)}
-                    inputMode="decimal"
-                    placeholder="Ogrzewanie"
-                    value={formState.forecastHeating}
-                    onChange={(event) => handleFormChange("forecastHeating", event.target.value)}
-                    disabled={pending}
-                    required
-                  />
-                  {fieldErrors.forecastHeating ? (
-                    <p className="mt-1 text-sm text-destructive">{fieldErrors.forecastHeating}</p>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-2 md:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground" htmlFor="monthly-advance">
-                  Zaliczka (PLN)
-                </label>
-                <input
-                  className={buildInputClasses(fieldErrors.advancePayment)}
-                  id="monthly-advance"
-                  inputMode="decimal"
-                  placeholder="0.00"
-                  value={formState.advancePayment}
-                  onChange={(event) => handleFormChange("advancePayment", event.target.value)}
-                  disabled={pending}
-                  required
-                />
-                {fieldErrors.advancePayment ? (
-                  <p className="text-sm text-destructive">{fieldErrors.advancePayment}</p>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3">
-              {formState.id ? (
-                <Button type="button" variant="ghost" onClick={cancelEdit} disabled={pending}>
-                  Anuluj
-                </Button>
-              ) : null}
-              <Button type="submit" disabled={pending || !filters.propertyId}>
-                {pending ? "Zapisywanie…" : "Zapisz warunki"}
-              </Button>
-            </div>
-          </form>
-        </section>
-
-        <section className="space-y-4 rounded-lg border bg-card p-6 shadow-sm">
-          <header className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">Aktualne warunki</h2>
-              <p className="text-sm text-muted-foreground">
-                {filters.propertyId
-                  ? `Wartości dla nieruchomości ${filters.propertyId}.`
-                  : "Wybierz nieruchomość, aby wczytać warunki."}
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => loadConditions().catch(() => {})}
-              disabled={loading || !filters.propertyId}
-            >
-              Odśwież
-            </Button>
-          </header>
-
-          <div className="overflow-hidden rounded-md border">
-            <table className="w-full border-separate border-spacing-y-1 text-sm">
-              <thead className="text-xs uppercase tracking-wide text-muted-foreground">
+        <div className="overflow-x-auto rounded-lg border">
+          <table className="w-full min-w-[960px] border-collapse text-sm">
+            <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground md:sticky md:top-0">
+              <tr>
+                <th className="px-3 py-2 text-left font-semibold">Miesiąc</th>
+                <th className="px-3 py-2 text-left font-semibold">Opłata adm. (PLN)</th>
+                <th className="px-3 py-2 text-left font-semibold">Cena zimnej wody (PLN)</th>
+                <th className="px-3 py-2 text-left font-semibold">Cena ciepłej wody (PLN)</th>
+                <th className="px-3 py-2 text-left font-semibold">Cena ogrzewania (PLN)</th>
+                <th className="px-3 py-2 text-left font-semibold">Prognoza zimnej wody (m³)</th>
+                <th className="px-3 py-2 text-left font-semibold">Prognoza ciepłej wody (m³)</th>
+                <th className="px-3 py-2 text-left font-semibold">Prognoza ogrzewania (GJ)</th>
+                <th className="px-3 py-2 text-left font-semibold">Zaliczka (PLN)</th>
+                <th className="px-3 py-2 text-right font-semibold">Akcje</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
                 <tr>
-                  <th className="px-4 py-2 text-left font-medium">Miesiąc</th>
-                  <th className="px-4 py-2 text-left font-medium">Opłaty</th>
-                  <th className="px-4 py-2 text-left font-medium">Prognozy</th>
-                  <th className="px-4 py-2 text-right font-medium">Akcje</th>
+                  <td className="px-3 py-4 text-center text-muted-foreground" colSpan={10}>
+                    Ładowanie warunków…
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td className="px-4 py-4 text-center text-muted-foreground" colSpan={4}>
-                      Ładowanie warunków…
-                    </td>
-                  </tr>
-                ) : items.length === 0 ? (
-                  <tr>
-                    <td className="px-4 py-4 text-center text-muted-foreground" colSpan={4}>
-                      Brak warunków dla wybranego zestawu filtrów.
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item) => (
-                    <tr key={item.id} className="rounded-lg border border-border bg-background/80 align-top shadow-sm">
-                      <td className="px-4 py-3 font-medium text-foreground">
-                        {item.month}
-                        <div className="text-xs text-muted-foreground">Zaliczka: {formatCurrency(item.advancePayment)}</div>
+              ) : items.length === 0 ? (
+                <tr>
+                  <td className="px-3 py-4 text-center text-muted-foreground" colSpan={10}>
+                    Brak warunków dla wybranych filtrów.
+                  </td>
+                </tr>
+              ) : (
+                items.map((item) => {
+                  const draft = draftsById[item.id] ?? buildFormState(item);
+                  const errors = draftErrorsById[item.id] ?? {};
+                  const isPending = Boolean(pendingById[item.id]);
+                  const isDeletePending = Boolean(deletePendingById[item.id]);
+                  const lockReason = lockedById[item.id];
+                  const isLocked = Boolean(lockReason);
+                  const isDirty = !areDraftsEqual(draft, baselineDrafts[item.id]);
+
+                  return (
+                    <tr key={item.id} className={isDirty ? "bg-muted/40" : undefined}>
+                      <td className="px-3 py-3 align-top">
+                        {renderInput(draft.month, (value) => handleDraftChange(item.id, "month", value), isPending || isLocked, errors.month, {
+                          type: "month",
+                        })}
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="space-y-1">
-                          <span className="text-sm text-foreground">
-                            Opłata administracyjna: {formatCurrency(item.managerFee)}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            Ceny: {formatCurrency(item.priceCold)} / {formatCurrency(item.priceHotHeating)} /{" "}
-                            {formatCurrency(item.priceHeating)}
-                          </span>
-                        </div>
+                      <td className="px-3 py-3 align-top">
+                        {renderInput(draft.managerFee, (value) => handleDraftChange(item.id, "managerFee", value), isPending || isLocked, errors.managerFee, {
+                          inputMode: "decimal",
+                          placeholder: "0.00",
+                        })}
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="space-y-1 text-xs text-muted-foreground">
-                          <span>Zimna woda: {formatNumber(item.forecastCold)} m³</span>
-                          <span>Ciepła woda: {formatNumber(item.forecastHot)} m³</span>
-                          <span>Ogrzewanie: {formatNumber(item.forecastHeating)} GJ</span>
-                        </div>
+                      <td className="px-3 py-3 align-top">
+                        {renderInput(draft.priceCold, (value) => handleDraftChange(item.id, "priceCold", value), isPending || isLocked, errors.priceCold, {
+                          inputMode: "decimal",
+                          placeholder: "0.00",
+                        })}
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="flex justify-end">
-                          <Button type="button" variant="ghost" onClick={() => beginEdit(item)} disabled={pending}>
-                            Edytuj
+                      <td className="px-3 py-3 align-top">
+                        {renderInput(
+                          draft.priceHotHeating,
+                          (value) => handleDraftChange(item.id, "priceHotHeating", value),
+                          isPending || isLocked,
+                          errors.priceHotHeating,
+                          {
+                            inputMode: "decimal",
+                            placeholder: "0.00",
+                          }
+                        )}
+                      </td>
+                      <td className="px-3 py-3 align-top">
+                        {renderInput(draft.priceHeating, (value) => handleDraftChange(item.id, "priceHeating", value), isPending || isLocked, errors.priceHeating, {
+                          inputMode: "decimal",
+                          placeholder: "0.00",
+                        })}
+                      </td>
+                      <td className="px-3 py-3 align-top">
+                        {renderInput(
+                          draft.forecastCold,
+                          (value) => handleDraftChange(item.id, "forecastCold", value),
+                          isPending || isLocked,
+                          errors.forecastCold,
+                          {
+                            inputMode: "decimal",
+                            placeholder: "0.000",
+                          }
+                        )}
+                      </td>
+                      <td className="px-3 py-3 align-top">
+                        {renderInput(
+                          draft.forecastHot,
+                          (value) => handleDraftChange(item.id, "forecastHot", value),
+                          isPending || isLocked,
+                          errors.forecastHot,
+                          {
+                            inputMode: "decimal",
+                            placeholder: "0.000",
+                          }
+                        )}
+                      </td>
+                      <td className="px-3 py-3 align-top">
+                        {renderInput(
+                          draft.forecastHeating,
+                          (value) => handleDraftChange(item.id, "forecastHeating", value),
+                          isPending || isLocked,
+                          errors.forecastHeating,
+                          {
+                            inputMode: "decimal",
+                            placeholder: "0.000",
+                          }
+                        )}
+                      </td>
+                      <td className="px-3 py-3 align-top">
+                        {renderInput(
+                          draft.advancePayment,
+                          (value) => handleDraftChange(item.id, "advancePayment", value),
+                          isPending || isLocked,
+                          errors.advancePayment,
+                          {
+                            inputMode: "decimal",
+                            placeholder: "0.00",
+                          }
+                        )}
+                      </td>
+                      <td className="px-3 py-3 align-top">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            disabled={!isDirty || isPending || isDeletePending || isLocked}
+                            onClick={() => handleSave(item.id)}
+                            title={lockReason ?? undefined}
+                          >
+                            {isPending ? "Zapisywanie…" : "Zapisz"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            disabled={isDeletePending || isPending || isLocked}
+                            onClick={() => handleDelete(item.id)}
+                            title={lockReason ?? undefined}
+                          >
+                            {isDeletePending ? "Usuwanie…" : "Usuń"}
                           </Button>
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                  );
+                })
+              )}
+
+              {!loading && filters.propertyId ? (
+                <tr className="bg-muted/20">
+                  <td className="px-3 py-3 align-top">
+                    {renderInput(createDraft.month, (value) => handleCreateDraftChange("month", value), pendingCreate, createErrors.month, {
+                      type: "month",
+                      title: createLockedMessage ?? undefined,
+                      disabled: pendingCreate || Boolean(createLockedMessage),
+                    })}
+                  </td>
+                  <td className="px-3 py-3 align-top">
+                    {renderInput(
+                      createDraft.managerFee,
+                      (value) => handleCreateDraftChange("managerFee", value),
+                      pendingCreate || Boolean(createLockedMessage),
+                      createErrors.managerFee,
+                      {
+                        inputMode: "decimal",
+                        placeholder: "0.00",
+                        title: createLockedMessage ?? undefined,
+                      }
+                    )}
+                  </td>
+                  <td className="px-3 py-3 align-top">
+                    {renderInput(
+                      createDraft.priceCold,
+                      (value) => handleCreateDraftChange("priceCold", value),
+                      pendingCreate || Boolean(createLockedMessage),
+                      createErrors.priceCold,
+                      {
+                        inputMode: "decimal",
+                        placeholder: "0.00",
+                        title: createLockedMessage ?? undefined,
+                      }
+                    )}
+                  </td>
+                  <td className="px-3 py-3 align-top">
+                    {renderInput(
+                      createDraft.priceHotHeating,
+                      (value) => handleCreateDraftChange("priceHotHeating", value),
+                      pendingCreate || Boolean(createLockedMessage),
+                      createErrors.priceHotHeating,
+                      {
+                        inputMode: "decimal",
+                        placeholder: "0.00",
+                        title: createLockedMessage ?? undefined,
+                      }
+                    )}
+                  </td>
+                  <td className="px-3 py-3 align-top">
+                    {renderInput(
+                      createDraft.priceHeating,
+                      (value) => handleCreateDraftChange("priceHeating", value),
+                      pendingCreate || Boolean(createLockedMessage),
+                      createErrors.priceHeating,
+                      {
+                        inputMode: "decimal",
+                        placeholder: "0.00",
+                        title: createLockedMessage ?? undefined,
+                      }
+                    )}
+                  </td>
+                  <td className="px-3 py-3 align-top">
+                    {renderInput(
+                      createDraft.forecastCold,
+                      (value) => handleCreateDraftChange("forecastCold", value),
+                      pendingCreate || Boolean(createLockedMessage),
+                      createErrors.forecastCold,
+                      {
+                        inputMode: "decimal",
+                        placeholder: "0.000",
+                        title: createLockedMessage ?? undefined,
+                      }
+                    )}
+                  </td>
+                  <td className="px-3 py-3 align-top">
+                    {renderInput(
+                      createDraft.forecastHot,
+                      (value) => handleCreateDraftChange("forecastHot", value),
+                      pendingCreate || Boolean(createLockedMessage),
+                      createErrors.forecastHot,
+                      {
+                        inputMode: "decimal",
+                        placeholder: "0.000",
+                        title: createLockedMessage ?? undefined,
+                      }
+                    )}
+                  </td>
+                  <td className="px-3 py-3 align-top">
+                    {renderInput(
+                      createDraft.forecastHeating,
+                      (value) => handleCreateDraftChange("forecastHeating", value),
+                      pendingCreate || Boolean(createLockedMessage),
+                      createErrors.forecastHeating,
+                      {
+                        inputMode: "decimal",
+                        placeholder: "0.000",
+                        title: createLockedMessage ?? undefined,
+                      }
+                    )}
+                  </td>
+                  <td className="px-3 py-3 align-top">
+                    {renderInput(
+                      createDraft.advancePayment,
+                      (value) => handleCreateDraftChange("advancePayment", value),
+                      pendingCreate || Boolean(createLockedMessage),
+                      createErrors.advancePayment,
+                      {
+                        inputMode: "decimal",
+                        placeholder: "0.00",
+                        title: createLockedMessage ?? undefined,
+                      }
+                    )}
+                  </td>
+                  <td className="px-3 py-3 align-top">
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={pendingCreate || Boolean(createLockedMessage)}
+                        onClick={handleCreate}
+                        title={createLockedMessage ?? undefined}
+                      >
+                        {pendingCreate ? "Dodawanie…" : "Dodaj warunki"}
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
   );
@@ -723,3 +1055,5 @@ export function MonthlyConditionsTable({ useOwnProvider }: MonthlyConditionsCont
 
   return <MonthlyConditionsContent />;
 }
+
+

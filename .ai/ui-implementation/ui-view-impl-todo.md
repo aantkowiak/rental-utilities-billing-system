@@ -15,16 +15,16 @@
 - [x] `ui-view-impl-13-TenantReadings.md`
 - [x] `ui-view-impl-14-TenantReportsList.md`
 - [x] `ui-view-impl-15-TenantReportDetail.md`
-- [ ] `ui-view-impl-16-AdminReadings.md`
-- [ ] `ui-view-impl-17-AdminMonthlyConditions.md`
-- [ ] `ui-view-impl-18-AdminReportsList.md`
-- [ ] `ui-view-impl-19-AdminReportDetail.md`
-- [ ] `ui-view-impl-20-AdminProperties.md`
-- [ ] `ui-view-impl-21-AdminContracts.md`
-- [ ] `ui-view-impl-22-AdminProfile.md`
-- [ ] `ui-view-impl-23-Login.md`
-- [ ] `ui-view-impl-24-TenantReadings.md`
-- [ ] `ui-view-impl-25-TenantReportsList.md`
+- [x] `ui-view-impl-16-AdminReadings.md`
+- [x] `ui-view-impl-17-AdminMonthlyConditions.md`
+- [x] `ui-view-impl-18-AdminReportsList.md`
+- [x] `ui-view-impl-19-AdminReportDetail.md`
+- [x] `ui-view-impl-20-AdminProperties.md`
+- [x] `ui-view-impl-21-AdminContracts.md`
+- [x] `ui-view-impl-22-AdminProfile.md`
+- [x] `ui-view-impl-23-Login.md`
+- [x] `ui-view-impl-24-TenantReadings.md`
+- [x] `ui-view-impl-25-TenantReportsList.md`
 - [ ] `ui-view-impl-26-TenantReportDetail.md`
 - [ ] `ui-view-impl-27-AdminReadings.md`
 - [ ] `ui-view-impl-28-AdminMonthlyConditions.md`

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactElement } from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
@@ -10,6 +10,7 @@ interface AnchorRecalcPanelProps {
   defaultMonth?: string | null;
   disabled?: boolean;
   onSuccess?: () => void;
+  onPendingChange?: (pending: boolean) => void;
 }
 
 interface InternalPanelProps extends AnchorRecalcPanelProps {
@@ -40,7 +41,8 @@ function AnchorRecalcPanelInner({
   defaultMonth,
   disabled,
   onSuccess,
-}: AnchorRecalcPanelProps): JSX.Element {
+  onPendingChange,
+}: AnchorRecalcPanelProps): ReactElement {
   const { pushToast } = useToast();
   const [fromMonth, setFromMonth] = useState<string>(() => resolveInitialMonth(defaultMonth));
   const [toMonth, setToMonth] = useState<string>(() => resolveInitialMonth(defaultMonth));
@@ -57,6 +59,10 @@ function AnchorRecalcPanelInner({
   const isSubmitDisabled = useMemo(() => {
     return pending || disabled || !propertyId;
   }, [disabled, pending, propertyId]);
+
+  useEffect(() => {
+    onPendingChange?.(pending);
+  }, [onPendingChange, pending]);
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -172,7 +178,7 @@ function AnchorRecalcPanelInner({
   );
 }
 
-export function AnchorRecalcPanel(props: InternalPanelProps): JSX.Element {
+export function AnchorRecalcPanel(props: InternalPanelProps): ReactElement {
   if (props.useOwnProvider) {
     return (
       <ToastProvider>

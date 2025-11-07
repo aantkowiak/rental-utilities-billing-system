@@ -51,6 +51,8 @@ function toApiError(error: unknown): ApiError {
   return {
     code: "unexpected_error",
     message: error instanceof Error ? error.message : "Wystąpił nieoczekiwany błąd.",
+    details: error && typeof error === "object" && "details" in error ? (error as ApiError).details : undefined,
+    status: error && typeof error === "object" && "status" in error ? (error as ApiError).status : undefined,
   };
 }
 
@@ -66,9 +68,11 @@ function AdminPropertiesContent(): JSX.Element {
 
   const [items, setItems] = useState<PropertyDTO[]>([]);
   const [loading, setLoading] = useState(false);
-  const [pendingAction, setPendingAction] = useState(false);
+  const [formPending, setFormPending] = useState(false);
+  const [deletePendingById, setDeletePendingById] = useState<Record<string, boolean>>({});
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
+  const [actionAccessError, setActionAccessError] = useState<string | null>(null);
   const [formError, setFormError] = useState<ApiError | string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FormField, string>>>({});
   const [formState, setFormState] = useState<FormState>(() => buildDefaultFormState());
@@ -84,14 +88,28 @@ function AdminPropertiesContent(): JSX.Element {
     [items]
   );
 
+  const tableItems = useMemo(
+    () =>
+      sortedItems.map((property) => ({
+        property,
+        deletePending: Boolean(deletePendingById[property.id]),
+      })),
+    [deletePendingById, sortedItems]
+  );
+
+  const actionsLocked = Boolean(actionAccessError);
+  const submitDisabled = formPending || actionsLocked;
+
   const loadProperties = useCallback(async () => {
     setLoading(true);
     setFetchError(null);
     setAccessError(null);
+    setActionAccessError(null);
 
     try {
       const response = await apiGet<PropertyListResponse>("/api/v1/properties");
       setItems(Array.isArray(response.items) ? response.items : []);
+      setDeletePendingById({});
     } catch (error) {
       const apiError = toApiError(error);
 
@@ -138,30 +156,27 @@ function AdminPropertiesContent(): JSX.Element {
     setFormError(null);
   }, []);
 
-  const validateForm = useCallback(
-    (state: FormState): Partial<Record<FormField, string>> => {
-      const errors: Partial<Record<FormField, string>> = {};
+  const validateForm = useCallback((state: FormState): Partial<Record<FormField, string>> => {
+    const errors: Partial<Record<FormField, string>> = {};
 
-      if (!state.label.trim()) {
-        errors.label = "Nazwa nieruchomości jest wymagana.";
-      } else if (state.label.trim().length < 3) {
-        errors.label = "Nazwa powinna mieć co najmniej 3 znaki.";
-      }
+    if (!state.label.trim()) {
+      errors.label = "Nazwa nieruchomości jest wymagana.";
+    } else if (state.label.trim().length < 3) {
+      errors.label = "Nazwa powinna mieć co najmniej 3 znaki.";
+    }
 
-      if (!state.startMonth) {
-        errors.startMonth = "Wybierz miesiąc początkowy.";
-      }
+    if (!state.startMonth) {
+      errors.startMonth = "Wybierz miesiąc początkowy.";
+    }
 
-      return errors;
-    },
-    []
-  );
+    return errors;
+  }, []);
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
 
-      if (pendingAction) {
+      if (formPending || actionsLocked) {
         return;
       }
 
@@ -176,8 +191,9 @@ function AdminPropertiesContent(): JSX.Element {
         startMonth: formState.startMonth,
       };
 
-      setPendingAction(true);
+      setFormPending(true);
       setFormError(null);
+      setActionAccessError(null);
 
       try {
         if (editing) {
@@ -222,8 +238,27 @@ function AdminPropertiesContent(): JSX.Element {
           return;
         }
 
-        if (apiError.code === "forbidden") {
-          setAccessError(apiError.message);
+        if (apiError.code === "forbidden" || apiError.status === 403) {
+          setActionAccessError(apiError.message);
+          return;
+        }
+
+        if (apiError.code === "conflict" || apiError.status === 409) {
+          setFieldErrors((prev) => ({
+            ...prev,
+            label: apiError.message || "Nieruchomość o takiej nazwie już istnieje.",
+          }));
+          return;
+        }
+
+        if (editing && (apiError.code === "not_found" || apiError.status === 404)) {
+          pushToast({
+            variant: "info",
+            title: "Nieruchomość już nie istnieje",
+            description: apiError.message,
+          });
+          await loadProperties();
+          resetForm();
           return;
         }
 
@@ -234,10 +269,10 @@ function AdminPropertiesContent(): JSX.Element {
           description: apiError.message,
         });
       } finally {
-        setPendingAction(false);
+        setFormPending(false);
       }
     },
-    [editing, formState, loadProperties, pendingAction, pushToast, resetForm, validateForm]
+    [actionsLocked, editing, formPending, formState, loadProperties, pushToast, resetForm, validateForm]
   );
 
   const handleEdit = useCallback((property: PropertyDTO) => {
@@ -248,20 +283,38 @@ function AdminPropertiesContent(): JSX.Element {
     });
     setFieldErrors({});
     setFormError(null);
+    setActionAccessError(null);
   }, []);
 
   const handleDelete = useCallback(
     async (property: PropertyDTO) => {
-      if (pendingAction) {
+      let shouldProceed = true;
+      setDeletePendingById((prev) => {
+        if (prev[property.id]) {
+          shouldProceed = false;
+          return prev;
+        }
+        return { ...prev, [property.id]: true };
+      });
+
+      if (!shouldProceed) {
         return;
       }
 
       const confirmed = window.confirm(`Czy na pewno chcesz usunąć nieruchomość "${property.label}"?`);
       if (!confirmed) {
+        setDeletePendingById((prev) => {
+          if (!prev[property.id]) {
+            return prev;
+          }
+          const next = { ...prev };
+          delete next[property.id];
+          return next;
+        });
         return;
       }
 
-      setPendingAction(true);
+      setActionAccessError(null);
 
       try {
         await apiDelete(`/api/v1/properties/${encodeURIComponent(property.id)}`);
@@ -277,26 +330,39 @@ function AdminPropertiesContent(): JSX.Element {
       } catch (error) {
         const apiError = toApiError(error);
 
-        if (apiError.code === "forbidden") {
-          setAccessError(apiError.message);
+        if (apiError.code === "forbidden" || apiError.status === 403) {
+          setActionAccessError(apiError.message);
         } else {
+          const isNotFound = apiError.code === "not_found" || apiError.status === 404;
           pushToast({
-            variant: "error",
-            title: "Nie udało się usunąć nieruchomości",
+            variant: isNotFound ? "info" : "error",
+            title: isNotFound ? "Nieruchomość już nie istnieje" : "Nie udało się usunąć nieruchomości",
             description: apiError.message,
           });
+
+          if (isNotFound || apiError.code === "conflict" || apiError.status === 409) {
+            await loadProperties();
+          }
         }
       } finally {
-        setPendingAction(false);
+        setDeletePendingById((prev) => {
+          if (!prev[property.id]) {
+            return prev;
+          }
+          const next = { ...prev };
+          delete next[property.id];
+          return next;
+        });
       }
     },
-    [editing?.id, loadProperties, pendingAction, pushToast, resetForm]
+    [editing?.id, loadProperties, pushToast, resetForm]
   );
 
   return (
     <section className="space-y-8">
       {accessError ? <ErrorAlert error={accessError} /> : null}
       {fetchError ? <ErrorAlert error={fetchError} /> : null}
+      {actionAccessError ? <ErrorAlert error={actionAccessError} /> : null}
 
       <div className="rounded-lg border bg-card p-6 shadow-sm">
         <header className="flex items-start justify-between gap-4">
@@ -330,7 +396,7 @@ function AdminPropertiesContent(): JSX.Element {
               type="text"
               placeholder="np. Mieszkanie Kowalskich"
               value={formState.label}
-              disabled={pendingAction}
+              disabled={submitDisabled}
               onChange={(event: ChangeEvent<HTMLInputElement>) => handleFormChange("label", event.target.value)}
               required
               minLength={3}
@@ -347,7 +413,7 @@ function AdminPropertiesContent(): JSX.Element {
               className={buildInputClasses(fieldErrors.startMonth)}
               type="month"
               value={formState.startMonth}
-              disabled={pendingAction}
+              disabled={submitDisabled}
               onChange={(event: ChangeEvent<HTMLInputElement>) => handleFormChange("startMonth", event.target.value)}
               required
             />
@@ -355,8 +421,8 @@ function AdminPropertiesContent(): JSX.Element {
           </div>
 
           <div className="flex justify-end">
-            <Button disabled={pendingAction} type="submit">
-              {pendingAction ? "Zapisywanie…" : editing ? "Zapisz zmiany" : "Dodaj nieruchomość"}
+            <Button disabled={submitDisabled} type="submit">
+              {formPending ? "Zapisywanie…" : editing ? "Zapisz zmiany" : "Dodaj nieruchomość"}
             </Button>
           </div>
         </form>
@@ -366,9 +432,7 @@ function AdminPropertiesContent(): JSX.Element {
         <header className="flex items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-foreground">Lista nieruchomości</h2>
-            <p className="text-sm text-muted-foreground">
-              Zarządzaj nieruchomościami przypisanymi do umów i odczytów.
-            </p>
+            <p className="text-sm text-muted-foreground">Zarządzaj nieruchomościami przypisanymi do umów i odczytów.</p>
           </div>
           <Button
             type="button"
@@ -409,7 +473,7 @@ function AdminPropertiesContent(): JSX.Element {
                   </td>
                 </tr>
               ) : (
-                sortedItems.map((property) => (
+                tableItems.map(({ property, deletePending }) => (
                   <tr key={property.id} className="border-t border-border bg-background/80">
                     <td className="px-4 py-3">
                       <div className="flex flex-col">
@@ -429,7 +493,7 @@ function AdminPropertiesContent(): JSX.Element {
                         <Button
                           type="button"
                           variant="secondary"
-                          disabled={pendingAction}
+                          disabled={actionsLocked}
                           onClick={() => handleEdit(property)}
                         >
                           Edytuj
@@ -437,7 +501,7 @@ function AdminPropertiesContent(): JSX.Element {
                         <Button
                           type="button"
                           variant="destructive"
-                          disabled={pendingAction}
+                          disabled={deletePending || actionsLocked}
                           onClick={() => {
                             handleDelete(property).catch(() => {
                               /* obsłużone w handleDelete */
@@ -466,5 +530,3 @@ export function AdminPropertiesList(): JSX.Element {
     </ToastProvider>
   );
 }
-
-

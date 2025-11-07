@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
 import type { JSX } from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
@@ -31,6 +31,14 @@ interface TenantReportsTableProps {
   initialMonth?: string;
 }
 
+interface TenantReportRowProps {
+  item: TenantReportListItem;
+  pendingGenerateId: string | null;
+  pendingResendId: string | null;
+  onGenerate: (item: TenantReportListItem) => void;
+  onResend: (item: TenantReportListItem) => void;
+}
+
 export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): JSX.Element {
   const { pushToast } = useToast();
   const [month, setMonth] = useState<string>(() => resolveInitialMonth(initialMonth));
@@ -50,7 +58,8 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
 
     try {
       const response = await apiGet<TenantReportsResponse>(`/api/v1/reports${listQuery}`);
-      setItems(Array.isArray(response.items) ? response.items : []);
+      const normalizedItems = Array.isArray(response.items) ? response.items : [];
+      setItems((previous) => mergeTenantReportItems(previous, normalizedItems));
     } catch (error) {
       const apiError = toApiError(error);
 
@@ -85,16 +94,9 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
       return;
     }
 
-    const sanitized = sanitizeMonth(month);
-    const next = sanitized ?? getCurrentMonth();
-
-    if (next !== month) {
-      setMonth(next);
-      return;
-    }
-
-    window.localStorage.setItem(MONTH_STORAGE_KEY, next);
-    replaceMonthParam(next);
+    const sanitized = sanitizeMonth(month) ?? getCurrentMonth();
+    window.localStorage.setItem(MONTH_STORAGE_KEY, sanitized);
+    replaceMonthParam(sanitized);
   }, [month]);
 
   const onMonthChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
@@ -232,51 +234,14 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
               </thead>
               <tbody>
                 {items.map((item) => (
-                  <tr
+                  <TenantReportRow
                     key={item.report.id}
-                    className="rounded-lg border border-border bg-background/60 text-sm shadow-sm"
-                  >
-                    <td className="px-4 py-3 align-top">
-                      <a
-                        className="font-medium text-foreground underline-offset-2 hover:underline"
-                        href={`/app/reports/${item.report.id}`}
-                      >
-                        {formatMonth(item.report.month)}
-                      </a>
-                    </td>
-                    <td className="px-4 py-3 align-top">{formatStatus(item.report.status)}</td>
-                    <td className="px-4 py-3 align-top text-xs text-muted-foreground">
-                      {renderEmailAttempt(item.lastEmailAttempt)}
-                    </td>
-                    <td className="px-4 py-3 align-top">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          type="button"
-                          disabled={
-                            !canGenerate(item) || pendingGenerateId === item.report.id || Boolean(pendingResendId)
-                          }
-                          onClick={() => handleGenerate(item)}
-                          title={item.permissions?.generateDisabledReason ?? undefined}
-                          variant="default"
-                          aria-disabled={!canGenerate(item)}
-                        >
-                          Generuj
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          disabled={
-                            !canSendEmail(item) || pendingResendId === item.report.id || Boolean(pendingGenerateId)
-                          }
-                          onClick={() => handleResend(item)}
-                          title={item.permissions?.sendEmailDisabledReason ?? undefined}
-                          aria-disabled={!canSendEmail(item)}
-                        >
-                          Wyślij ponownie
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
+                    item={item}
+                    onGenerate={handleGenerate}
+                    onResend={handleResend}
+                    pendingGenerateId={pendingGenerateId}
+                    pendingResendId={pendingResendId}
+                  />
                 ))}
               </tbody>
             </table>
@@ -286,6 +251,63 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
     </section>
   );
 }
+
+const TenantReportRow = memo(function TenantReportRow({
+  item,
+  onGenerate,
+  onResend,
+  pendingGenerateId,
+  pendingResendId,
+}: TenantReportRowProps): JSX.Element {
+  const handleGenerateClick = useCallback(() => {
+    onGenerate(item);
+  }, [item, onGenerate]);
+
+  const handleResendClick = useCallback(() => {
+    onResend(item);
+  }, [item, onResend]);
+
+  return (
+    <tr className="rounded-lg border border-border bg-background/60 text-sm shadow-sm">
+      <td className="px-4 py-3 align-top">
+        <a
+          className="font-medium text-foreground underline-offset-2 hover:underline"
+          href={`/app/reports/${item.report.id}`}
+        >
+          {formatMonth(item.report.month)}
+        </a>
+      </td>
+      <td className="px-4 py-3 align-top">{formatStatus(item.report.status)}</td>
+      <td className="px-4 py-3 align-top text-xs text-muted-foreground">
+        {renderEmailAttempt(item.lastEmailAttempt)}
+      </td>
+      <td className="px-4 py-3 align-top">
+        <div className="flex justify-end gap-2">
+          <Button
+            type="button"
+            disabled={!canGenerate(item) || pendingGenerateId === item.report.id || Boolean(pendingResendId)}
+            onClick={handleGenerateClick}
+            title={item.permissions?.generateDisabledReason ?? undefined}
+            variant="default"
+            aria-disabled={!canGenerate(item)}
+          >
+            Generuj
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={!canSendEmail(item) || pendingResendId === item.report.id || Boolean(pendingGenerateId)}
+            onClick={handleResendClick}
+            title={item.permissions?.sendEmailDisabledReason ?? undefined}
+            aria-disabled={!canSendEmail(item)}
+          >
+            Wyślij ponownie
+          </Button>
+        </div>
+      </td>
+    </tr>
+  );
+});
 
 export function TenantReportsView(props: TenantReportsTableProps): JSX.Element {
   return (
@@ -445,4 +467,88 @@ function toApiError(error: unknown): ApiError {
     code: "unexpected_error",
     message: error instanceof Error ? error.message : "Wystąpił nieoczekiwany błąd.",
   };
+}
+
+function mergeTenantReportItems(
+  previous: TenantReportListItem[],
+  next: TenantReportListItem[]
+): TenantReportListItem[] {
+  if (previous.length === 0) {
+    return next;
+  }
+
+  const previousById = new Map(previous.map((item) => [item.report.id, item]));
+  let didChange = previous.length !== next.length;
+  const merged = next.map((item, index) => {
+    const existing = previousById.get(item.report.id);
+    if (!existing) {
+      didChange = true;
+      return item;
+    }
+
+    if (
+      existing.report.updatedAt === item.report.updatedAt &&
+      existing.report.status === item.report.status &&
+      existing.report.month === item.report.month &&
+      isEmailAttemptEqual(existing.lastEmailAttempt, item.lastEmailAttempt) &&
+      isPermissionsEqual(existing.permissions, item.permissions)
+    ) {
+      if (existing === previous[index]) {
+        return existing;
+      }
+
+      didChange = true;
+      return existing;
+    }
+
+    didChange = true;
+    return item;
+  });
+
+  if (!didChange) {
+    return previous;
+  }
+
+  return merged;
+}
+
+function isEmailAttemptEqual(
+  previous: ReportEmailAttemptDTO | null | undefined,
+  next: ReportEmailAttemptDTO | null | undefined
+): boolean {
+  if (previous === next) {
+    return true;
+  }
+
+  if (!previous || !next) {
+    return !previous && !next;
+  }
+
+  return (
+    previous.id === next.id &&
+    previous.attemptedAt === next.attemptedAt &&
+    previous.status === next.status &&
+    previous.errorMessage === next.errorMessage &&
+    previous.reportEmailId === next.reportEmailId
+  );
+}
+
+function isPermissionsEqual(
+  previous: TenantReportPermissions | null | undefined,
+  next: TenantReportPermissions | null | undefined
+): boolean {
+  if (previous === next) {
+    return true;
+  }
+
+  if (!previous || !next) {
+    return !previous && !next;
+  }
+
+  return (
+    previous.canGenerate === next.canGenerate &&
+    previous.generateDisabledReason === next.generateDisabledReason &&
+    previous.canSendEmail === next.canSendEmail &&
+    previous.sendEmailDisabledReason === next.sendEmailDisabledReason
+  );
 }
