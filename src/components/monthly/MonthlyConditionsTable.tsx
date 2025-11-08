@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type InputHTMLAttributes } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type ChangeEvent, type InputHTMLAttributes } from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
@@ -59,6 +59,18 @@ const NUMERIC_FIELDS: FormField[] = [
   "forecastHeating",
   "advancePayment",
 ];
+
+const FIELD_PROPS: Partial<Record<FormField, InputHTMLAttributes<HTMLInputElement>>> = {
+  month: { type: "month" },
+  managerFee: { inputMode: "decimal", placeholder: "0.00" },
+  priceCold: { inputMode: "decimal", placeholder: "0.00" },
+  priceHotHeating: { inputMode: "decimal", placeholder: "0.00" },
+  priceHeating: { inputMode: "decimal", placeholder: "0.00" },
+  forecastCold: { inputMode: "decimal", placeholder: "0.000" },
+  forecastHot: { inputMode: "decimal", placeholder: "0.000" },
+  forecastHeating: { inputMode: "decimal", placeholder: "0.000" },
+  advancePayment: { inputMode: "decimal", placeholder: "0.00" },
+};
 
 function resolveInitialMonth(value?: string): string {
   if (value && /^\d{4}-\d{2}$/.test(value)) {
@@ -401,32 +413,60 @@ function MonthlyConditionsContent(): JSX.Element {
   );
 
   const handleDraftChange = useCallback((id: string, field: FormField, value: string) => {
-    setDraftsById((prev) => ({
-      ...prev,
-      [id]: {
-        ...prev[id],
-        id,
-        [field]: value,
-      },
-    }));
-    setDraftErrorsById((prev) => {
-      const next = { ...prev };
-      if (next[id]) {
-        next[id] = { ...next[id], [field]: undefined };
+    setDraftsById((prev) => {
+      const current = prev[id];
+      if (current && current[field] === value) {
+        return prev;
       }
-      return next;
+
+      return {
+        ...prev,
+        [id]: {
+          ...current,
+          id,
+          [field]: value,
+        },
+      };
+    });
+
+    setDraftErrorsById((prev) => {
+      const current = prev[id];
+      if (!current || current[field] === undefined) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [id]: {
+          ...current,
+          [field]: undefined,
+        },
+      };
     });
   }, []);
 
   const handleCreateDraftChange = useCallback((field: FormField, value: string) => {
-    setCreateDraft((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-    setCreateErrors((prev) => ({
-      ...prev,
-      [field]: undefined,
-    }));
+    setCreateDraft((prev) => {
+      if (prev[field] === value) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [field]: value,
+      };
+    });
+
+    setCreateErrors((prev) => {
+      if (prev[field] === undefined) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        [field]: undefined,
+      };
+    });
   }, []);
 
   const lockMessages = useMemo(() => {
@@ -670,28 +710,6 @@ function MonthlyConditionsContent(): JSX.Element {
     });
   }, [loadConditions]);
 
-  const renderInput = (
-    value: string,
-    onChange: (value: string) => void,
-    disabled: boolean,
-    error?: string,
-    props?: Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange" | "disabled">
-  ): JSX.Element => (
-    <div className="space-y-1">
-      <input
-        {...props}
-        className={[
-          "w-full rounded-md border bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
-          error ? "border-destructive focus-visible:ring-destructive/40" : "border-input",
-        ].join(" ")}
-        disabled={disabled}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
-      {error ? <p className="text-xs text-destructive">{error}</p> : null}
-    </div>
-  );
-
   return (
     <section className="space-y-8">
       <div className="rounded-lg border bg-card p-6 shadow-sm">
@@ -789,238 +807,43 @@ function MonthlyConditionsContent(): JSX.Element {
                 </tr>
               ) : (
                 items.map((item) => {
-                  const draft = draftsById[item.id] ?? buildFormState(item);
-                  const errors = draftErrorsById[item.id] ?? {};
-                  const isPending = Boolean(pendingById[item.id]);
-                  const isDeletePending = Boolean(deletePendingById[item.id]);
-                  const lockReason = lockedById[item.id];
-                  const isLocked = Boolean(lockReason);
-                  const isDirty = !areDraftsEqual(draft, baselineDrafts[item.id]);
+                  const baseline = baselineDrafts[item.id] ?? buildFormState(item);
+                  const draft = draftsById[item.id] ?? baseline;
 
                   return (
-                    <tr key={item.id} className={isDirty ? "bg-muted/40" : undefined}>
-                      <td className="px-3 py-3 align-top">
-                        {renderInput(draft.month, (value) => handleDraftChange(item.id, "month", value), isPending || isLocked, errors.month, {
-                          type: "month",
-                        })}
-                      </td>
-                      <td className="px-3 py-3 align-top">
-                        {renderInput(draft.managerFee, (value) => handleDraftChange(item.id, "managerFee", value), isPending || isLocked, errors.managerFee, {
-                          inputMode: "decimal",
-                          placeholder: "0.00",
-                        })}
-                      </td>
-                      <td className="px-3 py-3 align-top">
-                        {renderInput(draft.priceCold, (value) => handleDraftChange(item.id, "priceCold", value), isPending || isLocked, errors.priceCold, {
-                          inputMode: "decimal",
-                          placeholder: "0.00",
-                        })}
-                      </td>
-                      <td className="px-3 py-3 align-top">
-                        {renderInput(
-                          draft.priceHotHeating,
-                          (value) => handleDraftChange(item.id, "priceHotHeating", value),
-                          isPending || isLocked,
-                          errors.priceHotHeating,
-                          {
-                            inputMode: "decimal",
-                            placeholder: "0.00",
-                          }
-                        )}
-                      </td>
-                      <td className="px-3 py-3 align-top">
-                        {renderInput(draft.priceHeating, (value) => handleDraftChange(item.id, "priceHeating", value), isPending || isLocked, errors.priceHeating, {
-                          inputMode: "decimal",
-                          placeholder: "0.00",
-                        })}
-                      </td>
-                      <td className="px-3 py-3 align-top">
-                        {renderInput(
-                          draft.forecastCold,
-                          (value) => handleDraftChange(item.id, "forecastCold", value),
-                          isPending || isLocked,
-                          errors.forecastCold,
-                          {
-                            inputMode: "decimal",
-                            placeholder: "0.000",
-                          }
-                        )}
-                      </td>
-                      <td className="px-3 py-3 align-top">
-                        {renderInput(
-                          draft.forecastHot,
-                          (value) => handleDraftChange(item.id, "forecastHot", value),
-                          isPending || isLocked,
-                          errors.forecastHot,
-                          {
-                            inputMode: "decimal",
-                            placeholder: "0.000",
-                          }
-                        )}
-                      </td>
-                      <td className="px-3 py-3 align-top">
-                        {renderInput(
-                          draft.forecastHeating,
-                          (value) => handleDraftChange(item.id, "forecastHeating", value),
-                          isPending || isLocked,
-                          errors.forecastHeating,
-                          {
-                            inputMode: "decimal",
-                            placeholder: "0.000",
-                          }
-                        )}
-                      </td>
-                      <td className="px-3 py-3 align-top">
-                        {renderInput(
-                          draft.advancePayment,
-                          (value) => handleDraftChange(item.id, "advancePayment", value),
-                          isPending || isLocked,
-                          errors.advancePayment,
-                          {
-                            inputMode: "decimal",
-                            placeholder: "0.00",
-                          }
-                        )}
-                      </td>
-                      <td className="px-3 py-3 align-top">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            type="button"
-                            disabled={!isDirty || isPending || isDeletePending || isLocked}
-                            onClick={() => handleSave(item.id)}
-                            title={lockReason ?? undefined}
-                          >
-                            {isPending ? "Zapisywanie…" : "Zapisz"}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            disabled={isDeletePending || isPending || isLocked}
-                            onClick={() => handleDelete(item.id)}
-                            title={lockReason ?? undefined}
-                          >
-                            {isDeletePending ? "Usuwanie…" : "Usuń"}
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
+                    <MonthlyConditionRow
+                      key={item.id}
+                      id={item.id}
+                      draft={draft}
+                      baseline={baseline}
+                      errors={draftErrorsById[item.id] ?? {}}
+                      pending={Boolean(pendingById[item.id])}
+                      deletePending={Boolean(deletePendingById[item.id])}
+                      lockReason={lockedById[item.id]}
+                      onFieldChange={handleDraftChange}
+                      onSave={handleSave}
+                      onDelete={handleDelete}
+                    />
                   );
                 })
               )}
 
               {!loading && filters.propertyId ? (
                 <tr className="bg-muted/20">
-                  <td className="px-3 py-3 align-top">
-                    {renderInput(createDraft.month, (value) => handleCreateDraftChange("month", value), pendingCreate, createErrors.month, {
-                      type: "month",
-                      title: createLockedMessage ?? undefined,
-                      disabled: pendingCreate || Boolean(createLockedMessage),
-                    })}
-                  </td>
-                  <td className="px-3 py-3 align-top">
-                    {renderInput(
-                      createDraft.managerFee,
-                      (value) => handleCreateDraftChange("managerFee", value),
-                      pendingCreate || Boolean(createLockedMessage),
-                      createErrors.managerFee,
-                      {
-                        inputMode: "decimal",
-                        placeholder: "0.00",
-                        title: createLockedMessage ?? undefined,
-                      }
-                    )}
-                  </td>
-                  <td className="px-3 py-3 align-top">
-                    {renderInput(
-                      createDraft.priceCold,
-                      (value) => handleCreateDraftChange("priceCold", value),
-                      pendingCreate || Boolean(createLockedMessage),
-                      createErrors.priceCold,
-                      {
-                        inputMode: "decimal",
-                        placeholder: "0.00",
-                        title: createLockedMessage ?? undefined,
-                      }
-                    )}
-                  </td>
-                  <td className="px-3 py-3 align-top">
-                    {renderInput(
-                      createDraft.priceHotHeating,
-                      (value) => handleCreateDraftChange("priceHotHeating", value),
-                      pendingCreate || Boolean(createLockedMessage),
-                      createErrors.priceHotHeating,
-                      {
-                        inputMode: "decimal",
-                        placeholder: "0.00",
-                        title: createLockedMessage ?? undefined,
-                      }
-                    )}
-                  </td>
-                  <td className="px-3 py-3 align-top">
-                    {renderInput(
-                      createDraft.priceHeating,
-                      (value) => handleCreateDraftChange("priceHeating", value),
-                      pendingCreate || Boolean(createLockedMessage),
-                      createErrors.priceHeating,
-                      {
-                        inputMode: "decimal",
-                        placeholder: "0.00",
-                        title: createLockedMessage ?? undefined,
-                      }
-                    )}
-                  </td>
-                  <td className="px-3 py-3 align-top">
-                    {renderInput(
-                      createDraft.forecastCold,
-                      (value) => handleCreateDraftChange("forecastCold", value),
-                      pendingCreate || Boolean(createLockedMessage),
-                      createErrors.forecastCold,
-                      {
-                        inputMode: "decimal",
-                        placeholder: "0.000",
-                        title: createLockedMessage ?? undefined,
-                      }
-                    )}
-                  </td>
-                  <td className="px-3 py-3 align-top">
-                    {renderInput(
-                      createDraft.forecastHot,
-                      (value) => handleCreateDraftChange("forecastHot", value),
-                      pendingCreate || Boolean(createLockedMessage),
-                      createErrors.forecastHot,
-                      {
-                        inputMode: "decimal",
-                        placeholder: "0.000",
-                        title: createLockedMessage ?? undefined,
-                      }
-                    )}
-                  </td>
-                  <td className="px-3 py-3 align-top">
-                    {renderInput(
-                      createDraft.forecastHeating,
-                      (value) => handleCreateDraftChange("forecastHeating", value),
-                      pendingCreate || Boolean(createLockedMessage),
-                      createErrors.forecastHeating,
-                      {
-                        inputMode: "decimal",
-                        placeholder: "0.000",
-                        title: createLockedMessage ?? undefined,
-                      }
-                    )}
-                  </td>
-                  <td className="px-3 py-3 align-top">
-                    {renderInput(
-                      createDraft.advancePayment,
-                      (value) => handleCreateDraftChange("advancePayment", value),
-                      pendingCreate || Boolean(createLockedMessage),
-                      createErrors.advancePayment,
-                      {
-                        inputMode: "decimal",
-                        placeholder: "0.00",
-                        title: createLockedMessage ?? undefined,
-                      }
-                    )}
-                  </td>
+                  {DRAFT_FIELDS.map((field) => (
+                    <td key={field} className="px-3 py-3 align-top">
+                      <ConditionInput
+                        value={createDraft[field] ?? ""}
+                        onChange={(value) => handleCreateDraftChange(field, value)}
+                        disabled={pendingCreate || Boolean(createLockedMessage)}
+                        error={createErrors[field]}
+                        inputProps={{
+                          ...FIELD_PROPS[field],
+                          title: createLockedMessage ?? undefined,
+                        }}
+                      />
+                    </td>
+                  ))}
                   <td className="px-3 py-3 align-top">
                     <div className="flex justify-end">
                       <Button
@@ -1055,5 +878,101 @@ export function MonthlyConditionsTable({ useOwnProvider }: MonthlyConditionsCont
 
   return <MonthlyConditionsContent />;
 }
+
+interface ConditionInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  error?: string;
+  inputProps?: InputHTMLAttributes<HTMLInputElement>;
+}
+
+function ConditionInput({ value, onChange, disabled, error, inputProps }: ConditionInputProps): JSX.Element {
+  return (
+    <div className="space-y-1">
+      <input
+        {...inputProps}
+        className={[
+          "w-full rounded-md border bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+          error ? "border-destructive focus-visible:ring-destructive/40" : "border-input",
+        ].join(" ")}
+        disabled={disabled || inputProps?.disabled}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+    </div>
+  );
+}
+
+interface MonthlyConditionRowProps {
+  id: string;
+  draft: FormState;
+  baseline?: FormState;
+  errors: Partial<Record<FormField, string>>;
+  pending: boolean;
+  deletePending: boolean;
+  lockReason?: string;
+  onFieldChange: (id: string, field: FormField, value: string) => void;
+  onSave: (id: string) => void;
+  onDelete: (id: string) => void;
+}
+
+const MonthlyConditionRow = memo(function MonthlyConditionRow({
+  id,
+  draft,
+  baseline,
+  errors,
+  pending,
+  deletePending,
+  lockReason,
+  onFieldChange,
+  onSave,
+  onDelete,
+}: MonthlyConditionRowProps): JSX.Element {
+  const isDirty = baseline ? !areDraftsEqual(draft, baseline) : true;
+  const isLocked = Boolean(lockReason);
+  const rowClassName = isDirty ? "bg-muted/40" : undefined;
+
+  return (
+    <tr className={rowClassName}>
+      {DRAFT_FIELDS.map((field) => (
+        <td key={field} className="px-3 py-3 align-top">
+          <ConditionInput
+            value={draft[field] ?? ""}
+            onChange={(value) => onFieldChange(id, field, value)}
+            disabled={pending || isLocked}
+            error={errors[field]}
+            inputProps={{
+              ...FIELD_PROPS[field],
+              title: lockReason ?? FIELD_PROPS[field]?.title,
+            }}
+          />
+        </td>
+      ))}
+      <td className="px-3 py-3 align-top">
+        <div className="flex justify-end gap-2">
+          <Button
+            type="button"
+            disabled={!isDirty || pending || deletePending || isLocked}
+            onClick={() => onSave(id)}
+            title={lockReason ?? undefined}
+          >
+            {pending ? "Zapisywanie…" : "Zapisz"}
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={deletePending || pending || isLocked}
+            onClick={() => onDelete(id)}
+            title={lockReason ?? undefined}
+          >
+            {deletePending ? "Usuwanie…" : "Usuń"}
+          </Button>
+        </div>
+      </td>
+    </tr>
+  );
+});
 
 

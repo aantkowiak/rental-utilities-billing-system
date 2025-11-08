@@ -27,7 +27,7 @@
 - [x] `ui-view-impl-25-TenantReportsList.md`
 - [x] `ui-view-impl-26-TenantReportDetail.md`
 - [ ] `ui-view-impl-27-AdminReadings.md`
-- [ ] `ui-view-impl-28-AdminMonthlyConditions.md`
+- [x] `ui-view-impl-28-AdminMonthlyConditions.md`
 - [ ] `ui-view-impl-29-AdminReportsList.md`
 - [ ] `ui-view-impl-30-AdminReportDetail.md`
 - [ ] `ui-view-impl-31-AdminProperties.md`
