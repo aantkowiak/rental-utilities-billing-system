@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AdminReadingsView } from "@/components/readings/AdminReadingsView";
@@ -39,6 +39,33 @@ describe("AdminReadingsView", () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  it("skips refetching when filters do not change after debounce", async () => {
+    const initialResponse = { items: [buildReading()] } satisfies ReadingListResponse;
+
+    apiGetMock.mockResolvedValue(initialResponse);
+
+    render(<AdminReadingsView />);
+
+    await waitFor(() => expect(apiGetMock).toHaveBeenCalledTimes(1));
+    apiGetMock.mockClear();
+
+    const propertyInput = await screen.findByLabelText(/Identyfikator nieruchomości/i);
+
+    vi.useFakeTimers();
+    fireEvent.change(propertyInput, { target: { value: "property-1" } });
+
+    try {
+      await act(async () => {
+        vi.advanceTimersByTime(400);
+        await Promise.resolve();
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(apiGetMock).not.toHaveBeenCalled();
   });
 
   it("renders readings table after successful list fetch", async () => {

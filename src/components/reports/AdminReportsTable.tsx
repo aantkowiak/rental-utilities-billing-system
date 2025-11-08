@@ -1,4 +1,17 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type Dispatch, type SetStateAction } from "react";
+import type { JSX } from "react";
+import {
+  lazy,
+  memo,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
@@ -31,10 +44,6 @@ function normalizeMonth(value: string | null | undefined): string | null {
 
 function ensureMonth(value: string | null | undefined): string {
   return normalizeMonth(value) ?? getCurrentMonth();
-}
-
-function setPending(setter: Dispatch<SetStateAction<PendingMap>>, id: string): void {
-  setter((prev) => ({ ...prev, [id]: true }));
 }
 
 function clearPending(setter: Dispatch<SetStateAction<PendingMap>>, id: string): void {
@@ -170,7 +179,181 @@ function shouldRefetchAfterAction(error: ApiError): boolean {
   return [404, 409, 429, 500].includes(error.status);
 }
 
-function AdminReportsContent(): JSX.Element {
+const AdminReportEmailDetails = lazy(async () => {
+  const module = await import("./AdminReportEmailDetails");
+  return { default: module.AdminReportEmailDetails };
+});
+
+const STATUS_STYLE_MAP: Record<ReportDTO["status"], string> = {
+  draft: "border-input bg-secondary text-secondary-foreground",
+  realized: "border-transparent bg-emerald-500/10 text-emerald-600",
+  unlocked: "border-transparent bg-amber-500/10 text-amber-600",
+};
+
+const ATTEMPT_STATUS_LABELS: Record<NonNullable<ReportEmailAttemptDTO["status"]>, string> = {
+  success: "Sukces",
+  retry: "Ponów próbę",
+  failed: "Błąd",
+};
+
+interface AdminReportRowProps {
+  item: AdminReportListItem;
+  loading: boolean;
+  generatePending: boolean;
+  regeneratePending: boolean;
+  resendPending: boolean;
+  togglePending: boolean;
+  onGenerate: (item: AdminReportListItem) => void;
+  onRegenerate: (item: AdminReportListItem) => void;
+  onResend: (item: AdminReportListItem) => void;
+  onToggleRealized: (item: AdminReportListItem) => void;
+}
+
+const AdminReportRow = memo(function AdminReportRowComponent({
+  item,
+  loading,
+  generatePending,
+  regeneratePending,
+  resendPending,
+  togglePending,
+  onGenerate,
+  onRegenerate,
+  onResend,
+  onToggleRealized,
+}: AdminReportRowProps): JSX.Element {
+  const [emailDetailsOpen, setEmailDetailsOpen] = useState(false);
+
+  const isRealized = item.report.status === "realized";
+  const statusLabel = useMemo(() => formatStatus(item.report.status), [item.report.status]);
+  const statusClassName = useMemo(
+    () => `inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_STYLE_MAP[item.report.status]}`,
+    [item.report.status]
+  );
+  const balanceLabel = useMemo(() => formatCurrency(item.report.balanceRaw), [item.report.balanceRaw]);
+  const emailSummary = useMemo(() => formatEmailAttemptSummary(item.lastEmailAttempt), [item.lastEmailAttempt]);
+  const emailDetailsButtonLabel = emailDetailsOpen ? "Ukryj szczegóły" : "Szczegóły e-mail";
+
+  const disableAnyAction = generatePending || regeneratePending || resendPending || togglePending || loading;
+
+  const disableGenerate = disableAnyAction || !canGenerate(item);
+  const disableRegenerate = disableAnyAction || !canRegenerate(item);
+  const disableResend = disableAnyAction || !canSendEmail(item);
+  const disableToggle = disableAnyAction || !canToggleRealized(item);
+
+  const handleGenerateClick = useCallback(() => {
+    onGenerate(item);
+  }, [item, onGenerate]);
+
+  const handleRegenerateClick = useCallback(() => {
+    onRegenerate(item);
+  }, [item, onRegenerate]);
+
+  const handleResendClick = useCallback(() => {
+    onResend(item);
+  }, [item, onResend]);
+
+  const handleToggleClick = useCallback(() => {
+    onToggleRealized(item);
+  }, [item, onToggleRealized]);
+
+  const handleEmailDetailsToggle = useCallback(() => {
+    setEmailDetailsOpen((previous) => !previous);
+  }, []);
+
+  return (
+    <tr className="rounded-lg border border-border bg-background/80 align-top text-sm shadow-sm">
+      <td className="px-4 py-3 align-top">
+        <div className="space-y-1">
+          <a
+            className="font-medium text-foreground underline-offset-2 hover:underline"
+            href={`/admin/reports/${item.report.id}`}
+          >
+            {formatMonth(item.report.month)}
+          </a>
+          <p className="text-xs text-muted-foreground">
+            Kontrakt: <span className="font-medium text-foreground">{item.report.contractId}</span>
+          </p>
+        </div>
+      </td>
+      <td className="px-4 py-3 align-top">
+        <div className="space-y-1">
+          <span className={statusClassName}>{statusLabel}</span>
+          <p className="text-xs text-muted-foreground">
+            Aktualizacja: {formatDateTime(item.report.updatedAt)}
+          </p>
+        </div>
+      </td>
+      <td className="px-4 py-3 align-top">
+        <div className="space-y-1">
+          <span className="text-sm font-semibold text-foreground">{balanceLabel}</span>
+          <p className="text-xs text-muted-foreground">Saldo bieżącego miesiąca</p>
+        </div>
+      </td>
+      <td className="px-4 py-3 align-top">
+        <div className="space-y-2 text-xs text-muted-foreground">
+          <p>{emailSummary}</p>
+          <Button
+            size="sm"
+            type="button"
+            variant="ghost"
+            onClick={handleEmailDetailsToggle}
+            aria-expanded={emailDetailsOpen}
+          >
+            {emailDetailsButtonLabel}
+          </Button>
+          {emailDetailsOpen ? (
+            <Suspense fallback={<p className="text-xs text-muted-foreground">Ładowanie szczegółów e-mail…</p>}>
+              <AdminReportEmailDetails attempt={item.lastEmailAttempt ?? null} reportId={item.report.id} />
+            </Suspense>
+          ) : null}
+        </div>
+      </td>
+      <td className="px-4 py-3 align-top">
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            type="button"
+            onClick={handleGenerateClick}
+            disabled={disableGenerate}
+            title={item.permissions?.generateDisabledReason ?? undefined}
+          >
+            Generuj
+          </Button>
+          {!isRealized ? (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleRegenerateClick}
+              disabled={disableRegenerate}
+              title={item.permissions?.regenerateDisabledReason ?? undefined}
+            >
+              Przelicz ponownie
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleResendClick}
+            disabled={disableResend}
+            title={item.permissions?.sendEmailDisabledReason ?? undefined}
+          >
+            Wyślij ponownie
+          </Button>
+          <Button
+            type="button"
+            variant={isRealized ? "outline" : "destructive"}
+            onClick={handleToggleClick}
+            disabled={disableToggle}
+            title={item.permissions?.toggleRealizedDisabledReason ?? undefined}
+          >
+            {isRealized ? "Odblokuj" : "Zaksięguj"}
+          </Button>
+        </div>
+      </td>
+    </tr>
+  );
+});
+
+const AdminReportsContent = memo(function AdminReportsContentComponent(): JSX.Element {
   const { pushToast } = useToast();
 
   const [month, setMonth] = useState<string>(() => resolveInitialMonth());
@@ -183,6 +366,9 @@ function AdminReportsContent(): JSX.Element {
   const [regeneratePendingById, setRegeneratePendingById] = useState<PendingMap>({});
   const [resendPendingById, setResendPendingById] = useState<PendingMap>({});
   const [togglePendingById, setTogglePendingById] = useState<PendingMap>({});
+  const lastLoadedQueryRef = useRef<string | null>(null);
+  const loadingRef = useRef(false);
+  const invalidatePromiseRef = useRef<Promise<void> | null>(null);
 
   const listQuery = useMemo(() => {
     const params = new URLSearchParams();
@@ -213,41 +399,68 @@ function AdminReportsContent(): JSX.Element {
     window.localStorage.setItem(MONTH_STORAGE_KEY, month);
   }, [month]);
 
-  const loadReports = useCallback(async () => {
-    setLoading(true);
-    setFetchError(null);
-    setAccessError(null);
-     setActionAccessError(null);
-
-    try {
-      const path = listQuery ? `/api/v1/reports?${listQuery}` : "/api/v1/reports";
-      const response = await apiGet<AdminReportsResponse>(path);
-      setItems(Array.isArray(response.items) ? response.items : []);
-    } catch (error) {
-      const apiError = toApiError(error);
-
-      if (apiError.code === "forbidden") {
-        setAccessError(apiError.message);
-        setItems([]);
+  const loadReports = useCallback(
+    async ({ force = false }: { force?: boolean } = {}) => {
+      const query = listQuery;
+      if (!force && lastLoadedQueryRef.current === query && !loadingRef.current) {
         return;
       }
 
-      setFetchError(apiError.message);
+      loadingRef.current = true;
+      setLoading(true);
+      setFetchError(null);
+      setAccessError(null);
+      setActionAccessError(null);
 
-      if (shouldToast(apiError.code)) {
-        pushToast({
-          variant: "error",
-          title: "Nie udało się pobrać raportów",
-          description: apiError.message,
-        });
+      try {
+        const path = query ? `/api/v1/reports?${query}` : "/api/v1/reports";
+        const response = await apiGet<AdminReportsResponse>(path);
+        const nextItems = Array.isArray(response.items) ? response.items : [];
+        setItems((previous) => mergeReports(previous, nextItems));
+        lastLoadedQueryRef.current = query;
+      } catch (error) {
+        const apiError = toApiError(error);
+
+        if (apiError.code === "forbidden") {
+          setAccessError(apiError.message);
+          setItems([]);
+          lastLoadedQueryRef.current = query;
+          return;
+        }
+
+        setFetchError(apiError.message);
+
+        if (shouldToast(apiError.code)) {
+          pushToast({
+            variant: "error",
+            title: "Nie udało się pobrać raportów",
+            description: apiError.message,
+          });
+        }
+
+        lastLoadedQueryRef.current = query;
+      } finally {
+        loadingRef.current = false;
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
+    },
+    [listQuery, pushToast]
+  );
+
+  const invalidateReports = useCallback(() => {
+    if (invalidatePromiseRef.current) {
+      return invalidatePromiseRef.current;
     }
-  }, [listQuery, pushToast]);
+
+    const promise = loadReports({ force: true }).finally(() => {
+      invalidatePromiseRef.current = null;
+    });
+    invalidatePromiseRef.current = promise;
+    return promise;
+  }, [loadReports]);
 
   useEffect(() => {
-    loadReports().catch(() => {
+    loadReports({ force: true }).catch(() => {
       // handled inside loadReports
     });
   }, [loadReports]);
@@ -271,10 +484,10 @@ function AdminReportsContent(): JSX.Element {
       });
 
       if (shouldRefetchAfterAction(error)) {
-        await loadReports();
+        await invalidateReports();
       }
     },
-    [loadReports, pushToast]
+    [invalidateReports, pushToast]
   );
 
   const handleGenerate = useCallback(
@@ -320,7 +533,7 @@ function AdminReportsContent(): JSX.Element {
           title: "Raport w kolejce",
           description: "Raport został przekazany do generowania.",
         });
-        await loadReports();
+        await invalidateReports();
       } catch (error) {
         await handleActionFailure(toApiError(error));
       } finally {
@@ -368,7 +581,7 @@ function AdminReportsContent(): JSX.Element {
           title: "Przeliczanie zaplanowane",
           description: "Raport zostanie wygenerowany ponownie.",
         });
-        await loadReports();
+        await invalidateReports();
       } catch (error) {
         await handleActionFailure(toApiError(error));
       } finally {
@@ -416,7 +629,7 @@ function AdminReportsContent(): JSX.Element {
           title: "E-mail wysłany",
           description: "Raport został ponownie wysłany do najemcy.",
         });
-        await loadReports();
+        await invalidateReports();
       } catch (error) {
         await handleActionFailure(toApiError(error));
       } finally {
@@ -482,15 +695,73 @@ function AdminReportsContent(): JSX.Element {
               ? "Raport został oznaczony jako zrealizowany."
               : "Raport został odblokowany do edycji.",
         });
-        await loadReports();
+        await invalidateReports();
       } catch (error) {
         await handleActionFailure(toApiError(error));
       } finally {
         clearPending(setTogglePendingById, reportId);
       }
     },
-    [handleActionFailure, loadReports, pushToast]
+    [handleActionFailure, invalidateReports, pushToast]
   );
+
+  const handleRefreshClick = useCallback(() => {
+    invalidateReports().catch(() => {
+      // handled in invalidateReports
+    });
+  }, [invalidateReports]);
+
+  const renderedRows = useMemo(() => {
+    if (loading) {
+      return [
+        <tr key="loading">
+          <td className="px-4 py-4 text-center text-muted-foreground" colSpan={5}>
+            Ładowanie raportów…
+          </td>
+        </tr>,
+      ];
+    }
+
+    if (items.length === 0) {
+      return [
+        <tr key="empty">
+          <td className="px-4 py-4 text-center text-muted-foreground" colSpan={5}>
+            Brak raportów dla wybranego miesiąca.
+          </td>
+        </tr>,
+      ];
+    }
+
+    return items.map((item) => {
+      const reportId = item.report.id;
+      return (
+        <AdminReportRow
+          key={reportId}
+          item={item}
+          loading={loading}
+          generatePending={Boolean(generatePendingById[reportId])}
+          regeneratePending={Boolean(regeneratePendingById[reportId])}
+          resendPending={Boolean(resendPendingById[reportId])}
+          togglePending={Boolean(togglePendingById[reportId])}
+          onGenerate={handleGenerate}
+          onRegenerate={handleRegenerate}
+          onResend={handleResend}
+          onToggleRealized={handleToggleRealized}
+        />
+      );
+    });
+  }, [
+    generatePendingById,
+    handleGenerate,
+    handleRegenerate,
+    handleResend,
+    handleToggleRealized,
+    items,
+    loading,
+    regeneratePendingById,
+    resendPendingById,
+    togglePendingById,
+  ]);
 
   return (
     <section className="space-y-8">
@@ -528,7 +799,7 @@ function AdminReportsContent(): JSX.Element {
           <Button
             variant="secondary"
             type="button"
-            onClick={() => loadReports().catch(() => {})}
+            onClick={handleRefreshClick}
             disabled={loading}
           >
             Odśwież
@@ -546,146 +817,179 @@ function AdminReportsContent(): JSX.Element {
                 <th className="px-4 py-2 text-right font-medium">Akcje</th>
               </tr>
             </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td className="px-4 py-4 text-center text-muted-foreground" colSpan={5}>
-                    Ładowanie raportów…
-                  </td>
-                </tr>
-              ) : items.length === 0 ? (
-                <tr>
-                  <td className="px-4 py-4 text-center text-muted-foreground" colSpan={5}>
-                    Brak raportów dla wybranego miesiąca.
-                  </td>
-                </tr>
-              ) : (
-                items.map((item) => {
-                  const report = item.report;
-                  const permissions = item.permissions ?? {};
-                  const reportId = report.id;
-                  const generatePending = Boolean(generatePendingById[reportId]);
-                  const regeneratePending = Boolean(regeneratePendingById[reportId]);
-                  const resendPending = Boolean(resendPendingById[reportId]);
-                  const togglePending = Boolean(togglePendingById[reportId]);
-
-                  const canGenerate = permissions.canGenerate !== false && !permissions.generateDisabledReason;
-                  const canRegenerate = permissions.canRegenerate !== false && !permissions.regenerateDisabledReason;
-                  const canSendEmail = permissions.canSendEmail !== false && !permissions.sendEmailDisabledReason;
-                  const canToggle = permissions.canToggleRealized !== false && !permissions.toggleRealizedDisabledReason;
-
-                  const generateDisabled = loading || generatePending || !canGenerate;
-                  const regenerateDisabled =
-                    loading || regeneratePending || !canRegenerate;
-                  const resendDisabled = loading || resendPending || !canSendEmail;
-                  const toggleDisabled = loading || togglePending || !canToggle;
-
-                  const showRegenerate = report.status !== "realized";
-
-                  return (
-                    <tr key={report.id} className="rounded-lg border border-border bg-background/80 align-top shadow-sm">
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col gap-1">
-                          <a
-                            className="font-medium text-foreground underline-offset-2 hover:underline"
-                            href={`/app/reports/${encodeURIComponent(report.id)}`}
-                          >
-                            {formatMonth(report.month)}
-                          </a>
-                          <span className="text-xs text-muted-foreground">Kontrakt: {report.contractId}</span>
-                          <span className="text-xs text-muted-foreground">
-                            Utworzono: {formatDateTime(report.createdAt)} | Aktualizacja: {formatDateTime(report.updatedAt)}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-sm font-medium text-foreground">
-                            {report.status === "realized"
-                              ? "Zaksięgowany"
-                              : report.status === "generated"
-                              ? "Wygenerowany"
-                              : "Do wygenerowania"}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            Kotwica: {report.anchorReadingId ? "tak" : "brak"} | Następna:{" "}
-                            {report.anchorReadingNextId ? "tak" : "brak"}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="space-y-1 text-sm text-foreground">
-                          <span>Saldo: {formatCurrency(report.balanceRaw)}</span>
-                          <span className="text-xs text-muted-foreground">
-                            Koszty: {formatCurrency(report.meterCostColdRaw)} / {formatCurrency(report.meterCostHotRaw)} /{" "}
-                            {formatCurrency(report.meterCostHeatingRaw)}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
-                        {item.lastEmailAttempt ? (
-                          <>
-                            <span>{formatDateTime(item.lastEmailAttempt.attemptedAt)}</span>
-                            <span className="block">
-                              Status: {item.lastEmailAttempt.status}
-                              {item.lastEmailAttempt.errorMessage ? ` – ${item.lastEmailAttempt.errorMessage}` : ""}
-                            </span>
-                          </>
-                        ) : (
-                          "Brak wysyłek"
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap justify-end gap-2">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            disabled={generateDisabled}
-                            onClick={() => handleGenerate(item)}
-                            title={permissions.generateDisabledReason ?? undefined}
-                          >
-                            Generuj
-                          </Button>
-                          {showRegenerate ? (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              disabled={regenerateDisabled}
-                              onClick={() => handleRegenerate(item)}
-                              title={permissions.regenerateDisabledReason ?? undefined}
-                            >
-                              Przelicz
-                            </Button>
-                          ) : null}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            disabled={resendDisabled}
-                            onClick={() => handleResend(item)}
-                            title={permissions.sendEmailDisabledReason ?? undefined}
-                          >
-                            Wyślij e-mail
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={report.status === "realized" ? "destructive" : "default"}
-                            disabled={toggleDisabled}
-                            onClick={() => handleToggleRealized(item)}
-                            title={permissions.toggleRealizedDisabledReason ?? undefined}
-                          >
-                            {report.status === "realized" ? "Odblokuj" : "Zaksięguj"}
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
+            <tbody>{renderedRows}</tbody>
           </table>
         </div>
       </div>
     </section>
+  );
+});
+
+
+function formatStatus(status: ReportDTO["status"]): string {
+  switch (status) {
+    case "realized":
+      return "Zaksięgowany";
+    case "unlocked":
+      return "Odblokowany";
+    default:
+      return "Szkic";
+  }
+}
+
+function formatEmailAttemptSummary(attempt: ReportEmailAttemptDTO | null | undefined): string {
+  if (!attempt) {
+    return "Brak wysyłek e-mail.";
+  }
+
+  const timestamp = formatDateTime(attempt.attemptedAt);
+  const status = formatAttemptStatus(attempt.status);
+  return `${timestamp} • ${status}`;
+}
+
+function formatAttemptStatus(status: ReportEmailAttemptDTO["status"] | null | undefined): string {
+  if (!status) {
+    return "Nieznany status";
+  }
+
+  return ATTEMPT_STATUS_LABELS[status] ?? status;
+}
+
+function canGenerate(item: AdminReportListItem): boolean {
+  const permissions = item.permissions;
+  if (!permissions) {
+    return true;
+  }
+  if (permissions.generateDisabledReason) {
+    return false;
+  }
+  return Boolean(permissions.canGenerate);
+}
+
+function canRegenerate(item: AdminReportListItem): boolean {
+  if (item.report.status === "realized") {
+    return false;
+  }
+  const permissions = item.permissions;
+  if (!permissions) {
+    return true;
+  }
+  if (permissions.regenerateDisabledReason) {
+    return false;
+  }
+  return Boolean(permissions.canRegenerate);
+}
+
+function canSendEmail(item: AdminReportListItem): boolean {
+  const permissions = item.permissions;
+  if (!permissions) {
+    return true;
+  }
+  if (permissions.sendEmailDisabledReason) {
+    return false;
+  }
+  return Boolean(permissions.canSendEmail);
+}
+
+function canToggleRealized(item: AdminReportListItem): boolean {
+  const permissions = item.permissions;
+  if (!permissions) {
+    return true;
+  }
+  if (permissions.toggleRealizedDisabledReason) {
+    return false;
+  }
+  return Boolean(permissions.canToggleRealized);
+}
+
+function mergeReports(previous: AdminReportListItem[], next: AdminReportListItem[]): AdminReportListItem[] {
+  if (previous.length === 0) {
+    return next;
+  }
+
+  const previousById = new Map(previous.map((item) => [item.report.id, item]));
+  let didChange = previous.length !== next.length;
+
+  const merged = next.map((item, index) => {
+    const existing = previousById.get(item.report.id);
+    if (!existing) {
+      didChange = true;
+      return item;
+    }
+
+    if (areReportItemsEqual(existing, item)) {
+      if (existing === previous[index]) {
+        return existing;
+      }
+      return existing;
+    }
+
+    didChange = true;
+    return item;
+  });
+
+  if (!didChange) {
+    return previous;
+  }
+
+  return merged;
+}
+
+function areReportItemsEqual(previous: AdminReportListItem, next: AdminReportListItem): boolean {
+  return (
+    previous.report.updatedAt === next.report.updatedAt &&
+    previous.report.status === next.report.status &&
+    previous.report.balanceRaw === next.report.balanceRaw &&
+    previous.report.month === next.report.month &&
+    previous.report.contractId === next.report.contractId &&
+    previous.report.realizedAt === next.report.realizedAt &&
+    isEmailAttemptEqual(previous.lastEmailAttempt, next.lastEmailAttempt) &&
+    arePermissionsEqual(previous.permissions, next.permissions)
+  );
+}
+
+function isEmailAttemptEqual(
+  previous: ReportEmailAttemptDTO | null | undefined,
+  next: ReportEmailAttemptDTO | null | undefined
+): boolean {
+  if (previous === next) {
+    return true;
+  }
+
+  if (!previous || !next) {
+    return !previous && !next;
+  }
+
+  return (
+    previous.id === next.id &&
+    previous.reportEmailId === next.reportEmailId &&
+    previous.attemptedAt === next.attemptedAt &&
+    previous.status === next.status &&
+    previous.errorMessage === next.errorMessage
+  );
+}
+
+function arePermissionsEqual(
+  previous: AdminReportPermissions | null | undefined,
+  next: AdminReportPermissions | null | undefined
+): boolean {
+  if (previous === next) {
+    return true;
+  }
+
+  if (!previous || !next) {
+    return !previous && !next;
+  }
+
+  return (
+    previous.canGenerate === next.canGenerate &&
+    previous.generateDisabledReason === next.generateDisabledReason &&
+    previous.canRegenerate === next.canRegenerate &&
+    previous.regenerateDisabledReason === next.regenerateDisabledReason &&
+    previous.canSendEmail === next.canSendEmail &&
+    previous.sendEmailDisabledReason === next.sendEmailDisabledReason &&
+    previous.canToggleRealized === next.canToggleRealized &&
+    previous.toggleRealizedDisabledReason === next.toggleRealizedDisabledReason
   );
 }
 

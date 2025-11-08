@@ -187,7 +187,7 @@ function getCurrentMonth(): string {
   return `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, "0")}`;
 }
 
-function AdminReadingsContent(): JSX.Element {
+const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.Element {
   const { pushToast } = useToast();
 
   const initialFilters = useMemo(() => resolveInitialFilters(), []);
@@ -659,6 +659,76 @@ function AdminReadingsContent(): JSX.Element {
     });
   }, [loadReadings]);
 
+  const handleRefreshClick = useCallback(() => {
+    loadReadings({ force: true }).catch(() => {
+      /* obsłużone w loadReadings */
+    });
+  }, [loadReadings]);
+
+  const handleReplacementPendingChange = useCallback(
+    (pending: boolean) => {
+      if (!replacementSource) {
+        return;
+      }
+
+      const { id } = replacementSource;
+      if (pending) {
+        setReplacementPendingById((prev) => ({ ...prev, [id]: true }));
+        return;
+      }
+
+      clearReplacementPending(id);
+    },
+    [clearReplacementPending, replacementSource]
+  );
+
+  const renderedTableRows = useMemo(() => {
+    if (loading) {
+      return [
+        <tr key="loading">
+          <td className="px-4 py-4 text-center text-muted-foreground" colSpan={5}>
+            Ładowanie odczytów…
+          </td>
+        </tr>,
+      ];
+    }
+
+    if (items.length === 0) {
+      return [
+        <tr key="empty">
+          <td className="px-4 py-4 text-center text-muted-foreground" colSpan={5}>
+            Brak odczytów dla wybranych filtrów.
+          </td>
+        </tr>,
+      ];
+    }
+
+    return items.map((item) => (
+      <AdminReadingRow
+        key={item.id}
+        item={item}
+        deletePending={Boolean(deletePendingById[item.id])}
+        replacementPending={Boolean(replacementPendingById[item.id])}
+        updatePending={formPending && formPendingTargetId === item.id}
+        recalcPending={recalcPending}
+        onEdit={handleEdit}
+        onReplace={handleReplacementStart}
+        onDelete={handleDelete}
+      />
+    ));
+  }, [
+    deletePendingById,
+    formPending,
+    formPendingTargetId,
+    handleDelete,
+    handleEdit,
+    handleReplacementStart,
+    items,
+    loading,
+    recalcPending,
+    replacementPendingById,
+  ]);
+
   return (
     <section aria-busy={recalcPending} className="space-y-8">
       <div className="rounded-lg border bg-card p-6 shadow-sm">
@@ -843,11 +913,7 @@ function AdminReadingsContent(): JSX.Element {
             <Button
               variant="secondary"
               type="button"
-              onClick={() =>
-                loadReadings({ force: true }).catch(() => {
-                  /* obsłużone w loadReadings */
-                })
-              }
+              onClick={handleRefreshClick}
               disabled={loading || !filters.propertyId}
             >
               Odśwież
@@ -866,33 +932,7 @@ function AdminReadingsContent(): JSX.Element {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
-                  <tr>
-                    <td className="px-4 py-4 text-center text-muted-foreground" colSpan={5}>
-                      Ładowanie odczytów…
-                    </td>
-                  </tr>
-                ) : items.length === 0 ? (
-                  <tr>
-                    <td className="px-4 py-4 text-center text-muted-foreground" colSpan={5}>
-                      Brak odczytów dla wybranych filtrów.
-                    </td>
-                  </tr>
-                ) : (
-                  items.map((item) => (
-                    <AdminReadingRow
-                      key={item.id}
-                      item={item}
-                      deletePending={Boolean(deletePendingById[item.id])}
-                      replacementPending={Boolean(replacementPendingById[item.id])}
-                      updatePending={formPending && formPendingTargetId === item.id}
-                      recalcPending={recalcPending}
-                      onEdit={handleEdit}
-                      onReplace={handleReplacementStart}
-                      onDelete={handleDelete}
-                    />
-                  ))
-                )}
+                {renderedTableRows}
               </tbody>
             </table>
           </div>
@@ -961,21 +1001,14 @@ function AdminReadingsContent(): JSX.Element {
               source={replacementSource}
               onClose={closeReplacementModal}
               onSuccess={handleReplacementSuccess}
-              onPendingChange={(pending) => {
-                const id = replacementSource.id;
-                if (pending) {
-                  setReplacementPendingById((prev) => ({ ...prev, [id]: true }));
-                } else {
-                  clearReplacementPending(id);
-                }
-              }}
+              onPendingChange={handleReplacementPendingChange}
             />
           </div>
         </div>
       ) : null}
     </section>
   );
-}
+});
 
 interface AdminReadingRowProps {
   item: ReadingDTO;
