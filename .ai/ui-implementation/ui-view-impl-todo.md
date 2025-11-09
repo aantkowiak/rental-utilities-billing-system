@@ -29,8 +29,8 @@
 - [x] `ui-view-impl-27-AdminReadings.md`
 - [x] `ui-view-impl-28-AdminMonthlyConditions.md`
 - [x] `ui-view-impl-29-AdminReportsList.md`
-- [ ] `ui-view-impl-30-AdminReportDetail.md`
-- [ ] `ui-view-impl-31-AdminProperties.md`
+- [x] `ui-view-impl-30-AdminReportDetail.md`
+- [x] `ui-view-impl-31-AdminProperties.md`
 - [ ] `ui-view-impl-32-AdminContracts.md`
 - [ ] `ui-view-impl-33-AdminProfile.md`
 
