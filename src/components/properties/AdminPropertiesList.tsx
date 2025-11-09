@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
@@ -63,6 +63,55 @@ function buildDefaultFormState(): FormState {
   };
 }
 
+interface PropertyRowProps {
+  property: PropertyDTO;
+  deletePending: boolean;
+  actionsLocked: boolean;
+  onEdit: (property: PropertyDTO) => void;
+  onDelete: (property: PropertyDTO) => Promise<void>;
+}
+
+const PropertyRow = memo(function PropertyRow({
+  property,
+  deletePending,
+  actionsLocked,
+  onEdit,
+  onDelete,
+}: PropertyRowProps): JSX.Element {
+  return (
+    <tr className="border-t border-border bg-background/80">
+      <td className="px-4 py-3">
+        <div className="flex flex-col">
+          <span className="font-medium text-foreground">{property.label}</span>
+          <span className="text-xs text-muted-foreground">{property.id}</span>
+        </div>
+      </td>
+      <td className="px-4 py-3">{formatStartMonth(property.startMonth)}</td>
+      <td className="px-4 py-3 text-sm text-muted-foreground">{formatStartMonth(property.createdAt?.slice(0, 7) ?? "")}</td>
+      <td className="px-4 py-3 text-sm text-muted-foreground">{formatStartMonth(property.updatedAt?.slice(0, 7) ?? "")}</td>
+      <td className="px-4 py-3">
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="secondary" disabled={actionsLocked} onClick={() => onEdit(property)}>
+            Edytuj
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={deletePending || actionsLocked}
+            onClick={() => {
+              onDelete(property).catch(() => {
+                /* obsłużone w onDelete */
+              });
+            }}
+          >
+            Usuń
+          </Button>
+        </div>
+      </td>
+    </tr>
+  );
+});
+
 function AdminPropertiesContent(): JSX.Element {
   const { pushToast } = useToast();
 
@@ -77,6 +126,7 @@ function AdminPropertiesContent(): JSX.Element {
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FormField, string>>>({});
   const [formState, setFormState] = useState<FormState>(() => buildDefaultFormState());
   const [editing, setEditing] = useState<PropertyDTO | null>(null);
+  const reloadPromiseRef = useRef<Promise<void> | null>(null);
 
   const sortedItems = useMemo(
     () =>
@@ -130,6 +180,19 @@ function AdminPropertiesContent(): JSX.Element {
       setLoading(false);
     }
   }, [pushToast]);
+
+  const requestReload = useCallback(() => {
+    if (reloadPromiseRef.current) {
+      return reloadPromiseRef.current;
+    }
+
+    const loadPromise = loadProperties();
+    reloadPromiseRef.current = loadPromise.finally(() => {
+      reloadPromiseRef.current = null;
+    });
+
+    return reloadPromiseRef.current;
+  }, [loadProperties]);
 
   useEffect(() => {
     loadProperties().catch(() => {
@@ -220,7 +283,7 @@ function AdminPropertiesContent(): JSX.Element {
           });
         }
 
-        await loadProperties();
+        await requestReload();
         resetForm();
       } catch (error) {
         const apiError = toApiError(error);
@@ -257,7 +320,7 @@ function AdminPropertiesContent(): JSX.Element {
             title: "Nieruchomość już nie istnieje",
             description: apiError.message,
           });
-          await loadProperties();
+          await requestReload();
           resetForm();
           return;
         }
@@ -272,7 +335,7 @@ function AdminPropertiesContent(): JSX.Element {
         setFormPending(false);
       }
     },
-    [actionsLocked, editing, formPending, formState, loadProperties, pushToast, resetForm, validateForm]
+    [actionsLocked, editing, formPending, formState, pushToast, requestReload, resetForm, validateForm]
   );
 
   const handleEdit = useCallback((property: PropertyDTO) => {
@@ -323,7 +386,7 @@ function AdminPropertiesContent(): JSX.Element {
           title: "Usunięto nieruchomość",
           description: "Rekord został usunięty.",
         });
-        await loadProperties();
+        await requestReload();
         if (editing?.id === property.id) {
           resetForm();
         }
@@ -341,7 +404,7 @@ function AdminPropertiesContent(): JSX.Element {
           });
 
           if (isNotFound || apiError.code === "conflict" || apiError.status === 409) {
-            await loadProperties();
+            await requestReload();
           }
         }
       } finally {
@@ -355,7 +418,7 @@ function AdminPropertiesContent(): JSX.Element {
         });
       }
     },
-    [editing?.id, loadProperties, pushToast, resetForm]
+    [editing?.id, pushToast, requestReload, resetForm]
   );
 
   return (
@@ -474,45 +537,14 @@ function AdminPropertiesContent(): JSX.Element {
                 </tr>
               ) : (
                 tableItems.map(({ property, deletePending }) => (
-                  <tr key={property.id} className="border-t border-border bg-background/80">
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col">
-                        <span className="font-medium text-foreground">{property.label}</span>
-                        <span className="text-xs text-muted-foreground">{property.id}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">{formatStartMonth(property.startMonth)}</td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">
-                      {formatStartMonth(property.createdAt?.slice(0, 7) ?? "")}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">
-                      {formatStartMonth(property.updatedAt?.slice(0, 7) ?? "")}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          disabled={actionsLocked}
-                          onClick={() => handleEdit(property)}
-                        >
-                          Edytuj
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          disabled={deletePending || actionsLocked}
-                          onClick={() => {
-                            handleDelete(property).catch(() => {
-                              /* obsłużone w handleDelete */
-                            });
-                          }}
-                        >
-                          Usuń
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
+                  <PropertyRow
+                    key={property.id}
+                    property={property}
+                    deletePending={deletePending}
+                    actionsLocked={actionsLocked}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                  />
                 ))
               )}
             </tbody>

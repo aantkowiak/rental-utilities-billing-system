@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
@@ -159,6 +159,72 @@ function buildInputClasses(error?: string): string {
   ].join(" ");
 }
 
+interface ContractRowProps {
+  contract: ContractDTO;
+  deletePending: boolean;
+  actionsLocked: boolean;
+  onEdit: (contract: ContractDTO) => void;
+  onDelete: (contract: ContractDTO) => Promise<void>;
+}
+
+const ContractRow = memo(function ContractRow({
+  contract,
+  deletePending,
+  actionsLocked,
+  onEdit,
+  onDelete,
+}: ContractRowProps): JSX.Element {
+  const active = isActive(contract.period);
+
+  return (
+    <tr className="border-t border-border bg-background/80">
+      <td className="px-4 py-3">
+        <div className="space-y-1">
+          <span className="font-medium text-foreground">{contract.id}</span>
+          <span className="text-xs text-muted-foreground">Nieruchomość: {contract.propertyId}</span>
+          <span className="text-xs text-muted-foreground">Najemca: {contract.tenantUserId}</span>
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex flex-col text-sm">
+          <span>Od: {formatDate(contract.period.from)}</span>
+          <span>Do: {formatDate(contract.period.to)}</span>
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <span
+          className={[
+            "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+            active ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700" : "border-muted bg-muted/30 text-muted-foreground",
+          ].join(" ")}
+        >
+          {active ? "Aktywna" : "Nieaktywna"}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-sm text-muted-foreground">{formatDate(contract.createdAt)}</td>
+      <td className="px-4 py-3">
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="secondary" disabled={actionsLocked} onClick={() => onEdit(contract)}>
+            Edytuj
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={deletePending || actionsLocked}
+            onClick={() => {
+              onDelete(contract).catch(() => {
+                /* obsłużone w onDelete */
+              });
+            }}
+          >
+            Usuń
+          </Button>
+        </div>
+      </td>
+    </tr>
+  );
+});
+
 function AdminContractsContent(): JSX.Element {
   const { pushToast } = useToast();
 
@@ -174,6 +240,7 @@ function AdminContractsContent(): JSX.Element {
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FormField, string>>>({});
   const [formState, setFormState] = useState<FormState>(() => buildDefaultFormState());
   const [editing, setEditing] = useState<ContractDTO | null>(null);
+  const reloadPromiseRef = useRef<Promise<void> | null>(null);
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
@@ -286,6 +353,19 @@ function AdminContractsContent(): JSX.Element {
       setLoading(false);
     }
   }, [pushToast, queryString]);
+
+  const requestReload = useCallback(() => {
+    if (reloadPromiseRef.current) {
+      return reloadPromiseRef.current;
+    }
+
+    const loadPromise = loadContracts();
+    reloadPromiseRef.current = loadPromise.finally(() => {
+      reloadPromiseRef.current = null;
+    });
+
+    return reloadPromiseRef.current;
+  }, [loadContracts]);
 
   useEffect(() => {
     loadContracts().catch(() => {
@@ -451,7 +531,7 @@ function AdminContractsContent(): JSX.Element {
           });
         }
 
-        await loadContracts();
+        await requestReload();
         resetForm();
       } catch (error) {
         const apiError = toApiError(error);
@@ -490,7 +570,7 @@ function AdminContractsContent(): JSX.Element {
             title: "Umowa już nie istnieje",
             description: apiError.message,
           });
-          await loadContracts();
+          await requestReload();
           resetForm();
           return;
         }
@@ -501,18 +581,7 @@ function AdminContractsContent(): JSX.Element {
         setFormPending(false);
       }
     },
-    [
-      actionsLocked,
-      editing,
-      formPending,
-      formState,
-      handleMutationFailure,
-      items,
-      loadContracts,
-      pushToast,
-      resetForm,
-      validateForm,
-    ]
+    [actionsLocked, editing, formPending, formState, handleMutationFailure, items, pushToast, requestReload, resetForm, validateForm]
   );
 
   const handleEdit = useCallback((contract: ContractDTO) => {
@@ -568,7 +637,7 @@ function AdminContractsContent(): JSX.Element {
           title: "Usunięto umowę",
           description: "Umowa została usunięta.",
         });
-        await loadContracts();
+        await requestReload();
         if (editing?.id === contract.id) {
           resetForm();
         }
@@ -581,7 +650,7 @@ function AdminContractsContent(): JSX.Element {
             title: "Umowa już nie istnieje",
             description: apiError.message,
           });
-          await loadContracts();
+          await requestReload();
         } else {
           await handleMutationFailure(apiError, "delete");
         }
@@ -596,7 +665,7 @@ function AdminContractsContent(): JSX.Element {
         });
       }
     },
-    [actionsLocked, editing?.id, handleMutationFailure, loadContracts, pushToast, resetForm]
+    [actionsLocked, editing?.id, handleMutationFailure, pushToast, requestReload, resetForm]
   );
 
   return (

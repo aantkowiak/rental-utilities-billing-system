@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
@@ -75,8 +75,6 @@ function shouldRefetchAfterAction(error: ApiError): boolean {
 }
 
 function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Element {
-  const { pushToast } = useToast();
-
   const [report, setReport] = useState<ReportDTO | null>(null);
   const [lineItems, setLineItems] = useState<ReportLineItem[]>([]);
   const [lastEmailAttempt, setLastEmailAttempt] = useState<ReportEmailAttemptDTO | null>(null);
@@ -85,9 +83,6 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [actionAccessError, setActionAccessError] = useState<string | null>(null);
-  const [regeneratePending, setRegeneratePending] = useState(false);
-  const [resendPending, setResendPending] = useState(false);
-  const [togglePending, setTogglePending] = useState(false);
 
   const loadDetail = useCallback(async () => {
     if (!reportId) {
@@ -227,115 +222,6 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
     ];
   }, [report]);
 
-  const handleActionFailure = useCallback(
-    async (error: ApiError, action: ActionKind) => {
-      if (isForbiddenError(error)) {
-        setActionAccessError(error.message);
-        return;
-      }
-
-      const actionTitles: Record<ActionKind, string> = {
-        regenerate: "Nie udało się przeliczyć raportu",
-        resend: "Nie udało się wysłać e-maila",
-        toggle: "Nie udało się zmienić statusu raportu",
-      };
-
-      pushToast({
-        variant: "error",
-        title: actionTitles[action],
-        description: error.message,
-      });
-
-      if (shouldRefetchAfterAction(error)) {
-        await loadDetail();
-      }
-    },
-    [loadDetail, pushToast]
-  );
-
-  const handleRegenerate = useCallback(async () => {
-    if (!report || regeneratePending || !canRegenerate) {
-      return;
-    }
-
-    setRegeneratePending(true);
-    setActionAccessError(null);
-
-    try {
-      await apiPost<void>(`/api/v1/reports/${encodeURIComponent(report.id)}/regenerate`);
-      pushToast({
-        variant: "success",
-        title: "Przeliczanie zaplanowane",
-        description: "Raport zostanie wygenerowany ponownie.",
-      });
-      await loadDetail();
-    } catch (error) {
-      await handleActionFailure(toApiError(error), "regenerate");
-    } finally {
-      setRegeneratePending(false);
-    }
-  }, [canRegenerate, handleActionFailure, loadDetail, pushToast, regeneratePending, report]);
-
-  const handleResend = useCallback(async () => {
-    if (!report || resendPending || !canSendEmail) {
-      return;
-    }
-
-    setResendPending(true);
-    setActionAccessError(null);
-
-    try {
-      await apiPost<void>(`/api/v1/reports/${encodeURIComponent(report.id)}/send-email`);
-      pushToast({
-        variant: "success",
-        title: "E-mail wysłany",
-        description: "Raport został ponownie wysłany do najemcy.",
-      });
-      await loadDetail();
-    } catch (error) {
-      await handleActionFailure(toApiError(error), "resend");
-    } finally {
-      setResendPending(false);
-    }
-  }, [canSendEmail, handleActionFailure, loadDetail, pushToast, report, resendPending]);
-
-  const handleToggleRealized = useCallback(async () => {
-    if (!report || togglePending || !canToggleRealized) {
-      return;
-    }
-
-    const nextStatus: UpdateReportStatusCmd["status"] = report.status === "realized" ? "unlocked" : "realized";
-
-    if (nextStatus === "unlocked") {
-      const confirmed = window.confirm(
-        "Czy na pewno chcesz odblokować raport? Zmiany w szczegółach staną się ponownie widoczne dla najemcy."
-      );
-      if (!confirmed) {
-        return;
-      }
-    }
-
-    setTogglePending(true);
-    setActionAccessError(null);
-
-    try {
-      await apiPost<void>(`/api/v1/reports/${encodeURIComponent(report.id)}`, { status: nextStatus });
-      pushToast({
-        variant: "success",
-        title: nextStatus === "realized" ? "Raport zaksięgowany" : "Raport odblokowany",
-        description:
-          nextStatus === "realized"
-            ? "Raport został oznaczony jako zrealizowany."
-            : "Raport został odblokowany do edycji.",
-      });
-      await loadDetail();
-    } catch (error) {
-      await handleActionFailure(toApiError(error), "toggle");
-    } finally {
-      setTogglePending(false);
-    }
-  }, [canToggleRealized, handleActionFailure, loadDetail, pushToast, report, togglePending]);
-
   return (
     <section className="space-y-6">
       {accessError ? <ErrorAlert error={accessError} /> : null}
@@ -360,49 +246,18 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
                 Kontrakt: <span className="font-medium text-foreground">{report.contractId}</span>
               </p>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              {isRealized ? null : (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={regeneratePending || !canRegenerate}
-                  onClick={() => {
-                    handleRegenerate().catch(() => {
-                      /* obsłużone w handleRegenerate */
-                    });
-                  }}
-                  title={regenerateDisabledReason ?? undefined}
-                >
-                  Przelicz
-                </Button>
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                disabled={resendPending || !canSendEmail}
-                onClick={() => {
-                  handleResend().catch(() => {
-                    /* obsłużone w handleResend */
-                  });
-                }}
-                title={sendEmailDisabledReason ?? undefined}
-              >
-                Wyślij e-mail
-              </Button>
-              <Button
-                type="button"
-                variant={isRealized ? "destructive" : "default"}
-                disabled={togglePending || !canToggleRealized}
-                onClick={() => {
-                  handleToggleRealized().catch(() => {
-                    /* obsłużone w handleToggleRealized */
-                  });
-                }}
-                title={toggleDisabledReason ?? undefined}
-              >
-                {isRealized ? "Odblokuj" : "Zaksięguj"}
-              </Button>
-            </div>
+            <ReportActions
+              canRegenerate={canRegenerate}
+              canSendEmail={canSendEmail}
+              canToggleRealized={canToggleRealized}
+              isRealized={isRealized}
+              onActionAccessError={setActionAccessError}
+              onRefetch={loadDetail}
+              regenerateDisabledReason={regenerateDisabledReason}
+              report={report}
+              sendEmailDisabledReason={sendEmailDisabledReason}
+              toggleDisabledReason={toggleDisabledReason}
+            />
           </header>
 
           <section className="rounded-lg border bg-card p-6 shadow-sm">
@@ -489,6 +344,215 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
     </section>
   );
 }
+
+interface ReportActionsProps {
+  report: ReportDTO;
+  canRegenerate: boolean;
+  regenerateDisabledReason?: string | null;
+  canSendEmail: boolean;
+  sendEmailDisabledReason?: string | null;
+  canToggleRealized: boolean;
+  toggleDisabledReason?: string | null;
+  isRealized: boolean;
+  onRefetch: () => Promise<void>;
+  onActionAccessError: (message: string | null) => void;
+}
+
+const ReportActions = memo(function ReportActions({
+  report,
+  canRegenerate,
+  regenerateDisabledReason,
+  canSendEmail,
+  sendEmailDisabledReason,
+  canToggleRealized,
+  toggleDisabledReason,
+  isRealized,
+  onRefetch,
+  onActionAccessError,
+}: ReportActionsProps): JSX.Element {
+  const { pushToast } = useToast();
+  const [pending, setPending] = useState<Record<ActionKind, boolean>>({
+    regenerate: false,
+    resend: false,
+    toggle: false,
+  });
+
+  const setPendingFlag = useCallback((kind: ActionKind, value: boolean) => {
+    setPending((current) => {
+      if (current[kind] === value) {
+        return current;
+      }
+      return { ...current, [kind]: value };
+    });
+  }, []);
+
+  const handleActionFailure = useCallback(
+    async (error: ApiError, action: ActionKind) => {
+      if (isForbiddenError(error)) {
+        onActionAccessError(error.message);
+        return;
+      }
+
+      onActionAccessError(null);
+
+      const actionTitles: Record<ActionKind, string> = {
+        regenerate: "Nie udało się przeliczyć raportu",
+        resend: "Nie udało się wysłać e-maila",
+        toggle: "Nie udało się zmienić statusu raportu",
+      };
+
+      pushToast({
+        variant: "error",
+        title: actionTitles[action],
+        description: error.message,
+      });
+
+      if (shouldRefetchAfterAction(error)) {
+        await onRefetch();
+      }
+    },
+    [onActionAccessError, onRefetch, pushToast]
+  );
+
+  const handleRegenerate = useCallback(async () => {
+    if (!canRegenerate || pending.regenerate) {
+      return;
+    }
+
+    setPendingFlag("regenerate", true);
+    onActionAccessError(null);
+
+    try {
+      await apiPost<void>(`/api/v1/reports/${encodeURIComponent(report.id)}/regenerate`);
+      pushToast({
+        variant: "success",
+        title: "Przeliczanie zaplanowane",
+        description: "Raport zostanie wygenerowany ponownie.",
+      });
+      await onRefetch();
+    } catch (error) {
+      await handleActionFailure(toApiError(error), "regenerate");
+    } finally {
+      setPendingFlag("regenerate", false);
+    }
+  }, [canRegenerate, handleActionFailure, onActionAccessError, onRefetch, pending.regenerate, pushToast, report.id, setPendingFlag]);
+
+  const handleResend = useCallback(async () => {
+    if (!canSendEmail || pending.resend) {
+      return;
+    }
+
+    setPendingFlag("resend", true);
+    onActionAccessError(null);
+
+    try {
+      await apiPost<void>(`/api/v1/reports/${encodeURIComponent(report.id)}/send-email`);
+      pushToast({
+        variant: "success",
+        title: "E-mail wysłany",
+        description: "Raport został ponownie wysłany do najemcy.",
+      });
+      await onRefetch();
+    } catch (error) {
+      await handleActionFailure(toApiError(error), "resend");
+    } finally {
+      setPendingFlag("resend", false);
+    }
+  }, [canSendEmail, handleActionFailure, onActionAccessError, onRefetch, pending.resend, pushToast, report.id, setPendingFlag]);
+
+  const handleToggleRealized = useCallback(async () => {
+    if (!canToggleRealized || pending.toggle) {
+      return;
+    }
+
+    const nextStatus: UpdateReportStatusCmd["status"] = report.status === "realized" ? "unlocked" : "realized";
+
+    if (nextStatus === "unlocked") {
+      const confirmed = window.confirm(
+        "Czy na pewno chcesz odblokować raport? Zmiany w szczegółach staną się ponownie widoczne dla najemcy."
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    setPendingFlag("toggle", true);
+    onActionAccessError(null);
+
+    try {
+      await apiPost<void>(`/api/v1/reports/${encodeURIComponent(report.id)}`, { status: nextStatus });
+      pushToast({
+        variant: "success",
+        title: nextStatus === "realized" ? "Raport zaksięgowany" : "Raport odblokowany",
+        description:
+          nextStatus === "realized"
+            ? "Raport został oznaczony jako zrealizowany."
+            : "Raport został odblokowany do edycji.",
+      });
+      await onRefetch();
+    } catch (error) {
+      await handleActionFailure(toApiError(error), "toggle");
+    } finally {
+      setPendingFlag("toggle", false);
+    }
+  }, [
+    canToggleRealized,
+    handleActionFailure,
+    onActionAccessError,
+    onRefetch,
+    pending.toggle,
+    pushToast,
+    report.id,
+    report.status,
+    setPendingFlag,
+  ]);
+
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      {isRealized ? null : (
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={pending.regenerate || !canRegenerate}
+          onClick={() => {
+            handleRegenerate().catch(() => {
+              /* obsłużone w handleRegenerate */
+            });
+          }}
+          title={regenerateDisabledReason ?? undefined}
+        >
+          Przelicz
+        </Button>
+      )}
+      <Button
+        type="button"
+        variant="outline"
+        disabled={pending.resend || !canSendEmail}
+        onClick={() => {
+          handleResend().catch(() => {
+            /* obsłużone w handleResend */
+          });
+        }}
+        title={sendEmailDisabledReason ?? undefined}
+      >
+        Wyślij e-mail
+      </Button>
+      <Button
+        type="button"
+        variant={isRealized ? "destructive" : "default"}
+        disabled={pending.toggle || !canToggleRealized}
+        onClick={() => {
+          handleToggleRealized().catch(() => {
+            /* obsłużone w handleToggleRealized */
+          });
+        }}
+        title={toggleDisabledReason ?? undefined}
+      >
+        {isRealized ? "Odblokuj" : "Zaksięguj"}
+      </Button>
+    </div>
+  );
+});
 
 export function AdminReportDetail(props: AdminReportDetailProps): JSX.Element {
   return (

@@ -31,6 +31,6 @@
 - [x] `ui-view-impl-29-AdminReportsList.md`
 - [x] `ui-view-impl-30-AdminReportDetail.md`
 - [x] `ui-view-impl-31-AdminProperties.md`
-- [ ] `ui-view-impl-32-AdminContracts.md`
+- [x] `ui-view-impl-32-AdminContracts.md`
 - [ ] `ui-view-impl-33-AdminProfile.md`
 
