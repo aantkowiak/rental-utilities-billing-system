@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
 import { Button } from "@/components/ui/button";
-import { apiPatch, type ApiError } from "@/lib/client/http";
+import { apiGet, apiPatch, type ApiError } from "@/lib/client/http";
 import type { ProfileDTO, UpdateMeCmd } from "@/types";
 
 interface ProfileResponse {
@@ -49,12 +49,51 @@ function ProfileFormContent(): JSX.Element {
   const [formError, setFormError] = useState<ApiError | string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const loadPromiseRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     if (fieldError) {
       inputRef.current?.focus();
     }
   }, [fieldError]);
+
+  const loadProfile = useCallback(async () => {
+    if (loadPromiseRef.current) {
+      return loadPromiseRef.current;
+    }
+
+    const promise = (async () => {
+      try {
+        const response = await apiGet<ProfileResponse>("/api/v1/me");
+        setDisplayName(response.profile.displayName ?? "");
+        setFormError(null);
+      } catch (error) {
+        const apiError = toApiError(error);
+        if (apiError.code === "profile_not_found" || apiError.status === 404) {
+          setFormError(apiError.message || "Nie znaleziono profilu użytkownika.");
+          setDisplayName("");
+          return;
+        }
+        pushToast({
+          variant: "error",
+          title: "Nie udało się pobrać profilu",
+          description: apiError.message,
+        });
+        setFormError(apiError);
+      } finally {
+        loadPromiseRef.current = null;
+      }
+    })();
+
+    loadPromiseRef.current = promise;
+    return promise;
+  }, [pushToast]);
+
+  useEffect(() => {
+    loadProfile().catch(() => {
+      /* błąd obsłużony w loadProfile */
+    });
+  }, [loadProfile]);
 
   const handleDisplayNameChange = useCallback((value: string) => {
     setDisplayName(value);
@@ -122,7 +161,7 @@ function ProfileFormContent(): JSX.Element {
         setPending(false);
       }
     },
-    [displayName, pending, pushToast]
+    [displayName, loadProfile, pending, pushToast]
   );
 
   return (
