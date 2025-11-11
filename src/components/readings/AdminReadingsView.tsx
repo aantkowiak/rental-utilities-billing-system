@@ -11,11 +11,9 @@ import type { ReadingListResponse, ReadingResponse } from "@/types/readings";
 import type { PropertyListResponse } from "@/lib/services/PropertyService";
 
 const PROPERTY_STORAGE_KEY = "admin-readings:propertyId";
-const MONTH_STORAGE_KEY = "admin-readings:month";
 
 interface FiltersState {
   propertyId: string;
-  month: string;
 }
 
 interface FormState {
@@ -43,26 +41,19 @@ const DATE_FORMATTER = new Intl.DateTimeFormat("pl-PL", {
 });
 
 function resolveInitialFilters(): FiltersState {
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, "0")}`;
-
   if (typeof window === "undefined") {
     return {
       propertyId: "",
-      month: currentMonth,
     };
   }
 
   const params = new URLSearchParams(window.location.search);
   const paramProperty = params.get("propertyId") ?? "";
-  const paramMonth = params.get("month") ?? "";
 
   const storedProperty = window.localStorage.getItem(PROPERTY_STORAGE_KEY) ?? "";
-  const storedMonth = window.localStorage.getItem(MONTH_STORAGE_KEY);
 
   return {
     propertyId: paramProperty || storedProperty,
-    month: normalizeMonth(paramMonth || storedMonth, currentMonth),
   };
 }
 
@@ -102,33 +93,6 @@ function fromLocalDateTimeInput(value: string): string | null {
   return date.toISOString();
 }
 
-function computeMonthRange(month: string): { from: string; to: string } | null {
-  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
-    return null;
-  }
-
-  const [yearRaw, monthRaw] = month.split("-");
-  const year = Number(yearRaw);
-  const monthIndex = Number(monthRaw) - 1;
-
-  if (Number.isNaN(year) || Number.isNaN(monthIndex)) {
-    return null;
-  }
-
-  const from = new Date(Date.UTC(year, monthIndex, 1, 0, 0, 0, 0));
-  const to = new Date(Date.UTC(year, monthIndex + 1, 0, 23, 59, 59, 999));
-  return {
-    from: from.toISOString(),
-    to: to.toISOString(),
-  };
-}
-
-function normalizeMonth(value: string | null | undefined, fallback: string): string {
-  if (value && /^\d{4}-\d{2}$/.test(value)) {
-    return value;
-  }
-  return fallback;
-}
 
 function toApiError(error: unknown): ApiError {
   if (error && typeof error === "object" && "code" in error && "message" in error) {
@@ -183,9 +147,14 @@ function formatDate(value: string): string {
   return DATE_FORMATTER.format(date);
 }
 
-function getCurrentMonth(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, "0")}`;
+function formatMonth(dateString: string): string {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
 }
 
 const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.Element {
@@ -234,17 +203,16 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
     debounceTimeoutRef.current = setTimeout(() => {
       const nextFilters: FiltersState = {
         propertyId: filterInputs.propertyId.trim(),
-        month: normalizeMonth(filterInputs.month, getCurrentMonth()),
       };
 
       setFilters((prev) => {
-        if (prev.propertyId === nextFilters.propertyId && prev.month === nextFilters.month) {
+        if (prev.propertyId === nextFilters.propertyId) {
           return prev;
         }
         return nextFilters;
       });
 
-      if (filterInputs.propertyId !== nextFilters.propertyId || filterInputs.month !== nextFilters.month) {
+      if (filterInputs.propertyId !== nextFilters.propertyId) {
         setFilterInputs(nextFilters);
       }
     }, 300);
@@ -256,8 +224,6 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
       }
     };
   }, [filterInputs]);
-
-  const monthRange = useMemo(() => computeMonthRange(filters.month), [filters.month]);
 
   const clearReplacementPending = useCallback((id: string) => {
     setReplacementPendingById((prev) => {
@@ -282,14 +248,8 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
       url.searchParams.delete("propertyId");
     }
 
-    if (filters.month) {
-      url.searchParams.set("month", filters.month);
-    } else {
-      url.searchParams.delete("month");
-    }
-
     window.history.replaceState(null, "", url.toString());
-  }, [filters.propertyId, filters.month]);
+  }, [filters.propertyId]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -297,8 +257,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
     }
 
     window.localStorage.setItem(PROPERTY_STORAGE_KEY, filters.propertyId);
-    window.localStorage.setItem(MONTH_STORAGE_KEY, normalizeMonth(filters.month, getCurrentMonth()));
-  }, [filters.propertyId, filters.month]);
+  }, [filters.propertyId]);
 
   const loadProperties = useCallback(async () => {
     try {
@@ -318,7 +277,6 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
     async ({ force = false }: { force?: boolean } = {}) => {
       const currentFilters: FiltersState = {
         propertyId: filters.propertyId,
-        month: filters.month,
       };
 
       if (!filters.propertyId) {
@@ -332,7 +290,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
 
       if (!force) {
         const last = lastLoadedFiltersRef.current;
-        if (last && last.propertyId === currentFilters.propertyId && last.month === currentFilters.month) {
+        if (last && last.propertyId === currentFilters.propertyId) {
           return;
         }
       }
@@ -345,10 +303,6 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
       try {
         const search = new URLSearchParams();
         search.set("propertyId", filters.propertyId);
-        if (monthRange) {
-          search.set("from", monthRange.from);
-          search.set("to", monthRange.to);
-        }
 
         const response = await apiGet<ReadingListResponse>(`/api/v1/readings?${search.toString()}`);
         const normalizedItems = Array.isArray(response.items) ? response.items : [];
@@ -372,7 +326,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
         lastLoadedFiltersRef.current = currentFilters;
       }
     },
-    [filters.propertyId, filters.month, monthRange, pushToast]
+    [filters.propertyId, pushToast]
   );
 
   useEffect(() => {
@@ -399,14 +353,6 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
     setFilterInputs((prev) => ({
       ...prev,
       propertyId: value,
-    }));
-  }, []);
-
-  const handleFiltersMonthChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    const value = event.target.value;
-    setFilterInputs((prev) => ({
-      ...prev,
-      month: value,
     }));
   }, []);
 
@@ -696,7 +642,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
     if (loading) {
       return [
         <tr key="loading">
-          <td className="px-4 py-4 text-center text-muted-foreground" colSpan={5}>
+          <td className="px-4 py-4 text-center text-muted-foreground" colSpan={6}>
             Ładowanie odczytów…
           </td>
         </tr>,
@@ -706,8 +652,8 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
     if (items.length === 0) {
       return [
         <tr key="empty">
-          <td className="px-4 py-4 text-center text-muted-foreground" colSpan={5}>
-            Brak odczytów dla wybranych filtrów.
+          <td className="px-4 py-4 text-center text-muted-foreground" colSpan={6}>
+            Brak odczytów dla wybranej nieruchomości.
           </td>
         </tr>,
       ];
@@ -743,7 +689,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
     <section aria-busy={recalcPending} className="space-y-8">
       <div className="rounded-lg border bg-card p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-foreground">Filtry</h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <div className="mt-4">
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground" htmlFor="admin-readings-property">
               Nieruchomość
@@ -762,19 +708,6 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
               ))}
             </select>
             <p className="text-xs text-muted-foreground">Wymagana do pobrania odczytów oraz zapisów.</p>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground" htmlFor="admin-readings-month">
-              Miesiąc rozliczeniowy
-            </label>
-            <input
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-              id="admin-readings-month"
-              type="month"
-              value={filterInputs.month}
-              onChange={handleFiltersMonthChange}
-            />
-            <p className="text-xs text-muted-foreground">Zapisywane w adresie URL i w pamięci przeglądarki.</p>
           </div>
         </div>
       </div>
@@ -917,10 +850,10 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
               <h2 className="text-lg font-semibold text-foreground">Odczyty</h2>
               <p className="text-sm text-muted-foreground">
                 {filters.propertyId
-                  ? `Wyniki dla nieruchomości ${
+                  ? `Wszystkie odczyty dla nieruchomości ${
                       properties.find((p) => p.id === filters.propertyId)?.label || filters.propertyId
-                    }${filters.month ? `, miesiąc ${filters.month}` : ""}.`
-                  : "Wprowadź identyfikator nieruchomości, aby wczytać odczyty."}
+                    }.`
+                  : "Wybierz nieruchomość, aby wczytać odczyty."}
               </p>
             </div>
             <Button
@@ -940,6 +873,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
                   <th className="px-4 py-2 text-left font-medium">Data</th>
                   <th className="px-4 py-2 text-left font-medium">Wartości</th>
                   <th className="px-4 py-2 text-left font-medium">Typ</th>
+                  <th className="px-4 py-2 text-left font-medium">Miesiące</th>
                   <th className="px-4 py-2 text-left font-medium">Komentarz</th>
                   <th className="px-4 py-2 text-right font-medium">Akcje</th>
                 </tr>
@@ -953,7 +887,6 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
       <AnchorRecalcPanel
         propertyId={filters.propertyId}
         propertyLabel={properties.find((p) => p.id === filters.propertyId)?.label}
-        defaultMonth={filters.month}
         disabled={!filters.propertyId}
         onSuccess={handleRecalcSuccess}
         onPendingChange={setRecalcPending}
@@ -1091,6 +1024,21 @@ const AdminReadingRow = memo(function AdminReadingRow({
           <div className="text-xs text-muted-foreground">
             {item.readingType === "baseline" ? "Kotwica" : "Odczyt cykliczny"}
           </div>
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <div className="space-y-1 text-sm">
+          {item.effectiveMonth ? (
+            <>
+              <div className="font-medium text-foreground">Przypisany do:</div>
+              <div className="text-muted-foreground">{formatMonth(item.effectiveMonth)}</div>
+            </>
+          ) : (
+            <>
+              <div className="font-medium text-foreground">Miesiąc odczytu:</div>
+              <div className="text-muted-foreground">{formatMonth(item.readingAt)}</div>
+            </>
+          )}
         </div>
       </td>
       <td className="px-4 py-3 text-sm text-muted-foreground">{item.commentText ? item.commentText : "—"}</td>

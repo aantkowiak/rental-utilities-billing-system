@@ -54,6 +54,46 @@ SERVICE_ROLE_KEY=<internal-task-endpoint-secret>
 
 `SERVICE_ROLE_KEY` is compared against the `x-service-role-key` header when invoking the scheduler task endpoint.
 
+## Local Development with Supabase
+
+### Prerequisites
+- Docker Desktop (required for local Supabase)
+- Supabase CLI: `npm install -g supabase` or `brew install supabase/tap/supabase`
+
+### Setup Local Database
+
+1. Start Supabase:
+```bash
+supabase start
+```
+
+2. Seed database with test data:
+```bash
+npm run db:seed
+```
+
+This will reset your local database and populate it with:
+- 3 properties (apartments/houses)
+- 3 test users (1 admin, 2 tenants)
+- 2 active contracts
+- Monthly conditions for the last 13 months
+- Historical meter readings for the last year
+
+### Test Accounts
+
+After seeding, you can login with:
+- **Admin**: `admin@example.com` / `password123`
+- **Tenant 1**: `tenant1@example.com` / `password123`
+- **Tenant 2**: `tenant2@example.com` / `password123`
+
+### Database Management
+
+- **Supabase Studio**: http://127.0.0.1:54323
+- **Database Port**: 54322
+- **API Port**: 54321
+
+For more details, see [scripts/README.md](scripts/README.md)
+
 ## Available Scripts
 
 - `npm run dev` - Start development server
@@ -61,6 +101,8 @@ SERVICE_ROLE_KEY=<internal-task-endpoint-secret>
 - `npm run preview` - Preview production build
 - `npm run lint` - Run ESLint
 - `npm run lint:fix` - Fix ESLint issues
+- `npm run test` - Run tests with Vitest
+- `npm run db:seed` - Reset and seed local database with test data
 
 ## API Endpoints
 

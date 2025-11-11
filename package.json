@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:seed": "./scripts/seed-db.sh"
   },
   "dependencies": {
     "@astrojs/node": "^9.4.3",
