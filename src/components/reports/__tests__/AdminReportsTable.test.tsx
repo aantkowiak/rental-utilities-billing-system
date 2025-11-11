@@ -3,24 +3,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AdminReportsTable } from "@/components/reports/AdminReportsTable";
 import type { ReportDTO, ReportEmailAttemptDTO } from "@/types";
-import { apiGet, apiPost } from "@/lib/client/http";
+import { apiGet, apiPatch, apiPost } from "@/lib/client/http";
 
 vi.mock("@/lib/client/http", async () => {
   const actual = await vi.importActual<typeof import("@/lib/client/http")>("@/lib/client/http");
   return {
     ...actual,
     apiGet: vi.fn(),
+    apiPatch: vi.fn(),
     apiPost: vi.fn(),
   };
 });
 
 const apiGetMock = apiGet as unknown as vi.Mock;
+const apiPatchMock = apiPatch as unknown as vi.Mock;
 const apiPostMock = apiPost as unknown as vi.Mock;
 
 describe("AdminReportsTable", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     apiGetMock.mockReset();
+    apiPatchMock.mockReset();
     apiPostMock.mockReset();
     window.localStorage.clear();
     window.localStorage.setItem("admin-reports:month", "2024-02");
@@ -118,7 +121,7 @@ describe("AdminReportsTable", () => {
     const item = buildReportItem({ status: "draft" });
 
     apiGetMock.mockResolvedValueOnce({ items: [item] }).mockResolvedValueOnce({ items: [item] });
-    apiPostMock.mockResolvedValueOnce({});
+    apiPatchMock.mockResolvedValueOnce({});
 
     render(<AdminReportsTable />);
 
@@ -126,7 +129,7 @@ describe("AdminReportsTable", () => {
     fireEvent.click(toggleButton);
 
     await waitFor(() =>
-      expect(apiPostMock).toHaveBeenCalledWith(`/api/v1/reports/${encodeURIComponent(item.report.id)}`, {
+      expect(apiPatchMock).toHaveBeenCalledWith(`/api/v1/reports/${encodeURIComponent(item.report.id)}`, {
         status: "realized",
       })
     );
@@ -138,7 +141,7 @@ describe("AdminReportsTable", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
 
     apiGetMock.mockResolvedValueOnce({ items: [item] }).mockResolvedValueOnce({ items: [item] });
-    apiPostMock.mockResolvedValueOnce({});
+    apiPatchMock.mockResolvedValueOnce({});
 
     render(<AdminReportsTable />);
 
@@ -146,7 +149,7 @@ describe("AdminReportsTable", () => {
     fireEvent.click(toggleButton);
 
     await waitFor(() =>
-      expect(apiPostMock).toHaveBeenCalledWith(`/api/v1/reports/${encodeURIComponent(item.report.id)}`, {
+      expect(apiPatchMock).toHaveBeenCalledWith(`/api/v1/reports/${encodeURIComponent(item.report.id)}`, {
         status: "unlocked",
       })
     );

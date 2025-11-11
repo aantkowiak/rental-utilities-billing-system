@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/db/database.types";
 import type { CreateMonthlyAdvanceCmd, MonthlyAdvanceDTO, UpdateMonthlyAdvanceCmd } from "@/types";
-import type { MonthlyAdvanceListFilters, MonthlyAdvanceListResponse } from "@/types/monthlyConditions";
+import type { MonthlyAdvanceListFilters, MonthlyAdvanceListResponse } from "@/types/monthlyAdvances";
 
 /* eslint-disable @typescript-eslint/no-extraneous-class */
 

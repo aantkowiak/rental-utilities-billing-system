@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AdminReportDetail } from "@/components/reports/AdminReportDetail";
-import { apiGet, apiPost } from "@/lib/client/http";
+import { apiGet, apiPatch, apiPost } from "@/lib/client/http";
 import type { ReportDTO, ReportEmailAttemptDTO } from "@/types";
 
 vi.mock("@/lib/client/http", async () => {
@@ -10,11 +10,13 @@ vi.mock("@/lib/client/http", async () => {
   return {
     ...actual,
     apiGet: vi.fn(),
+    apiPatch: vi.fn(),
     apiPost: vi.fn(),
   };
 });
 
 const apiGetMock = apiGet as unknown as vi.Mock;
+const apiPatchMock = apiPatch as unknown as vi.Mock;
 const apiPostMock = apiPost as unknown as vi.Mock;
 
 beforeEach(() => {
@@ -168,7 +170,7 @@ describe("AdminReportDetail", () => {
         },
       });
 
-    apiPostMock.mockResolvedValueOnce({});
+    apiPatchMock.mockResolvedValueOnce({});
 
     render(<AdminReportDetail reportId="report-12" />);
 
@@ -179,7 +181,7 @@ describe("AdminReportDetail", () => {
 
     fireEvent.click(toggleButton);
 
-    await waitFor(() => expect(apiPostMock).toHaveBeenCalledWith("/api/v1/reports/report-12", { status: "realized" }));
+    await waitFor(() => expect(apiPatchMock).toHaveBeenCalledWith("/api/v1/reports/report-12", { status: "realized" }));
     expect(await screen.findByText("Raport zaksięgowany")).toBeInTheDocument();
     await waitFor(() => expect(apiGetMock).toHaveBeenCalledTimes(2));
   });
@@ -206,7 +208,7 @@ describe("AdminReportDetail", () => {
         },
       });
 
-    apiPostMock.mockResolvedValueOnce({});
+    apiPatchMock.mockResolvedValueOnce({});
 
     render(<AdminReportDetail reportId="report-15" />);
 
@@ -214,7 +216,7 @@ describe("AdminReportDetail", () => {
     fireEvent.click(toggleButton);
 
     expect(confirmSpy).toHaveBeenCalledOnce();
-    await waitFor(() => expect(apiPostMock).toHaveBeenCalledWith("/api/v1/reports/report-15", { status: "unlocked" }));
+    await waitFor(() => expect(apiPatchMock).toHaveBeenCalledWith("/api/v1/reports/report-15", { status: "unlocked" }));
     expect(await screen.findByText("Raport odblokowany")).toBeInTheDocument();
     await waitFor(() => expect(apiGetMock).toHaveBeenCalledTimes(2));
   });

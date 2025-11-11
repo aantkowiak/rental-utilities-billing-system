@@ -5,7 +5,7 @@ import { ToastProvider, useToast } from "@/components/common/ToastProvider";
 import { Button } from "@/components/ui/button";
 import { apiDelete, apiGet, apiPatch, apiPost, type ApiError } from "@/lib/client/http";
 import type { MonthlyAdvanceDTO, PropertyDTO } from "@/types";
-import type { MonthlyAdvanceListResponse, MonthlyAdvanceResponse } from "@/types/monthlyConditions";
+import type { MonthlyAdvanceListResponse, MonthlyAdvanceResponse } from "@/types/monthlyAdvances";
 import type { PropertyListResponse } from "@/lib/services/PropertyService";
 
 const PROPERTY_STORAGE_KEY = "admin-monthly-advances:propertyId";
@@ -287,7 +287,7 @@ function MonthlyAdvancesContent(): JSX.Element {
       const params = new URLSearchParams();
       params.set("propertyId", filters.propertyId);
 
-      const response = await apiGet<MonthlyAdvanceListResponse>(`/api/v1/monthly-conditions?${params.toString()}`);
+      const response = await apiGet<MonthlyAdvanceListResponse>(`/api/v1/monthly-advances?${params.toString()}`);
       const sorted = Array.isArray(response.items)
         ? [...response.items].sort((a, b) => b.month.localeCompare(a.month))
         : [];
@@ -477,7 +477,7 @@ function MonthlyAdvancesContent(): JSX.Element {
       setActionAccessError(null);
 
       try {
-        await apiPatch<MonthlyAdvanceResponse>(`/api/v1/monthly-conditions/${encodeURIComponent(id)}`, {
+        await apiPatch<MonthlyAdvanceResponse>(`/api/v1/monthly-advances/${encodeURIComponent(id)}`, {
           ...mapDraftToPayload(draft, filters.propertyId),
         });
 
@@ -561,7 +561,7 @@ function MonthlyAdvancesContent(): JSX.Element {
       setActionAccessError(null);
 
       try {
-        await apiDelete(`/api/v1/monthly-conditions/${encodeURIComponent(id)}`);
+        await apiDelete(`/api/v1/monthly-advances/${encodeURIComponent(id)}`);
         pushToast({
           variant: "success",
           title: "Usunięto zaliczkę",
@@ -632,7 +632,7 @@ function MonthlyAdvancesContent(): JSX.Element {
 
     try {
       await apiPost<MonthlyAdvanceResponse>(
-        "/api/v1/monthly-conditions",
+        "/api/v1/monthly-advances",
         mapDraftToPayload(createDraft, filters.propertyId)
       );
 

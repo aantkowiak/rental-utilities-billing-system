@@ -1,11 +1,11 @@
 import type { APIRoute } from "astro";
 
 import { requireAuth } from "@/lib/api/auth";
-import { mapMonthlyAdvanceServiceError } from "@/lib/api/monthlyConditions";
+import { mapMonthlyAdvanceServiceError } from "@/lib/api/monthlyAdvances";
 import { errorResponse } from "@/lib/errors";
-import { MonthlyAdvanceService } from "@/lib/services/MonthlyConditionService";
-import { buildMonthlyAdvanceResponse, buildMonthlyAdvancesListResponse } from "@/types/monthlyConditions";
-import { CreateMonthlyAdvanceSchema, MonthlyAdvancesListQuerySchema } from "@/lib/validators/monthlyConditions";
+import { MonthlyAdvanceService } from "@/lib/services/MonthlyAdvanceService";
+import { buildMonthlyAdvanceResponse, buildMonthlyAdvancesListResponse } from "@/types/monthlyAdvances";
+import { CreateMonthlyAdvanceSchema, MonthlyAdvancesListQuerySchema } from "@/lib/validators/monthlyAdvances";
 
 export const GET: APIRoute = async ({ request, locals, url }) => {
   const auth = await requireAuth(request, locals);

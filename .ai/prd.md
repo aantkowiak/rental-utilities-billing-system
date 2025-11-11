@@ -2,7 +2,7 @@
 ## 1. Product Overview
 The Rental Utilities Billing System is an MVP web application to calculate, communicate, and audit monthly utility costs for a single residential property with exactly one active tenant at any time. It standardizes meter reading collection, monthly anchoring logic, consumption and cost calculations, report generation, and delivery with strong auditability and access control.
 
-Scope is limited to one property, one active tenant, monthly settlement periods (no proration), and Polish market conventions: locale pl-PL, currency PLN, and VAT included in unit prices. The system enforces role-based behavior with tenant and administrator roles. Tenants can submit readings only within a limited monthly time window and view their reports. Administrators manage monthly conditions (rates, forecasts, advance payment), handle meter replacements, generate/regenerate reports, mark reports as realized, unlock when needed, and export CSV.
+Scope is limited to one property, one active tenant, monthly settlement periods (no proration), and Polish market conventions: locale pl-PL, currency PLN, and VAT included in unit prices. The system enforces role-based behavior with tenant and administrator roles. Tenants can submit readings only within a limited monthly time window and view their reports. Administrators manage monthly advances (rates, forecasts, advance payment), handle meter replacements, generate/regenerate reports, mark reports as realized, unlock when needed, and export CSV.
 
 Key features include: reading anchoring for month N using a −3/+5 day window, precise rounding rules (consumption 3 decimals, prices 4 decimals, amounts 2 decimals half-up), monthly versioned conditions effective from the first of each month, automated and manual report emailing with idempotency and throttling, complete business audit trail including HTML snapshots of sent reports, DST-safe scheduling for reminders and automation, and privacy-first data handling with RLS.
 
@@ -54,7 +54,7 @@ FR-009 Consumption calculation
 - If any meter was replaced between N and N+1 (indicated by `*_replaced = TRUE` on the replacement row), consumption is computed from the new baseline value without additional anomaly handling.
 - Display precision: consumption 3 decimals.
 
-FR-010 Pricing and forecasts (monthly conditions)
+FR-010 Pricing and forecasts (monthly advances)
 - Effective from the first day of the month: fixed manager fee, unit price cold water (PLN/m³), unit price hot water heating component (PLN/m³), unit price heating (PLN/GJ), monthly forecasts for each meter, advancePayment.
 - Hot water cost unit price = cold water unit price + hot water heating unit price.
 - Forecasts equal to 0 are allowed and produce an informational warning only.
@@ -242,7 +242,7 @@ US-032
   - Message explains next available window.
 
 US-040
-- Title: Manage monthly conditions effective from day 1
+- Title: Manage monthly advances effective from day 1
 - Description: As an administrator, I want to set monthly rates, forecasts, and advancePayment effective from the first day of the month.
 - Acceptance Criteria:
   - Form fields include manager fee, unit prices, forecasts, advancePayment.

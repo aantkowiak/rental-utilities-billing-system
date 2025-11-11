@@ -102,16 +102,16 @@
   - APIs used: `GET/POST/PATCH/DELETE /api/v1/readings`, `POST /api/v1/readings/:id/replacement`, `POST /api/v1/readings/recalculate-anchors`.
   - Requirements covered: Decisions 3, 4, 9, 12, 18.
 
-- View name: Admin Monthly Conditions
-  - View path: `/admin/monthly-conditions`
+- View name: Admin Monthly Advances
+  - View path: `/admin/monthly-advances`
   - Main purpose: Create/edit per-month conditions; respect locks when linked to realized reports.
   - Key information to display:
     - Month filter, condition fields (tariffs, fixed fees), lock status, forecast=0 info.
   - Key view components:
-    - Monthly Conditions Table/Form; Inline validation and locked state banner; Save CTA.
+    - Monthly Advances Table/Form; Inline validation and locked state banner; Save CTA.
   - UX, accessibility, and security considerations:
     - When locked: disable inputs with inline explanation; 422 details inline.
-  - APIs used: `GET/POST/PATCH/DELETE /api/v1/monthly-conditions`.
+  - APIs used: `GET/POST/PATCH/DELETE /api/v1/monthly-advances`.
   - Requirements covered: Decisions 2, 5, 12.
 
 - View name: Admin Reports List
@@ -193,7 +193,7 @@ Note: Internal task trigger UI is omitted from MVP per decision. Anchor recalcul
 - Admin primary flow (prepare month and generate reports)
   1. Set month in header (stored in `?month=` and `localStorage`).
   2. Review `/admin/readings`; backdate or add missing readings; use Replacement Modal for corrections; recalc anchors if needed.
-  3. Open `/admin/monthly-conditions`; edit values; if locked by realized reports, see inline lock banner.
+  3. Open `/admin/monthly-advances`; edit values; if locked by realized reports, see inline lock banner.
   4. Go to `/admin/reports`; click Generate (or Regenerate when allowed); disabled state shows reason if prerequisites missing.
   5. Inspect a report at `/admin/reports/:id`; send email; toggle realized; Unlock requires confirm.
 
@@ -209,7 +209,7 @@ Note: Internal task trigger UI is omitted from MVP per decision. Anchor recalcul
 - Navigation
   - Top nav entries by role:
     - Tenant: Readings, Reports, Profile (optional).
-    - Admin: Readings, Monthly Conditions, Reports, Properties, Contracts, Profile (optional).
+    - Admin: Readings, Monthly Advances, Reports, Properties, Contracts, Profile (optional).
   - Header shows single property label for context; favicon branding.
   - Skip-to-content link at top for accessibility.
 - Loading and feedback
@@ -229,7 +229,7 @@ Note: Internal task trigger UI is omitted from MVP per decision. Anchor recalcul
   - Reading Form (`ReadingForm`): combined tenant/admin form; admin variant supports `datetime-local`.
   - Readings Table (`ReadingsTable`): list with inline actions and “Kotwica” anchor badges.
   - Replacement Form (`ReplacementForm`): minimal modal for admin corrections.
-  - Monthly Conditions Table (`MonthlyConditionsTable`): per-month editable rows with lock states.
+  - Monthly Advances Table (`MonthlyAdvancesTable`): per-month editable rows with lock states.
   - Anchor Recalc Panel (`AnchorRecalcPanel`): scoped action panel to trigger recalculation.
   - Properties List (`PropertyList`), Contracts List (`ContractsList`): simple list/crud.
 - Client and services

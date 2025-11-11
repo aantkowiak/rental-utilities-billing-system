@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MonthlyAdvancesTable } from "@/components/monthly/MonthlyConditionsTable";
+import { MonthlyAdvancesTable } from "@/components/monthly/MonthlyAdvancesTable";
 import type { MonthlyAdvanceDTO } from "@/types";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/client/http";
 
@@ -151,7 +151,7 @@ describe("MonthlyAdvancesTable", () => {
 
     await waitFor(() =>
       expect(apiPostMock).toHaveBeenCalledWith(
-        "/api/v1/monthly-conditions",
+        "/api/v1/monthly-advances",
         expect.objectContaining({ month: "2024-03-01" })
       )
     );

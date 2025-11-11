@@ -783,7 +783,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
       {fetchError ? <ErrorAlert error={fetchError} /> : null}
       {actionAccessError ? <ErrorAlert error={actionAccessError} /> : null}
 
-      <div className="grid gap-8 lg:grid-cols-[2fr_3fr]">
+      <div className="space-y-8">
         <section className="space-y-4 rounded-lg border bg-card p-6 shadow-sm">
           <header className="flex items-start justify-between">
             <div>

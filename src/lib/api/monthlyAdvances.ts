@@ -1,5 +1,5 @@
 import { errorResponse } from "@/lib/errors";
-import { MonthlyAdvanceServiceError } from "@/lib/services/MonthlyConditionService";
+import { MonthlyAdvanceServiceError } from "@/lib/services/MonthlyAdvanceService";
 
 export const mapMonthlyAdvanceServiceError = (error: unknown): Response => {
   if (error instanceof MonthlyAdvanceServiceError) {

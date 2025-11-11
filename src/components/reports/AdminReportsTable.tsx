@@ -16,7 +16,7 @@ import {
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
 import { Button } from "@/components/ui/button";
-import { apiGet, apiPost, type ApiError } from "@/lib/client/http";
+import { apiGet, apiPatch, apiPost, type ApiError } from "@/lib/client/http";
 import type { GenerateReportCmd, ReportDTO, ReportEmailAttemptDTO, UpdateReportStatusCmd } from "@/types";
 
 const MONTH_STORAGE_KEY = "admin-reports:month";
@@ -677,7 +677,7 @@ const AdminReportsContent = memo(function AdminReportsContentComponent(): JSX.El
       setActionAccessError(null);
 
       try {
-        await apiPost<void>(`/api/v1/reports/${encodeURIComponent(reportId)}`, {
+        await apiPatch<void>(`/api/v1/reports/${encodeURIComponent(reportId)}`, {
           status: nextStatus,
         });
 

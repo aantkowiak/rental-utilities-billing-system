@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Database } from "@/db/database.types";
 import type { MonthlyAdvanceDTO } from "@/types";
-import { MonthlyAdvanceService, MonthlyAdvanceServiceError } from "@/lib/services/MonthlyConditionService";
+import { MonthlyAdvanceService, MonthlyAdvanceServiceError } from "@/lib/services/MonthlyAdvanceService";
 
 const BASE_ROW: Database["public"]["Tables"]["monthly_conditions"]["Row"] = {
   id: "mc-1",

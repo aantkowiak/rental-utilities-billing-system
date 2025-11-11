@@ -8,9 +8,9 @@ const serviceMocks = vi.hoisted(() => ({
   deleteMock: vi.fn(),
 }));
 
-vi.mock("@/lib/services/MonthlyConditionService", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/services/MonthlyConditionService")>(
-    "@/lib/services/MonthlyConditionService"
+vi.mock("@/lib/services/MonthlyAdvanceService", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/services/MonthlyAdvanceService")>(
+    "@/lib/services/MonthlyAdvanceService"
   );
 
   return {
@@ -61,7 +61,7 @@ describe("Monthly advances API routes", () => {
     process.env.TEST_AUTH_ROLE = "tenant";
     process.env.TEST_AUTH_PROPERTY_ID = "property-tenant";
 
-    const url = new URL("http://localhost/v1/monthly-conditions");
+    const url = new URL("http://localhost/v1/monthly-advances");
     const response = await GET({
       request: new Request(url),
       locals: createLocals(),
@@ -85,7 +85,7 @@ describe("Monthly advances API routes", () => {
 
     process.env.TEST_AUTH_ROLE = "tenant";
 
-    const url = new URL("http://localhost/v1/monthly-conditions");
+    const url = new URL("http://localhost/v1/monthly-advances");
     const response = await POST({
       request: new Request(url, {
         method: "POST",
@@ -102,7 +102,7 @@ describe("Monthly advances API routes", () => {
   });
 
   it("maps locked update errors to 422 status", async () => {
-    const { MonthlyAdvanceServiceError } = await import("@/lib/services/MonthlyConditionService");
+    const { MonthlyAdvanceServiceError } = await import("@/lib/services/MonthlyAdvanceService");
 
     updateMock.mockRejectedValue(new MonthlyAdvanceServiceError("MONTHLY_ADVANCE_LOCKED_BY_REPORTS", "locked"));
 
@@ -110,7 +110,7 @@ describe("Monthly advances API routes", () => {
 
     process.env.TEST_AUTH_ROLE = "admin";
 
-    const url = new URL("http://localhost/v1/monthly-conditions/mc-1");
+    const url = new URL("http://localhost/v1/monthly-advances/mc-1");
     const response = await PATCH({
       request: new Request(url, {
         method: "PATCH",
@@ -133,7 +133,7 @@ describe("Monthly advances API routes", () => {
 
     process.env.TEST_AUTH_ROLE = "admin";
 
-    const url = new URL("http://localhost/v1/monthly-conditions/mc-1");
+    const url = new URL("http://localhost/v1/monthly-advances/mc-1");
     const response = await DELETE({
       request: new Request(url, {
         method: "DELETE",

@@ -1,7 +1,7 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import { RoleNav } from "@/components/nav/RoleNav";
-import { MonthlyAdvancesTable } from "@/components/monthly/MonthlyConditionsTable";
+import { MonthlyAdvancesTable } from "@/components/monthly/MonthlyAdvancesTable";
 import { requireAuth } from "@/lib/api/auth";
 
 const auth = await requireAuth(Astro.request, Astro.locals, { requireAdmin: true });
@@ -26,7 +26,7 @@ const pageTitle = "Zaliczki miesięczne";
         <p class="text-sm text-muted-foreground">Panel administratora</p>
         <h1 class="text-2xl font-semibold text-foreground">{pageTitle}</h1>
       </div>
-      <RoleNav client:only="react" currentPath="/admin/monthly-conditions" role="admin" />
+      <RoleNav client:only="react" currentPath="/admin/monthly-advances" role="admin" />
     </div>
   </header>
 

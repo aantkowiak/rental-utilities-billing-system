@@ -3,7 +3,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
 import { Button } from "@/components/ui/button";
-import { apiGet, apiPost, type ApiError } from "@/lib/client/http";
+import { apiGet, apiPatch, apiPost, type ApiError } from "@/lib/client/http";
 import type { ReportDTO, ReportEmailAttemptDTO, UpdateReportStatusCmd } from "@/types";
 
 interface AdminReportPermissions {
@@ -498,7 +498,7 @@ const ReportActions = memo(function ReportActions({
     onActionAccessError(null);
 
     try {
-      await apiPost<void>(`/api/v1/reports/${encodeURIComponent(report.id)}`, { status: nextStatus });
+      await apiPatch<void>(`/api/v1/reports/${encodeURIComponent(report.id)}`, { status: nextStatus });
       pushToast({
         variant: "success",
         title: nextStatus === "realized" ? "Raport zaksięgowany" : "Raport odblokowany",

@@ -1,11 +1,11 @@
 import type { APIRoute } from "astro";
 
 import { requireAuth } from "@/lib/api/auth";
-import { mapMonthlyAdvanceServiceError } from "@/lib/api/monthlyConditions";
+import { mapMonthlyAdvanceServiceError } from "@/lib/api/monthlyAdvances";
 import { errorResponse } from "@/lib/errors";
-import { MonthlyAdvanceService } from "@/lib/services/MonthlyConditionService";
-import { buildMonthlyAdvanceResponse } from "@/types/monthlyConditions";
-import { UpdateMonthlyAdvanceSchema } from "@/lib/validators/monthlyConditions";
+import { MonthlyAdvanceService } from "@/lib/services/MonthlyAdvanceService";
+import { buildMonthlyAdvanceResponse } from "@/types/monthlyAdvances";
+import { UpdateMonthlyAdvanceSchema } from "@/lib/validators/monthlyAdvances";
 
 const missingIdResponse = () => errorResponse(400, "validation_error", "Monthly advance id is required");
 

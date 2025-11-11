@@ -7,7 +7,7 @@
 | Property | `properties` | Residential property being billed. Exactly one active tenant at a time. |
 | Profile | `profiles` | Supabase user profile, holds role and optional display name. |
 | Contract | `contracts` | Active rental contract linking tenant user to a property for a period. |
-| MonthlyCondition | `monthly_conditions` | Versioned monthly rates, forecasts and advance payment. |
+| MonthlyAdvance | `monthly_conditions` | Versioned monthly rates, forecasts and advance payment. |
 | Reading | `readings` | Meter readings (cold, hot, heating) collected from tenant/admin. |
 | Report | `reports` | Monthly billing report produced per contract×month. |
 | ReportEmail | `report_emails` | Recipient addresses for each report. |
@@ -52,15 +52,15 @@
 | PATCH | `/v1/contracts/{contractId}` | Update contract (admin). Period update validates GIST exclude.
 | DELETE | `/v1/contracts/{contractId}` | Delete contract (admin).
 
-### 2.5 Monthly Conditions
+### 2.5 Monthly Advances
 
 | Method | Path |
 |--------|------|
-| GET | `/v1/monthly-conditions` | List by `propertyId`, `month`, `page`.
-| POST | `/v1/monthly-conditions` | Create. `{ propertyId, month, managerFee, priceCold, priceHotHeating, priceHeating, forecastCold, forecastHot, forecastHeating, advancePayment }`.
-| GET | `/v1/monthly-conditions/{id}` | Get.
-| PATCH | `/v1/monthly-conditions/{id}` | Update – allowed only when linked reports are not realized.
-| DELETE | `/v1/monthly-conditions/{id}` | Admin – soft-delete not needed; hard delete guarded.
+| GET | `/v1/monthly-advances` | List by `propertyId`, `month`, `page`.
+| POST | `/v1/monthly-advances` | Create. `{ propertyId, month, managerFee, priceCold, priceHotHeating, priceHeating, forecastCold, forecastHot, forecastHeating, advancePayment }`.
+| GET | `/v1/monthly-advances/{id}` | Get.
+| PATCH | `/v1/monthly-advances/{id}` | Update – allowed only when linked reports are not realized.
+| DELETE | `/v1/monthly-advances/{id}` | Admin – soft-delete not needed; hard delete guarded.
 
 ### 2.6 Readings
 
@@ -109,7 +109,7 @@ Not needed at the moment.
   - `coldM3, hotM3, heatingGj` ≥ 0, ≤ 9 999 999.999 (schema).
   - Max 3 decimal places.
   - Tenant origin only allowed inside −3/+5 window (FR-005) else 403.
-- **MonthlyCondition**:
+- **MonthlyAdvance**:
   - `month` must be first day of month ✓ CHECK.
   - Uniqueness `(propertyId, month)` enforced → 409.
   - Forecasts may be 0 but return 200 with warning header.
