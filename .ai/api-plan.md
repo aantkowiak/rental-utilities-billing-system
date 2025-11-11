@@ -109,7 +109,7 @@ Not needed at the moment.
   - `coldM3, hotM3, heatingGj` ≥ 0, ≤ 9 999 999.999 (schema).
   - Max 3 decimal places.
   - Tenant origin only allowed inside −3/+5 window (FR-005) else 403.
-- **MonthlyAdvance**:
+- **MonthlyAdvance (Zaliczki miesięczne)**:
   - `month` must be first day of month ✓ CHECK.
   - Uniqueness `(propertyId, month)` enforced → 409.
   - Forecasts may be 0 but return 200 with warning header.

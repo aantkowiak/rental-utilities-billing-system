@@ -1,13 +1,13 @@
-## UI View Implementation — Admin Monthly Conditions (Iteration 2)
+## UI View Implementation — Admin Monthly Advances (Zaliczki miesięczne) (Iteration 2)
 
 This iteration covers steps 4–6 from `.ai/ui-implementation/ui-view-implementation.md`.
 
 ### 4) State Management
 - Filters: `propertyId`, `month` via query/localStorage; validate month format.
-- Data: `items?: MonthlyConditionDTO[]`, `loading: boolean`, `error?: string`.
+- Data: `items?: MonthlyAdvanceDTO[]`, `loading: boolean`, `error?: string`.
 - Edit state: per-row editable values; `pendingById` map; `fieldErrorsById` for inline validation.
 - Create: new-row draft with same structures; `pendingCreate`.
-- Fetch on filter changes: GET `/api/v1/monthly-conditions?propertyId=...&month=...`.
+- Fetch on filter changes: GET `/api/v1/monthly-advances?propertyId=...&month=...`.
 
 ### 5) Styling & Layout
 - Grid/table layout for fields: labels in header, inputs per row; sticky header at `md+`.

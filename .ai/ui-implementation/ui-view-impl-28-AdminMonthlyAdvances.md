@@ -1,4 +1,4 @@
-## UI View Implementation — Admin Monthly Conditions (Iteration 3)
+## UI View Implementation — Admin Monthly Advances (Zaliczki miesięczne) (Iteration 3)
 
 This iteration covers steps 7–8 from `.ai/ui-implementation/ui-view-implementation.md`.
 
