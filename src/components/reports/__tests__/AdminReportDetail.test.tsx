@@ -18,7 +18,10 @@ const apiGetMock = apiGet as unknown as vi.Mock;
 const apiPostMock = apiPost as unknown as vi.Mock;
 
 beforeEach(() => {
-  vi.stubGlobal("confirm", vi.fn(() => true));
+  vi.stubGlobal(
+    "confirm",
+    vi.fn(() => true)
+  );
 });
 
 afterEach(() => {
@@ -176,9 +179,7 @@ describe("AdminReportDetail", () => {
 
     fireEvent.click(toggleButton);
 
-    await waitFor(() =>
-      expect(apiPostMock).toHaveBeenCalledWith("/api/v1/reports/report-12", { status: "realized" })
-    );
+    await waitFor(() => expect(apiPostMock).toHaveBeenCalledWith("/api/v1/reports/report-12", { status: "realized" }));
     expect(await screen.findByText("Raport zaksięgowany")).toBeInTheDocument();
     await waitFor(() => expect(apiGetMock).toHaveBeenCalledTimes(2));
   });
@@ -213,9 +214,7 @@ describe("AdminReportDetail", () => {
     fireEvent.click(toggleButton);
 
     expect(confirmSpy).toHaveBeenCalledOnce();
-    await waitFor(() =>
-      expect(apiPostMock).toHaveBeenCalledWith("/api/v1/reports/report-15", { status: "unlocked" })
-    );
+    await waitFor(() => expect(apiPostMock).toHaveBeenCalledWith("/api/v1/reports/report-15", { status: "unlocked" }));
     expect(await screen.findByText("Raport odblokowany")).toBeInTheDocument();
     await waitFor(() => expect(apiGetMock).toHaveBeenCalledTimes(2));
   });
@@ -278,5 +277,3 @@ function buildEmailAttempt(overrides: Partial<ReportEmailAttemptDTO>): ReportEma
     status: overrides.status ?? "queued",
   };
 }
-
-

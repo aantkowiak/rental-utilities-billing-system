@@ -278,9 +278,7 @@ const TenantReportRow = memo(function TenantReportRow({
         </a>
       </td>
       <td className="px-4 py-3 align-top">{formatStatus(item.report.status)}</td>
-      <td className="px-4 py-3 align-top text-xs text-muted-foreground">
-        {renderEmailAttempt(item.lastEmailAttempt)}
-      </td>
+      <td className="px-4 py-3 align-top text-xs text-muted-foreground">{renderEmailAttempt(item.lastEmailAttempt)}</td>
       <td className="px-4 py-3 align-top">
         <div className="flex justify-end gap-2">
           <Button

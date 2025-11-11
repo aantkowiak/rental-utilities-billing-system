@@ -5,7 +5,11 @@ import { z } from "zod";
  * RFC 5322 compliant email with max 254 characters.
  */
 export const RequestMagicLinkSchema = z.object({
-  email: z.string().email().max(254).transform((email) => email.toLowerCase()),
+  email: z
+    .string()
+    .email()
+    .max(254)
+    .transform((email) => email.toLowerCase()),
 });
 
 /**
@@ -31,11 +35,7 @@ export const UpdateMeSchema = z.object({
  * - startMonth: ISO date string, must be first day of month
  */
 export const CreatePropertySchema = z.object({
-  label: z
-    .string()
-    .trim()
-    .min(1, "Label is required")
-    .max(100, "Label must be 100 characters or less"),
+  label: z.string().trim().min(1, "Label is required").max(100, "Label must be 100 characters or less"),
   startMonth: z
     .string()
     .regex(/^\d{4}-\d{2}$/, "Start month must be in YYYY-MM format")
@@ -52,4 +52,3 @@ export const CreatePropertySchema = z.object({
  * Partial version of CreatePropertySchema.
  */
 export const UpdatePropertySchema = CreatePropertySchema.partial();
-

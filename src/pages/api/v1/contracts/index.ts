@@ -29,16 +29,12 @@ export const GET: APIRoute = async ({ request, locals, url }) => {
 
   const filters = {
     propertyId: propertyId ?? undefined,
-    tenantUserId: auth.role === "tenant" ? auth.user.id : tenantUserId ?? undefined,
+    tenantUserId: auth.role === "tenant" ? auth.user.id : (tenantUserId ?? undefined),
     active: active ?? undefined,
   };
 
   try {
-    const result = await ContractService.list(
-      locals.supabase,
-      { role: auth.role, userId: auth.user.id },
-      { filters }
-    );
+    const result = await ContractService.list(locals.supabase, { role: auth.role, userId: auth.user.id }, { filters });
 
     const body = buildContractsListResponse(result.items);
 
@@ -75,11 +71,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const cmd = validation.data;
 
   try {
-    const contract = await ContractService.create(
-      locals.supabase,
-      { role: auth.role, userId: auth.user.id },
-      cmd
-    );
+    const contract = await ContractService.create(locals.supabase, { role: auth.role, userId: auth.user.id }, cmd);
 
     return new Response(JSON.stringify(buildContractResponse(contract)), {
       status: 201,
@@ -104,4 +96,3 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return errorResponse(500, "internal_error", "Failed to create contract");
   }
 };
-

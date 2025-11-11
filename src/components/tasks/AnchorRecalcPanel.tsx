@@ -7,6 +7,7 @@ import { apiPost, type ApiError } from "@/lib/client/http";
 
 interface AnchorRecalcPanelProps {
   propertyId?: string | null;
+  propertyLabel?: string | null;
   defaultMonth?: string | null;
   disabled?: boolean;
   onSuccess?: () => void;
@@ -38,6 +39,7 @@ function resolveInitialMonth(month?: string | null): string {
 
 function AnchorRecalcPanelInner({
   propertyId,
+  propertyLabel,
   defaultMonth,
   disabled,
   onSuccess,
@@ -134,11 +136,11 @@ function AnchorRecalcPanelInner({
             <input
               className="w-full cursor-not-allowed rounded-md border border-input bg-muted px-3 py-2 text-sm shadow-sm"
               id="anchor-recalc-property"
-              value={propertyId ?? ""}
+              value={propertyLabel ?? ""}
               readOnly
               placeholder="Wybierz nieruchomość w filtrach"
             />
-            <p className="text-xs text-muted-foreground">Identyfikator pobierany jest z bieżących filtrów.</p>
+            <p className="text-xs text-muted-foreground">Nieruchomość pobierana jest z bieżących filtrów.</p>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground" htmlFor="anchor-recalc-from">

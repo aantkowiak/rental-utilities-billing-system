@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { AnchorRecalcPanel } from "@/components/tasks/AnchorRecalcPanel";
 import { ReplacementForm } from "@/components/readings/ReplacementForm";
 import { apiDelete, apiGet, apiPatch, apiPost, type ApiError } from "@/lib/client/http";
-import type { CreateReadingCmd, ReadingDTO, UpdateReadingCmd } from "@/types";
+import type { CreateReadingCmd, ReadingDTO, UpdateReadingCmd, PropertyDTO } from "@/types";
 import type { ReadingListResponse, ReadingResponse } from "@/types/readings";
+import type { PropertyListResponse } from "@/lib/services/PropertyService";
 
 const PROPERTY_STORAGE_KEY = "admin-readings:propertyId";
 const MONTH_STORAGE_KEY = "admin-readings:month";
@@ -208,6 +209,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
   const [formState, setFormState] = useState<FormState>(() => buildDefaultFormState());
   const [editing, setEditing] = useState<ReadingDTO | null>(null);
   const [replacementSource, setReplacementSource] = useState<ReadingDTO | null>(null);
+  const [properties, setProperties] = useState<PropertyDTO[]>([]);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastLoadedFiltersRef = useRef<FiltersState | null>(null);
   const deletePendingByIdRef = useRef<Record<string, boolean>>({});
@@ -242,10 +244,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
         return nextFilters;
       });
 
-      if (
-        filterInputs.propertyId !== nextFilters.propertyId ||
-        filterInputs.month !== nextFilters.month
-      ) {
+      if (filterInputs.propertyId !== nextFilters.propertyId || filterInputs.month !== nextFilters.month) {
         setFilterInputs(nextFilters);
       }
     }, 300);
@@ -300,6 +299,20 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
     window.localStorage.setItem(PROPERTY_STORAGE_KEY, filters.propertyId);
     window.localStorage.setItem(MONTH_STORAGE_KEY, normalizeMonth(filters.month, getCurrentMonth()));
   }, [filters.propertyId, filters.month]);
+
+  const loadProperties = useCallback(async () => {
+    try {
+      const response = await apiGet<PropertyListResponse>("/api/v1/properties");
+      setProperties(Array.isArray(response.items) ? response.items : []);
+    } catch (error) {
+      const apiError = toApiError(error);
+      pushToast({
+        variant: "error",
+        title: "Nie udało się pobrać nieruchomości",
+        description: apiError.message,
+      });
+    }
+  }, [pushToast]);
 
   const loadReadings = useCallback(
     async ({ force = false }: { force?: boolean } = {}) => {
@@ -363,6 +376,12 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
   );
 
   useEffect(() => {
+    loadProperties().catch(() => {
+      // handled in loadProperties
+    });
+  }, [loadProperties]);
+
+  useEffect(() => {
     loadReadings().catch(() => {
       // handled in loadReadings
     });
@@ -375,7 +394,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
     setEditing(null);
   }, []);
 
-  const handleFiltersPropertyChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+  const handleFiltersPropertyChange = useCallback((event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const value = event.target.value;
     setFilterInputs((prev) => ({
       ...prev,
@@ -403,26 +422,25 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
   }, []);
 
   const focusFieldRef = useCallback((field: FormField) => {
-    const element = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[data-admin-reading-field="${field}"]`);
+    const element = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+      `[data-admin-reading-field="${field}"]`
+    );
     element?.focus();
   }, []);
 
-  const handleEdit = useCallback(
-    (reading: ReadingDTO) => {
-      setEditing(reading);
-      setFormState({
-        readingAt: toLocalDateTimeInput(reading.readingAt),
-        coldM3: reading.coldM3.toString(),
-        hotM3: reading.hotM3.toString(),
-        heatingGj: reading.heatingGj.toString(),
-        commentText: reading.commentText ?? "",
-      });
-      setFieldErrors({});
-      setFormError(null);
-      setActionAccessError(null);
-    },
-    []
-  );
+  const handleEdit = useCallback((reading: ReadingDTO) => {
+    setEditing(reading);
+    setFormState({
+      readingAt: toLocalDateTimeInput(reading.readingAt),
+      coldM3: reading.coldM3.toString(),
+      hotM3: reading.hotM3.toString(),
+      heatingGj: reading.heatingGj.toString(),
+      commentText: reading.commentText ?? "",
+    });
+    setFieldErrors({});
+    setFormError(null);
+    setActionAccessError(null);
+  }, []);
 
   const handleReplacementStart = useCallback((reading: ReadingDTO) => {
     setActionAccessError(null);
@@ -618,15 +636,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
         setFormPendingTargetId(null);
       }
     },
-    [
-      editing,
-      filters.propertyId,
-      focusFieldRef,
-      formPending,
-      formState,
-      loadReadings,
-      pushToast,
-    ]
+    [editing, filters.propertyId, focusFieldRef, formPending, formState, loadReadings, pushToast]
   );
 
   const handleCancelEdit = useCallback(() => {
@@ -736,17 +746,22 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground" htmlFor="admin-readings-property">
-              Identyfikator nieruchomości
+              Nieruchomość
             </label>
-            <input
+            <select
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
               id="admin-readings-property"
-              inputMode="text"
-              placeholder="UUID nieruchomości"
               value={filterInputs.propertyId}
               onChange={handleFiltersPropertyChange}
-            />
-            <p className="text-xs text-muted-foreground">Wymagany do pobrania odczytów oraz zapisów.</p>
+            >
+              <option value="">-- Wybierz nieruchomość --</option>
+              {properties.map((property) => (
+                <option key={property.id} value={property.id}>
+                  {property.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">Wymagana do pobrania odczytów oraz zapisów.</p>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground" htmlFor="admin-readings-month">
@@ -772,9 +787,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
         <section className="space-y-4 rounded-lg border bg-card p-6 shadow-sm">
           <header className="flex items-start justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-foreground">
-                {editing ? "Edytuj odczyt" : "Dodaj odczyt"}
-              </h2>
+              <h2 className="text-lg font-semibold text-foreground">{editing ? "Edytuj odczyt" : "Dodaj odczyt"}</h2>
               <p className="text-sm text-muted-foreground">
                 {editing
                   ? "Aktualizujesz istniejący odczyt. Zmiany zostaną zapisane po zatwierdzeniu."
@@ -904,9 +917,9 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
               <h2 className="text-lg font-semibold text-foreground">Odczyty</h2>
               <p className="text-sm text-muted-foreground">
                 {filters.propertyId
-                  ? `Wyniki dla nieruchomości ${filters.propertyId}${
-                      filters.month ? `, miesiąc ${filters.month}` : ""
-                    }.`
+                  ? `Wyniki dla nieruchomości ${
+                      properties.find((p) => p.id === filters.propertyId)?.label || filters.propertyId
+                    }${filters.month ? `, miesiąc ${filters.month}` : ""}.`
                   : "Wprowadź identyfikator nieruchomości, aby wczytać odczyty."}
               </p>
             </div>
@@ -931,9 +944,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
                   <th className="px-4 py-2 text-right font-medium">Akcje</th>
                 </tr>
               </thead>
-              <tbody>
-                {renderedTableRows}
-              </tbody>
+              <tbody>{renderedTableRows}</tbody>
             </table>
           </div>
         </section>
@@ -941,6 +952,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
 
       <AnchorRecalcPanel
         propertyId={filters.propertyId}
+        propertyLabel={properties.find((p) => p.id === filters.propertyId)?.label}
         defaultMonth={filters.month}
         disabled={!filters.propertyId}
         onSuccess={handleRecalcSuccess}
@@ -954,7 +966,10 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
           role="status"
         >
           <div className="flex flex-col items-center gap-3 rounded-lg border bg-card px-6 py-4 shadow-xl">
-            <div aria-hidden="true" className="size-10 animate-spin rounded-full border-2 border-muted border-t-transparent" />
+            <div
+              aria-hidden="true"
+              className="size-10 animate-spin rounded-full border-2 border-muted border-t-transparent"
+            />
             <p className="text-sm font-medium text-foreground">Planowanie przeliczenia kotwic…</p>
             <p className="text-xs text-muted-foreground text-center">
               Poczekaj na zakończenie operacji, aby uniknąć konfliktów danych.
@@ -964,7 +979,10 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
       ) : null}
 
       {replacementSource ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm" role="presentation">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
+          role="presentation"
+        >
           <div
             aria-busy={replacementModalPending}
             aria-labelledby="replacement-modal-title"
@@ -975,7 +993,10 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
             {replacementModalPending ? (
               <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/60">
                 <div className="flex flex-col items-center gap-3" aria-live="assertive">
-                  <div aria-hidden="true" className="size-8 animate-spin rounded-full border-2 border-muted border-t-transparent" />
+                  <div
+                    aria-hidden="true"
+                    className="size-8 animate-spin rounded-full border-2 border-muted border-t-transparent"
+                  />
                   <p className="text-sm font-medium text-foreground">Zapisywanie odczytu zastępczego…</p>
                 </div>
               </div>
@@ -989,8 +1010,8 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
                   Wprowadź wartości zastępcze. Po zapisaniu zostanie uruchomione ponowne wyliczenie kotwic.
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Źródło: {formatDate(replacementSource.readingAt)} • {formatNumber(replacementSource.coldM3)} / {formatNumber(replacementSource.hotM3)} /{" "}
-                  {formatNumber(replacementSource.heatingGj)}
+                  Źródło: {formatDate(replacementSource.readingAt)} • {formatNumber(replacementSource.coldM3)} /{" "}
+                  {formatNumber(replacementSource.hotM3)} / {formatNumber(replacementSource.heatingGj)}
                 </p>
               </div>
               <Button variant="ghost" type="button" onClick={closeReplacementModal} disabled={replacementModalPending}>
@@ -1086,7 +1107,12 @@ const AdminReadingRow = memo(function AdminReadingRow({
           >
             Zastąp
           </Button>
-          <Button variant="destructive" type="button" disabled={deletePending || recalcPending} onClick={handleDeleteClick}>
+          <Button
+            variant="destructive"
+            type="button"
+            disabled={deletePending || recalcPending}
+            onClick={handleDeleteClick}
+          >
             Usuń
           </Button>
         </div>
@@ -1163,4 +1189,3 @@ export function AdminReadingsView(): JSX.Element {
     </ToastProvider>
   );
 }
-

@@ -218,5 +218,3 @@ function buildEmailAttempt(overrides: Partial<ReportEmailAttemptDTO>): ReportEma
     status: overrides.status ?? "queued",
   };
 }
-
-

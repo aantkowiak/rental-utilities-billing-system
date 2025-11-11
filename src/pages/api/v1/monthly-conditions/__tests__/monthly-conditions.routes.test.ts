@@ -15,7 +15,7 @@ vi.mock("@/lib/services/MonthlyConditionService", async () => {
 
   return {
     ...actual,
-    MonthlyConditionService: {
+    MonthlyAdvanceService: {
       list: serviceMocks.listMock,
       create: serviceMocks.createMock,
       getById: serviceMocks.getByIdMock,
@@ -27,7 +27,7 @@ vi.mock("@/lib/services/MonthlyConditionService", async () => {
 
 const { listMock, createMock, getByIdMock, updateMock, deleteMock } = serviceMocks;
 
-describe("Monthly conditions API routes", () => {
+describe("Monthly advances API routes", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     process.env.TEST_AUTH_USER_ID = "user-1";
@@ -35,7 +35,7 @@ describe("Monthly conditions API routes", () => {
     delete process.env.TEST_AUTH_PROPERTY_ID;
   });
 
-  it("lists monthly conditions for authenticated tenant", async () => {
+  it("lists monthly advances for authenticated tenant", async () => {
     listMock.mockResolvedValue({
       items: [
         {
@@ -80,7 +80,7 @@ describe("Monthly conditions API routes", () => {
     );
   });
 
-  it("prevents non-admin users from creating monthly conditions", async () => {
+  it("prevents non-admin users from creating monthly advances", async () => {
     const { POST } = await import("../index");
 
     process.env.TEST_AUTH_ROLE = "tenant";
@@ -102,11 +102,9 @@ describe("Monthly conditions API routes", () => {
   });
 
   it("maps locked update errors to 422 status", async () => {
-    const { MonthlyConditionServiceError } = await import("@/lib/services/MonthlyConditionService");
+    const { MonthlyAdvanceServiceError } = await import("@/lib/services/MonthlyConditionService");
 
-    updateMock.mockRejectedValue(
-      new MonthlyConditionServiceError("MONTHLY_CONDITION_LOCKED_BY_REPORTS", "locked")
-    );
+    updateMock.mockRejectedValue(new MonthlyAdvanceServiceError("MONTHLY_ADVANCE_LOCKED_BY_REPORTS", "locked"));
 
     const { PATCH } = await import("../[id]");
 
@@ -128,7 +126,7 @@ describe("Monthly conditions API routes", () => {
     expect(response.status).toBe(422);
   });
 
-  it("deletes monthly conditions for admin", async () => {
+  it("deletes monthly advances for admin", async () => {
     deleteMock.mockResolvedValue(undefined);
 
     const { DELETE } = await import("../[id]");
@@ -145,10 +143,14 @@ describe("Monthly conditions API routes", () => {
     } as Parameters<typeof DELETE>[0]);
 
     expect(response.status).toBe(204);
-    expect(deleteMock).toHaveBeenCalledWith(expect.anything(), {
-      role: "admin",
-      tenantPropertyId: null,
-    }, "mc-1");
+    expect(deleteMock).toHaveBeenCalledWith(
+      expect.anything(),
+      {
+        role: "admin",
+        tenantPropertyId: null,
+      },
+      "mc-1"
+    );
   });
 });
 
@@ -157,4 +159,3 @@ function createLocals() {
     supabase: {},
   } as unknown as App.Locals;
 }
-

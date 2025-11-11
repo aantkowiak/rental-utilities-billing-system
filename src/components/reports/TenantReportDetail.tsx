@@ -392,8 +392,12 @@ const TenantReportLineItems = memo(function TenantReportLineItems({ items }: Lin
                       ) : null}
                     </div>
                   </td>
-                  <td className="px-4 py-2 text-sm text-muted-foreground">{item.description ? item.description : "—"}</td>
-                  <td className="px-4 py-2 text-right text-sm font-medium text-foreground">{formatMoney(item.amountRaw)}</td>
+                  <td className="px-4 py-2 text-sm text-muted-foreground">
+                    {item.description ? item.description : "—"}
+                  </td>
+                  <td className="px-4 py-2 text-right text-sm font-medium text-foreground">
+                    {formatMoney(item.amountRaw)}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -529,5 +533,3 @@ function areLineItemsEqual(previous: TenantReportLineItem[], next: TenantReportL
 
   return true;
 }
-
-

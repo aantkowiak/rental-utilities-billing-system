@@ -59,4 +59,3 @@ export const PATCH: APIRoute = async ({ request, locals }) => {
     return errorResponse(500, "internal_error", "An unexpected error occurred");
   }
 };
-

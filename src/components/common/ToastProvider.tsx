@@ -1,13 +1,5 @@
 import type { ReactNode } from "react";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -109,7 +101,8 @@ export function ToastProvider({ children }: ToastProviderProps): JSX.Element {
               "pointer-events-auto rounded-lg border p-4 shadow-lg",
               toast.variant === "success" && "border-emerald-200 bg-emerald-50 text-emerald-900",
               toast.variant === "error" && "border-red-200 bg-red-50 text-red-900",
-              toast.variant === "info" && "border-slate-200 bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100"
+              toast.variant === "info" &&
+                "border-slate-200 bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100"
             )}
             role="status"
           >
@@ -148,4 +141,3 @@ const generateToastId = (): string => {
 
   return `toast-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
 };
-

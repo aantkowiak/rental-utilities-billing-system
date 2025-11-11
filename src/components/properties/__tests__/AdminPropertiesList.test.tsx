@@ -22,7 +22,10 @@ const apiPatchMock = apiPatch as unknown as vi.Mock;
 const apiDeleteMock = apiDelete as unknown as vi.Mock;
 
 beforeEach(() => {
-  vi.stubGlobal("confirm", vi.fn(() => true));
+  vi.stubGlobal(
+    "confirm",
+    vi.fn(() => true)
+  );
 });
 
 afterEach(() => {
@@ -201,5 +204,3 @@ function buildProperty(overrides: Partial<PropertyDTO>): PropertyDTO {
     updatedAt: overrides.updatedAt ?? "2024-01-02T11:00:00.000Z",
   };
 }
-
-

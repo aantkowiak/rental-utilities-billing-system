@@ -124,5 +124,3 @@ describe("ProfileForm", () => {
     await waitFor(() => expect(submitButton).not.toBeDisabled());
   });
 });
-
-

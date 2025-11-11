@@ -17,12 +17,7 @@ import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
 import { Button } from "@/components/ui/button";
 import { apiGet, apiPost, type ApiError } from "@/lib/client/http";
-import type {
-  GenerateReportCmd,
-  ReportDTO,
-  ReportEmailAttemptDTO,
-  UpdateReportStatusCmd,
-} from "@/types";
+import type { GenerateReportCmd, ReportDTO, ReportEmailAttemptDTO, UpdateReportStatusCmd } from "@/types";
 
 const MONTH_STORAGE_KEY = "admin-reports:month";
 const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -226,7 +221,8 @@ const AdminReportRow = memo(function AdminReportRowComponent({
   const isRealized = item.report.status === "realized";
   const statusLabel = useMemo(() => formatStatus(item.report.status), [item.report.status]);
   const statusClassName = useMemo(
-    () => `inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_STYLE_MAP[item.report.status]}`,
+    () =>
+      `inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_STYLE_MAP[item.report.status]}`,
     [item.report.status]
   );
   const balanceLabel = useMemo(() => formatCurrency(item.report.balanceRaw), [item.report.balanceRaw]);
@@ -278,9 +274,7 @@ const AdminReportRow = memo(function AdminReportRowComponent({
       <td className="px-4 py-3 align-top">
         <div className="space-y-1">
           <span className={statusClassName}>{statusLabel}</span>
-          <p className="text-xs text-muted-foreground">
-            Aktualizacja: {formatDateTime(item.report.updatedAt)}
-          </p>
+          <p className="text-xs text-muted-foreground">Aktualizacja: {formatDateTime(item.report.updatedAt)}</p>
         </div>
       </td>
       <td className="px-4 py-3 align-top">
@@ -784,24 +778,21 @@ const AdminReportsContent = memo(function AdminReportsContentComponent(): JSX.El
         </div>
       </div>
 
-              {accessError ? <ErrorAlert error={accessError} /> : null}
-              {actionAccessError ? <ErrorAlert error={actionAccessError} /> : null}
-              {fetchError ? <ErrorAlert error={fetchError} /> : null}
+      {accessError ? <ErrorAlert error={accessError} /> : null}
+      {actionAccessError ? <ErrorAlert error={actionAccessError} /> : null}
+      {fetchError ? <ErrorAlert error={fetchError} /> : null}
 
       <div className="rounded-lg border bg-card p-6 shadow-sm">
         <header className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-foreground">Raporty</h2>
             <p className="text-sm text-muted-foreground">
-              {month ? `Zestawienie raportów dla miesiąca ${formatMonth(month)}.` : "Wybierz miesiąc, aby wyświetlić raporty."}
+              {month
+                ? `Zestawienie raportów dla miesiąca ${formatMonth(month)}.`
+                : "Wybierz miesiąc, aby wyświetlić raporty."}
             </p>
           </div>
-          <Button
-            variant="secondary"
-            type="button"
-            onClick={handleRefreshClick}
-            disabled={loading}
-          >
+          <Button variant="secondary" type="button" onClick={handleRefreshClick} disabled={loading}>
             Odśwież
           </Button>
         </header>
@@ -824,7 +815,6 @@ const AdminReportsContent = memo(function AdminReportsContentComponent(): JSX.El
     </section>
   );
 });
-
 
 function formatStatus(status: ReportDTO["status"]): string {
   switch (status) {
@@ -1000,4 +990,3 @@ export function AdminReportsTable(): JSX.Element {
     </ToastProvider>
   );
 }
-

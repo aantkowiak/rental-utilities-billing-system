@@ -195,4 +195,3 @@ function createLocals() {
     supabase: {},
   } as App.Locals;
 }
-

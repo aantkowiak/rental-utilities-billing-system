@@ -1,49 +1,46 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/db/database.types";
-import type { CreateMonthlyConditionCmd, MonthlyConditionDTO, UpdateMonthlyConditionCmd } from "@/types";
-import type { MonthlyConditionListFilters, MonthlyConditionListResponse } from "@/types/monthlyConditions";
+import type { CreateMonthlyAdvanceCmd, MonthlyAdvanceDTO, UpdateMonthlyAdvanceCmd } from "@/types";
+import type { MonthlyAdvanceListFilters, MonthlyAdvanceListResponse } from "@/types/monthlyConditions";
 
 /* eslint-disable @typescript-eslint/no-extraneous-class */
 
 type Supabase = SupabaseClient<Database>;
-type MonthlyConditionsTable = Database["public"]["Tables"]["monthly_conditions"];
-type MonthlyConditionRow = MonthlyConditionsTable["Row"];
+type MonthlyAdvancesTable = Database["public"]["Tables"]["monthly_conditions"];
+type MonthlyAdvanceRow = MonthlyAdvancesTable["Row"];
 
-export type MonthlyConditionServiceErrorCode =
-  | "MONTHLY_CONDITION_NOT_FOUND"
-  | "MONTHLY_CONDITION_FORBIDDEN"
-  | "MONTHLY_CONDITION_DUPLICATE"
-  | "MONTHLY_CONDITION_LOCKED_BY_REPORTS"
+export type MonthlyAdvanceServiceErrorCode =
+  | "MONTHLY_ADVANCE_NOT_FOUND"
+  | "MONTHLY_ADVANCE_FORBIDDEN"
+  | "MONTHLY_ADVANCE_DUPLICATE"
+  | "MONTHLY_ADVANCE_LOCKED_BY_REPORTS"
   | "DATABASE_ERROR";
 
-export class MonthlyConditionServiceError extends Error {
+export class MonthlyAdvanceServiceError extends Error {
   constructor(
-    public readonly code: MonthlyConditionServiceErrorCode,
+    public readonly code: MonthlyAdvanceServiceErrorCode,
     message: string
   ) {
     super(message);
   }
 }
 
-export interface MonthlyConditionAccessContext {
+export interface MonthlyAdvanceAccessContext {
   role: "admin" | "tenant";
   tenantPropertyId?: string | null;
 }
 
-export class MonthlyConditionService {
+export class MonthlyAdvanceService {
   static async list(
     supabase: Supabase,
-    context: MonthlyConditionAccessContext,
-    filters: MonthlyConditionListFilters = {}
-  ): Promise<MonthlyConditionListResponse> {
+    context: MonthlyAdvanceAccessContext,
+    filters: MonthlyAdvanceListFilters = {}
+  ): Promise<MonthlyAdvanceListResponse> {
     const normalized = normalizeListFilters(filters, context);
 
     try {
-      let query = supabase
-        .from("monthly_conditions")
-        .select("*")
-        .order("month", { ascending: false });
+      let query = supabase.from("monthly_conditions").select("*").order("month", { ascending: false });
 
       if (normalized.propertyId) {
         query = query.eq("property_id", normalized.propertyId);
@@ -56,49 +53,49 @@ export class MonthlyConditionService {
       const { data, error } = await query;
 
       if (error) {
-        throw new MonthlyConditionServiceError("DATABASE_ERROR", error.message);
+        throw new MonthlyAdvanceServiceError("DATABASE_ERROR", error.message);
       }
 
       const items = (data ?? []).map(mapRowToDto);
 
       return {
         items,
-      } satisfies MonthlyConditionListResponse;
+      } satisfies MonthlyAdvanceListResponse;
     } catch (error) {
-      if (error instanceof MonthlyConditionServiceError) {
+      if (error instanceof MonthlyAdvanceServiceError) {
         throw error;
       }
 
-      throw new MonthlyConditionServiceError("DATABASE_ERROR", (error as Error).message);
+      throw new MonthlyAdvanceServiceError("DATABASE_ERROR", (error as Error).message);
     }
   }
 
   static async getById(
     supabase: Supabase,
-    context: MonthlyConditionAccessContext,
-    monthlyConditionId: string
-  ): Promise<MonthlyConditionDTO> {
-    const { data, error } = await supabase.from("monthly_conditions").select("*").eq("id", monthlyConditionId).single();
+    context: MonthlyAdvanceAccessContext,
+    monthlyAdvanceId: string
+  ): Promise<MonthlyAdvanceDTO> {
+    const { data, error } = await supabase.from("monthly_conditions").select("*").eq("id", monthlyAdvanceId).single();
 
     if (error) {
       if (error.code === "PGRST116") {
-        throw new MonthlyConditionServiceError("MONTHLY_CONDITION_NOT_FOUND", "Monthly condition not found");
+        throw new MonthlyAdvanceServiceError("MONTHLY_ADVANCE_NOT_FOUND", "Monthly advance not found");
       }
 
-      throw new MonthlyConditionServiceError("DATABASE_ERROR", error.message);
+      throw new MonthlyAdvanceServiceError("DATABASE_ERROR", error.message);
     }
 
     if (!data) {
-      throw new MonthlyConditionServiceError("MONTHLY_CONDITION_NOT_FOUND", "Monthly condition not found");
+      throw new MonthlyAdvanceServiceError("MONTHLY_ADVANCE_NOT_FOUND", "Monthly advance not found");
     }
 
     if (context.role === "tenant") {
       if (!context.tenantPropertyId) {
-        throw new MonthlyConditionServiceError("MONTHLY_CONDITION_FORBIDDEN", "Tenant has no property assigned");
+        throw new MonthlyAdvanceServiceError("MONTHLY_ADVANCE_FORBIDDEN", "Tenant has no property assigned");
       }
 
       if (data.property_id !== context.tenantPropertyId) {
-        throw new MonthlyConditionServiceError("MONTHLY_CONDITION_FORBIDDEN", "Tenant cannot access this property");
+        throw new MonthlyAdvanceServiceError("MONTHLY_ADVANCE_FORBIDDEN", "Tenant cannot access this property");
       }
     }
 
@@ -107,17 +104,14 @@ export class MonthlyConditionService {
 
   static async create(
     supabase: Supabase,
-    context: MonthlyConditionAccessContext,
-    cmd: CreateMonthlyConditionCmd
-  ): Promise<MonthlyConditionDTO> {
+    context: MonthlyAdvanceAccessContext,
+    cmd: CreateMonthlyAdvanceCmd
+  ): Promise<MonthlyAdvanceDTO> {
     if (context.role !== "admin") {
-      throw new MonthlyConditionServiceError(
-        "MONTHLY_CONDITION_FORBIDDEN",
-        "Only admins can create monthly conditions"
-      );
+      throw new MonthlyAdvanceServiceError("MONTHLY_ADVANCE_FORBIDDEN", "Only admins can create monthly advances");
     }
 
-    const insertPayload: MonthlyConditionsTable["Insert"] = {
+    const insertPayload: MonthlyAdvancesTable["Insert"] = {
       property_id: cmd.propertyId,
       month: cmd.month,
       manager_fee: cmd.managerFee,
@@ -134,17 +128,17 @@ export class MonthlyConditionService {
 
     if (error) {
       if (error.code === "23505") {
-        throw new MonthlyConditionServiceError(
-          "MONTHLY_CONDITION_DUPLICATE",
-          "Monthly condition already exists for the given property and month"
+        throw new MonthlyAdvanceServiceError(
+          "MONTHLY_ADVANCE_DUPLICATE",
+          "Monthly advance already exists for the given property and month"
         );
       }
 
-      throw new MonthlyConditionServiceError("DATABASE_ERROR", error.message);
+      throw new MonthlyAdvanceServiceError("DATABASE_ERROR", error.message);
     }
 
     if (!data) {
-      throw new MonthlyConditionServiceError("DATABASE_ERROR", "Failed to create monthly condition");
+      throw new MonthlyAdvanceServiceError("DATABASE_ERROR", "Failed to create monthly advance");
     }
 
     return mapRowToDto(data);
@@ -152,20 +146,17 @@ export class MonthlyConditionService {
 
   static async update(
     supabase: Supabase,
-    context: MonthlyConditionAccessContext,
-    monthlyConditionId: string,
-    cmd: UpdateMonthlyConditionCmd
-  ): Promise<MonthlyConditionDTO> {
+    context: MonthlyAdvanceAccessContext,
+    monthlyAdvanceId: string,
+    cmd: UpdateMonthlyAdvanceCmd
+  ): Promise<MonthlyAdvanceDTO> {
     if (context.role !== "admin") {
-      throw new MonthlyConditionServiceError(
-        "MONTHLY_CONDITION_FORBIDDEN",
-        "Only admins can update monthly conditions"
-      );
+      throw new MonthlyAdvanceServiceError("MONTHLY_ADVANCE_FORBIDDEN", "Only admins can update monthly advances");
     }
 
-    const existing = await this.getById(supabase, context, monthlyConditionId);
+    const existing = await this.getById(supabase, context, monthlyAdvanceId);
 
-    const updatePayload: MonthlyConditionsTable["Update"] = {};
+    const updatePayload: MonthlyAdvancesTable["Update"] = {};
 
     if (cmd.propertyId !== undefined) {
       updatePayload.property_id = cmd.propertyId;
@@ -214,46 +205,46 @@ export class MonthlyConditionService {
     const { data: blockingReport, error: reportsError } = await supabase
       .from("reports")
       .select("id")
-      .eq("monthly_conditions_id", monthlyConditionId)
+      .eq("monthly_conditions_id", monthlyAdvanceId)
       .neq("status", "draft")
       .limit(1)
       .maybeSingle();
 
     if (reportsError) {
-      throw new MonthlyConditionServiceError("DATABASE_ERROR", reportsError.message);
+      throw new MonthlyAdvanceServiceError("DATABASE_ERROR", reportsError.message);
     }
 
     if (blockingReport) {
-      throw new MonthlyConditionServiceError(
-        "MONTHLY_CONDITION_LOCKED_BY_REPORTS",
-        "Cannot update monthly conditions linked to realized reports"
+      throw new MonthlyAdvanceServiceError(
+        "MONTHLY_ADVANCE_LOCKED_BY_REPORTS",
+        "Cannot update monthly advances linked to realized reports"
       );
     }
 
     const { data, error } = await supabase
       .from("monthly_conditions")
       .update(updatePayload)
-      .eq("id", monthlyConditionId)
+      .eq("id", monthlyAdvanceId)
       .select("*")
       .single();
 
     if (error) {
       if (error.code === "23505") {
-        throw new MonthlyConditionServiceError(
-          "MONTHLY_CONDITION_DUPLICATE",
-          "Monthly condition already exists for the given property and month"
+        throw new MonthlyAdvanceServiceError(
+          "MONTHLY_ADVANCE_DUPLICATE",
+          "Monthly advance already exists for the given property and month"
         );
       }
 
       if (error.code === "PGRST116") {
-        throw new MonthlyConditionServiceError("MONTHLY_CONDITION_NOT_FOUND", "Monthly condition not found");
+        throw new MonthlyAdvanceServiceError("MONTHLY_ADVANCE_NOT_FOUND", "Monthly advance not found");
       }
 
-      throw new MonthlyConditionServiceError("DATABASE_ERROR", error.message);
+      throw new MonthlyAdvanceServiceError("DATABASE_ERROR", error.message);
     }
 
     if (!data) {
-      throw new MonthlyConditionServiceError("MONTHLY_CONDITION_NOT_FOUND", "Monthly condition not found");
+      throw new MonthlyAdvanceServiceError("MONTHLY_ADVANCE_NOT_FOUND", "Monthly advance not found");
     }
 
     return mapRowToDto(data);
@@ -261,31 +252,28 @@ export class MonthlyConditionService {
 
   static async delete(
     supabase: Supabase,
-    context: MonthlyConditionAccessContext,
-    monthlyConditionId: string
+    context: MonthlyAdvanceAccessContext,
+    monthlyAdvanceId: string
   ): Promise<void> {
     if (context.role !== "admin") {
-      throw new MonthlyConditionServiceError(
-        "MONTHLY_CONDITION_FORBIDDEN",
-        "Only admins can delete monthly conditions"
-      );
+      throw new MonthlyAdvanceServiceError("MONTHLY_ADVANCE_FORBIDDEN", "Only admins can delete monthly advances");
     }
 
-    const { error } = await supabase.from("monthly_conditions").delete().eq("id", monthlyConditionId);
+    const { error } = await supabase.from("monthly_conditions").delete().eq("id", monthlyAdvanceId);
 
     if (error) {
       if (error.code === "PGRST116") {
-        throw new MonthlyConditionServiceError("MONTHLY_CONDITION_NOT_FOUND", "Monthly condition not found");
+        throw new MonthlyAdvanceServiceError("MONTHLY_ADVANCE_NOT_FOUND", "Monthly advance not found");
       }
 
       if (error.code === "23503") {
-        throw new MonthlyConditionServiceError(
-          "MONTHLY_CONDITION_LOCKED_BY_REPORTS",
-          "Cannot delete monthly conditions linked to reports"
+        throw new MonthlyAdvanceServiceError(
+          "MONTHLY_ADVANCE_LOCKED_BY_REPORTS",
+          "Cannot delete monthly advances linked to reports"
         );
       }
 
-      throw new MonthlyConditionServiceError("DATABASE_ERROR", error.message);
+      throw new MonthlyAdvanceServiceError("DATABASE_ERROR", error.message);
     }
   }
 }
@@ -296,12 +284,12 @@ interface NormalizedListFilters {
 }
 
 const normalizeListFilters = (
-  filters: MonthlyConditionListFilters,
-  context: MonthlyConditionAccessContext
+  filters: MonthlyAdvanceListFilters,
+  context: MonthlyAdvanceAccessContext
 ): NormalizedListFilters => {
   if (context.role === "tenant") {
     if (!context.tenantPropertyId) {
-      throw new MonthlyConditionServiceError("MONTHLY_CONDITION_FORBIDDEN", "Tenant has no property assigned");
+      throw new MonthlyAdvanceServiceError("MONTHLY_ADVANCE_FORBIDDEN", "Tenant has no property assigned");
     }
 
     return {
@@ -316,7 +304,7 @@ const normalizeListFilters = (
   } satisfies NormalizedListFilters;
 };
 
-const mapRowToDto = (row: MonthlyConditionRow): MonthlyConditionDTO => ({
+const mapRowToDto = (row: MonthlyAdvanceRow): MonthlyAdvanceDTO => ({
   id: row.id,
   propertyId: row.property_id,
   month: row.month,

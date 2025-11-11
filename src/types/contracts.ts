@@ -22,8 +22,6 @@ export const buildContractResponse = (contract: ContractDTO): ContractResponse =
   contract,
 });
 
-export const buildContractsListResponse = (
-  items: ContractDTO[]
-): ListContractsResponse => ({
+export const buildContractsListResponse = (items: ContractDTO[]): ListContractsResponse => ({
   items,
 });

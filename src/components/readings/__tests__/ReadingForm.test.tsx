@@ -157,12 +157,7 @@ describe("ReadingForm", () => {
   });
 
   const fillReadingInputs = (values?: { cold?: string; hot?: string; heating?: string; comment?: string }) => {
-    const {
-      cold = "1,111",
-      hot = "2,222",
-      heating = "3,333",
-      comment = "Notatka",
-    } = values ?? {};
+    const { cold = "1,111", hot = "2,222", heating = "3,333", comment = "Notatka" } = values ?? {};
 
     fireEvent.change(screen.getByLabelText(/zimna woda/i), { target: { value: cold } });
     fireEvent.change(screen.getByLabelText(/ciepła woda/i), { target: { value: hot } });
@@ -193,4 +188,3 @@ function buildReading(overrides: Partial<ReadingDTO> = {}): ReadingDTO {
     ...overrides,
   };
 }
-

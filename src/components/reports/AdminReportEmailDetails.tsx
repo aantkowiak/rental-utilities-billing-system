@@ -27,7 +27,8 @@ export function AdminReportEmailDetails({ attempt, reportId }: AdminReportEmailD
         <span className="font-medium text-foreground">Raport:</span> {reportId}
       </p>
       <p>
-        <span className="font-medium text-foreground">Data próby:</span> {attemptDateFormatter.format(new Date(attempt.attemptedAt))}
+        <span className="font-medium text-foreground">Data próby:</span>{" "}
+        {attemptDateFormatter.format(new Date(attempt.attemptedAt))}
       </p>
       <p>
         <span className="font-medium text-foreground">Status:</span> {formatAttemptStatus(attempt.status)}
@@ -53,4 +54,3 @@ function formatAttemptStatus(status: ReportEmailAttemptDTO["status"] | null | un
       return "Nieznany status";
   }
 }
-

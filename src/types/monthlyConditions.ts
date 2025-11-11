@@ -1,24 +1,22 @@
-import type { MonthlyConditionDTO } from "@/types";
+import type { MonthlyAdvanceDTO } from "@/types";
 
-export interface MonthlyConditionListFilters {
+export interface MonthlyAdvanceListFilters {
   propertyId?: string;
   month?: string;
 }
 
-export interface MonthlyConditionListResponse {
-  items: MonthlyConditionDTO[];
+export interface MonthlyAdvanceListResponse {
+  items: MonthlyAdvanceDTO[];
 }
 
-export interface MonthlyConditionResponse {
-  monthlyCondition: MonthlyConditionDTO;
+export interface MonthlyAdvanceResponse {
+  monthlyAdvance: MonthlyAdvanceDTO;
 }
 
-export const buildMonthlyConditionResponse = (monthlyCondition: MonthlyConditionDTO): MonthlyConditionResponse => ({
-  monthlyCondition,
+export const buildMonthlyAdvanceResponse = (monthlyAdvance: MonthlyAdvanceDTO): MonthlyAdvanceResponse => ({
+  monthlyAdvance,
 });
 
-export const buildMonthlyConditionsListResponse = (
-  items: MonthlyConditionDTO[]
-): MonthlyConditionListResponse => ({
+export const buildMonthlyAdvancesListResponse = (items: MonthlyAdvanceDTO[]): MonthlyAdvanceListResponse => ({
   items,
 });

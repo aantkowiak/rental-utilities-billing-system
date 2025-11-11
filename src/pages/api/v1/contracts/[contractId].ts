@@ -24,7 +24,11 @@ export const GET: APIRoute = async ({ request, locals, params }) => {
   }
 
   try {
-    const contract = await ContractService.getById(locals.supabase, { role: auth.role, userId: auth.user.id }, contractId);
+    const contract = await ContractService.getById(
+      locals.supabase,
+      { role: auth.role, userId: auth.user.id },
+      contractId
+    );
 
     return new Response(JSON.stringify(buildContractResponse(contract)), {
       status: 200,
@@ -137,4 +141,3 @@ function validateContractId(params: Record<string, string | undefined>): string 
   const validation = ContractIdSchema.safeParse(params);
   return validation.success ? validation.data.contractId : null;
 }
-

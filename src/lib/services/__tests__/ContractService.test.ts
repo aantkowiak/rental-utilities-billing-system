@@ -28,8 +28,7 @@ describe("ContractService", () => {
       supabase,
       { role: "tenant", userId: "tenant-1" },
       {
-        filters: {
-        },
+        filters: {},
       }
     );
 
@@ -163,4 +162,3 @@ function createSupabaseForInsert(result: {
 
   return { supabase, insertMock };
 }
-

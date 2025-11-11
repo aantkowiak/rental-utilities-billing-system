@@ -36,8 +36,8 @@ export class ProfileService {
     const items: ProfileWithEmail[] = profiles.map((row) => ({
       userId: row.user_id,
       role: row.role,
-      propertyId: row.property_id,
-      displayName: row.display_name,
+      propertyId: row.property_id ?? null,
+      displayName: row.display_name ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       email: row.email,
@@ -99,4 +99,3 @@ export class ProfileService {
     return profileDTO;
   }
 }
-

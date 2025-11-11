@@ -1,17 +1,17 @@
 import { errorResponse } from "@/lib/errors";
-import { MonthlyConditionServiceError } from "@/lib/services/MonthlyConditionService";
+import { MonthlyAdvanceServiceError } from "@/lib/services/MonthlyConditionService";
 
-export const mapMonthlyConditionServiceError = (error: unknown): Response => {
-  if (error instanceof MonthlyConditionServiceError) {
+export const mapMonthlyAdvanceServiceError = (error: unknown): Response => {
+  if (error instanceof MonthlyAdvanceServiceError) {
     switch (error.code) {
-      case "MONTHLY_CONDITION_NOT_FOUND":
-        return errorResponse(404, "monthly_condition_not_found", error.message);
-      case "MONTHLY_CONDITION_FORBIDDEN":
+      case "MONTHLY_ADVANCE_NOT_FOUND":
+        return errorResponse(404, "monthly_advance_not_found", error.message);
+      case "MONTHLY_ADVANCE_FORBIDDEN":
         return errorResponse(403, "forbidden", error.message);
-      case "MONTHLY_CONDITION_DUPLICATE":
+      case "MONTHLY_ADVANCE_DUPLICATE":
         return errorResponse(409, "conflict", error.message);
-      case "MONTHLY_CONDITION_LOCKED_BY_REPORTS":
-        return errorResponse(422, "monthly_condition_locked", error.message);
+      case "MONTHLY_ADVANCE_LOCKED_BY_REPORTS":
+        return errorResponse(422, "monthly_advance_locked", error.message);
       default:
         return errorResponse(500, "internal_error", error.message);
     }

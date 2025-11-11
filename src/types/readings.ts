@@ -18,8 +18,6 @@ export const buildReadingResponse = (reading: ReadingDTO): ReadingResponse => ({
   reading,
 });
 
-export const buildReadingsListResponse = (
-  items: ReadingDTO[]
-): ReadingListResponse => ({
+export const buildReadingsListResponse = (items: ReadingDTO[]): ReadingListResponse => ({
   items,
 });

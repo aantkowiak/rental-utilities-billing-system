@@ -3,9 +3,7 @@
  * Provides consistent error format across all API routes.
  */
 
-interface ErrorDetails {
-  [key: string]: unknown;
-}
+type ErrorDetails = Record<string, unknown>;
 
 interface ErrorResponse {
   error: {
@@ -24,12 +22,7 @@ interface ErrorResponse {
  * @param details - Optional additional error details
  * @returns Response object with JSON error body
  */
-export function errorResponse(
-  status: number,
-  code: string,
-  message: string,
-  details?: ErrorDetails
-): Response {
+export function errorResponse(status: number, code: string, message: string, details?: ErrorDetails): Response {
   const body: ErrorResponse = {
     error: {
       code,
@@ -43,4 +36,3 @@ export function errorResponse(
     headers: { "Content-Type": "application/json" },
   });
 }
-

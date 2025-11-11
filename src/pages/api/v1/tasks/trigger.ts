@@ -56,5 +56,3 @@ export const POST: APIRoute = async ({ request, url, locals }) => {
     return errorResponse(500, "internal_error", "Failed to forward task trigger");
   }
 };
-
-

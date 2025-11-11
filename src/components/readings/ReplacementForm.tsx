@@ -182,7 +182,10 @@ export function ReplacementForm({ source, onClose, onSuccess, onPendingChange }:
     [formState, onSuccess, pending, reset, source.id, source.propertyId]
   );
 
-  const formattedSourceDate = useMemo(() => DATE_TIME_INPUT_FORMATTER.format(new Date(source.readingAt)), [source.readingAt]);
+  const formattedSourceDate = useMemo(
+    () => DATE_TIME_INPUT_FORMATTER.format(new Date(source.readingAt)),
+    [source.readingAt]
+  );
   const formattedSourceValues = useMemo(
     () =>
       `${DECIMAL_FORMATTER.format(source.coldM3)} / ${DECIMAL_FORMATTER.format(source.hotM3)} / ${DECIMAL_FORMATTER.format(
@@ -195,7 +198,10 @@ export function ReplacementForm({ source, onClose, onSuccess, onPendingChange }:
     <form className="space-y-4" noValidate onSubmit={handleSubmit}>
       <ErrorAlert error={formError} />
       {statusMessage ? (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800" role="status">
+        <div
+          className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+          role="status"
+        >
           {statusMessage}
         </div>
       ) : null}
@@ -239,7 +245,9 @@ export function ReplacementForm({ source, onClose, onSuccess, onPendingChange }:
             disabled={pending}
           />
           {fieldErrors.effectiveMonth ? <p className="text-sm text-destructive">{fieldErrors.effectiveMonth}</p> : null}
-          <p className="text-xs text-muted-foreground">Kotwice zostaną wyliczone dla miesiąca zawierającego wskazany dzień.</p>
+          <p className="text-xs text-muted-foreground">
+            Kotwice zostaną wyliczone dla miesiąca zawierającego wskazany dzień.
+          </p>
         </div>
       </div>
 
@@ -331,4 +339,3 @@ function buildInputClasses(error?: string): string {
     error ? "border-destructive focus-visible:ring-destructive/40" : "border-input",
   ].join(" ");
 }
-

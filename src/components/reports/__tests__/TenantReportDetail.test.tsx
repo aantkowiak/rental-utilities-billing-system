@@ -49,9 +49,7 @@ describe("TenantReportDetail", () => {
     expect(screen.getByText("Opłata serwisowa")).toBeInTheDocument();
     expect(screen.getByText("Opis pozycji")).toBeInTheDocument();
     expect(screen.getByText(/^Serwis$/i)).toBeInTheDocument();
-    expect(
-      screen.getByText((content) => content.replace(/\s+/g, " ").includes("123,45"))
-    ).toBeInTheDocument();
+    expect(screen.getByText((content) => content.replace(/\s+/g, " ").includes("123,45"))).toBeInTheDocument();
     expect(screen.getByText(/Status:\s*sent/i)).toBeInTheDocument();
   });
 
@@ -143,5 +141,3 @@ function buildEmailAttempt(overrides: Partial<ReportEmailAttemptDTO>): ReportEma
     status: overrides.status ?? "queued",
   };
 }
-
-

@@ -87,8 +87,12 @@ const PropertyRow = memo(function PropertyRow({
         </div>
       </td>
       <td className="px-4 py-3">{formatStartMonth(property.startMonth)}</td>
-      <td className="px-4 py-3 text-sm text-muted-foreground">{formatStartMonth(property.createdAt?.slice(0, 7) ?? "")}</td>
-      <td className="px-4 py-3 text-sm text-muted-foreground">{formatStartMonth(property.updatedAt?.slice(0, 7) ?? "")}</td>
+      <td className="px-4 py-3 text-sm text-muted-foreground">
+        {formatStartMonth(property.createdAt?.slice(0, 7) ?? "")}
+      </td>
+      <td className="px-4 py-3 text-sm text-muted-foreground">
+        {formatStartMonth(property.updatedAt?.slice(0, 7) ?? "")}
+      </td>
       <td className="px-4 py-3">
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" disabled={actionsLocked} onClick={() => onEdit(property)}>

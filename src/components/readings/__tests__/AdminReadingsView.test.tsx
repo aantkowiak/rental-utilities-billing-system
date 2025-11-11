@@ -35,6 +35,14 @@ describe("AdminReadingsView", () => {
     window.localStorage.clear();
     window.localStorage.setItem(PROPERTY_KEY, "property-1");
     window.localStorage.setItem(MONTH_KEY, "2024-02");
+
+    // Mock properties list request
+    apiGetMock.mockImplementation((url: string) => {
+      if (url === "/api/v1/properties") {
+        return Promise.resolve({ items: [{ id: "property-1", label: "Test Property" }] });
+      }
+      return Promise.reject(new Error(`Unmocked URL: ${url}`));
+    });
   });
 
   afterEach(() => {
@@ -44,14 +52,22 @@ describe("AdminReadingsView", () => {
   it("skips refetching when filters do not change after debounce", async () => {
     const initialResponse = { items: [buildReading()] } satisfies ReadingListResponse;
 
-    apiGetMock.mockResolvedValue(initialResponse);
+    apiGetMock.mockImplementation((url: string) => {
+      if (url === "/api/v1/properties") {
+        return Promise.resolve({ items: [{ id: "property-1", label: "Test Property" }] });
+      }
+      return Promise.resolve(initialResponse);
+    });
 
     render(<AdminReadingsView />);
 
-    await waitFor(() => expect(apiGetMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(apiGetMock).toHaveBeenCalledTimes(2)); // properties + readings
     apiGetMock.mockClear();
 
-    const propertyInput = await screen.findByLabelText(/Identyfikator nieruchomości/i);
+    const propertyInput = document.getElementById("admin-readings-property");
+    if (!propertyInput) {
+      throw new Error("Property input not found");
+    }
 
     vi.useFakeTimers();
     fireEvent.change(propertyInput, { target: { value: "property-1" } });
@@ -69,7 +85,12 @@ describe("AdminReadingsView", () => {
   });
 
   it("renders readings table after successful list fetch", async () => {
-    apiGetMock.mockResolvedValueOnce({ items: [buildReading()] } satisfies ReadingListResponse);
+    apiGetMock.mockImplementation((url: string) => {
+      if (url === "/api/v1/properties") {
+        return Promise.resolve({ items: [{ id: "property-1", label: "Test Property" }] });
+      }
+      return Promise.resolve({ items: [buildReading()] } satisfies ReadingListResponse);
+    });
 
     render(<AdminReadingsView />);
 
@@ -84,9 +105,17 @@ describe("AdminReadingsView", () => {
     const originalReading = buildReading({ id: "reading-1", coldM3: 10 });
     const updatedReading = buildReading({ id: "reading-1", coldM3: 12, updatedAt: "2024-02-11T10:00:00.000Z" });
 
-    apiGetMock
-      .mockResolvedValueOnce({ items: [originalReading] } satisfies ReadingListResponse)
-      .mockResolvedValueOnce({ items: [updatedReading] } satisfies ReadingListResponse);
+    let callCount = 0;
+    apiGetMock.mockImplementation((url: string) => {
+      if (url === "/api/v1/properties") {
+        return Promise.resolve({ items: [{ id: "property-1", label: "Test Property" }] });
+      }
+      callCount++;
+      if (callCount === 1) {
+        return Promise.resolve({ items: [originalReading] } satisfies ReadingListResponse);
+      }
+      return Promise.resolve({ items: [updatedReading] } satisfies ReadingListResponse);
+    });
     apiPatchMock.mockResolvedValueOnce({ reading: updatedReading } satisfies ReadingResponse);
 
     render(<AdminReadingsView />);
@@ -111,7 +140,12 @@ describe("AdminReadingsView", () => {
   it("maps validation errors when update fails with validation_error", async () => {
     const originalReading = buildReading({ id: "reading-422", hotM3: 15 });
 
-    apiGetMock.mockResolvedValueOnce({ items: [originalReading] } satisfies ReadingListResponse);
+    apiGetMock.mockImplementation((url: string) => {
+      if (url === "/api/v1/properties") {
+        return Promise.resolve({ items: [{ id: "property-1", label: "Test Property" }] });
+      }
+      return Promise.resolve({ items: [originalReading] } satisfies ReadingListResponse);
+    });
     apiPatchMock.mockRejectedValueOnce({
       code: "validation_error",
       message: "Validation failed",
@@ -134,9 +168,17 @@ describe("AdminReadingsView", () => {
   it("deletes a reading after confirmation and refetches list", async () => {
     const reading = buildReading({ id: "to-delete" });
 
-    apiGetMock
-      .mockResolvedValueOnce({ items: [reading] } satisfies ReadingListResponse)
-      .mockResolvedValueOnce({ items: [] } satisfies ReadingListResponse);
+    let callCount = 0;
+    apiGetMock.mockImplementation((url: string) => {
+      if (url === "/api/v1/properties") {
+        return Promise.resolve({ items: [{ id: "property-1", label: "Test Property" }] });
+      }
+      callCount++;
+      if (callCount === 1) {
+        return Promise.resolve({ items: [reading] } satisfies ReadingListResponse);
+      }
+      return Promise.resolve({ items: [] } satisfies ReadingListResponse);
+    });
     apiDeleteMock.mockResolvedValueOnce({});
 
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -156,9 +198,12 @@ describe("AdminReadingsView", () => {
   it("submits replacement form and closes modal after success", async () => {
     const reading = buildReading({ id: "replacement-source" });
 
-    apiGetMock
-      .mockResolvedValueOnce({ items: [reading] } satisfies ReadingListResponse)
-      .mockResolvedValueOnce({ items: [reading] } satisfies ReadingListResponse);
+    apiGetMock.mockImplementation((url: string) => {
+      if (url === "/api/v1/properties") {
+        return Promise.resolve({ items: [{ id: "property-1", label: "Test Property" }] });
+      }
+      return Promise.resolve({ items: [reading] } satisfies ReadingListResponse);
+    });
     apiPostMock.mockResolvedValueOnce({}).mockResolvedValueOnce({});
 
     render(<AdminReadingsView />);
@@ -192,9 +237,12 @@ describe("AdminReadingsView", () => {
   it("plans anchor recalculation and hides overlay after completion", async () => {
     const reading = buildReading({ id: "anchor-reading" });
 
-    apiGetMock
-      .mockResolvedValueOnce({ items: [reading] } satisfies ReadingListResponse)
-      .mockResolvedValueOnce({ items: [reading] } satisfies ReadingListResponse);
+    apiGetMock.mockImplementation((url: string) => {
+      if (url === "/api/v1/properties") {
+        return Promise.resolve({ items: [{ id: "property-1", label: "Test Property" }] });
+      }
+      return Promise.resolve({ items: [reading] } satisfies ReadingListResponse);
+    });
 
     let resolvePost: ((value: unknown) => void) | undefined;
     apiPostMock.mockImplementationOnce(
@@ -249,5 +297,3 @@ function buildReading(overrides: Partial<ReadingDTO> = {}): ReadingDTO {
     ...overrides,
   };
 }
-
-

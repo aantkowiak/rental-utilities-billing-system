@@ -435,7 +435,16 @@ const ReportActions = memo(function ReportActions({
     } finally {
       setPendingFlag("regenerate", false);
     }
-  }, [canRegenerate, handleActionFailure, onActionAccessError, onRefetch, pending.regenerate, pushToast, report.id, setPendingFlag]);
+  }, [
+    canRegenerate,
+    handleActionFailure,
+    onActionAccessError,
+    onRefetch,
+    pending.regenerate,
+    pushToast,
+    report.id,
+    setPendingFlag,
+  ]);
 
   const handleResend = useCallback(async () => {
     if (!canSendEmail || pending.resend) {
@@ -458,7 +467,16 @@ const ReportActions = memo(function ReportActions({
     } finally {
       setPendingFlag("resend", false);
     }
-  }, [canSendEmail, handleActionFailure, onActionAccessError, onRefetch, pending.resend, pushToast, report.id, setPendingFlag]);
+  }, [
+    canSendEmail,
+    handleActionFailure,
+    onActionAccessError,
+    onRefetch,
+    pending.resend,
+    pushToast,
+    report.id,
+    setPendingFlag,
+  ]);
 
   const handleToggleRealized = useCallback(async () => {
     if (!canToggleRealized || pending.toggle) {

@@ -25,9 +25,11 @@ const getConfiguredServiceRoleKey = (): string | undefined => {
     return metaKey;
   }
 
-  const processEnv = (globalThis as typeof globalThis & {
-    process?: { env?: Record<string, string | undefined> };
-  }).process?.env;
+  const processEnv = (
+    globalThis as typeof globalThis & {
+      process?: { env?: Record<string, string | undefined> };
+    }
+  ).process?.env;
 
   return processEnv?.SERVICE_ROLE_KEY;
 };
@@ -85,5 +87,3 @@ export const POST: APIRoute = async ({ request, params }) => {
     return errorResponse(500, "internal_error", "An unexpected error occurred");
   }
 };
-
-

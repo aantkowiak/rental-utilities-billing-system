@@ -19,10 +19,9 @@ export function RoleNav({ role, currentPath }: RoleNavProps): JSX.Element {
       return [
         { href: "/admin/properties", label: "Nieruchomości" },
         { href: "/admin/contracts", label: "Umowy" },
-        { href: "/admin/monthly-conditions", label: "Warunki miesięczne" },
+        { href: "/admin/monthly-conditions", label: "Zaliczki miesięczne" },
         { href: "/admin/readings", label: "Odczyty" },
         { href: "/admin/reports", label: "Raporty" },
-        { href: "/admin/tasks", label: "Zadania" },
         { href: "/admin/profile", label: "Profil" },
       ];
     }

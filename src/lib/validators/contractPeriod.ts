@@ -80,7 +80,10 @@ export function contractPeriodFromPostgresRange(value: unknown): ContractPeriod 
   }
 
   const lowerRaw = content.slice(0, commaIndex).replace(/"/g, "").trim();
-  const upperRaw = content.slice(commaIndex + 1).replace(/"/g, "").trim();
+  const upperRaw = content
+    .slice(commaIndex + 1)
+    .replace(/"/g, "")
+    .trim();
 
   if (!lowerInclusive || upperInclusive) {
     throw new Error("UNSUPPORTED_CONTRACT_PERIOD_BOUNDS");
@@ -138,4 +141,3 @@ function toValidDate(value: string): Date {
 function isoDateStringFromDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
-

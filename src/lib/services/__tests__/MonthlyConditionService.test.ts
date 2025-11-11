@@ -3,8 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Database } from "@/db/database.types";
-import type { MonthlyConditionDTO } from "@/types";
-import { MonthlyConditionService, MonthlyConditionServiceError } from "@/lib/services/MonthlyConditionService";
+import type { MonthlyAdvanceDTO } from "@/types";
+import { MonthlyAdvanceService, MonthlyAdvanceServiceError } from "@/lib/services/MonthlyConditionService";
 
 const BASE_ROW: Database["public"]["Tables"]["monthly_conditions"]["Row"] = {
   id: "mc-1",
@@ -22,7 +22,7 @@ const BASE_ROW: Database["public"]["Tables"]["monthly_conditions"]["Row"] = {
   updated_at: "2025-01-03T00:00:00.000Z",
 };
 
-const BASE_DTO: MonthlyConditionDTO = {
+const BASE_DTO: MonthlyAdvanceDTO = {
   id: "mc-1",
   propertyId: "property-1",
   month: "2025-01-01",
@@ -38,19 +38,19 @@ const BASE_DTO: MonthlyConditionDTO = {
   updatedAt: "2025-01-03T00:00:00.000Z",
 };
 
-describe("MonthlyConditionService", () => {
+describe("MonthlyAdvanceService", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("lists monthly conditions and enforces tenant property filter", async () => {
+  it("lists monthly advances and enforces tenant property filter", async () => {
     const { supabase, builder } = createSupabaseForList({
       data: [BASE_ROW],
       count: 1,
       error: null,
     });
 
-    const result = await MonthlyConditionService.list(
+    const result = await MonthlyAdvanceService.list(
       supabase,
       { role: "tenant", tenantPropertyId: BASE_ROW.property_id },
       {}
@@ -63,12 +63,12 @@ describe("MonthlyConditionService", () => {
     });
   });
 
-  it("prevents tenants from reading monthly conditions of other properties", async () => {
+  it("prevents tenants from reading monthly advances of other properties", async () => {
     const { supabase } = createSupabaseForSingle(BASE_ROW);
 
     await expect(
-      MonthlyConditionService.getById(supabase, { role: "tenant", tenantPropertyId: "other-property" }, BASE_ROW.id)
-    ).rejects.toMatchObject({ code: "MONTHLY_CONDITION_FORBIDDEN" satisfies MonthlyConditionServiceError["code"] });
+      MonthlyAdvanceService.getById(supabase, { role: "tenant", tenantPropertyId: "other-property" }, BASE_ROW.id)
+    ).rejects.toMatchObject({ code: "MONTHLY_ADVANCE_FORBIDDEN" satisfies MonthlyAdvanceServiceError["code"] });
   });
 
   it("maps unique constraint errors to duplicate conflicts on create", async () => {
@@ -78,7 +78,7 @@ describe("MonthlyConditionService", () => {
     });
 
     await expect(
-      MonthlyConditionService.create(
+      MonthlyAdvanceService.create(
         supabase,
         { role: "admin" },
         {
@@ -94,20 +94,20 @@ describe("MonthlyConditionService", () => {
           advancePayment: BASE_ROW.advance_payment,
         }
       )
-    ).rejects.toMatchObject({ code: "MONTHLY_CONDITION_DUPLICATE" satisfies MonthlyConditionServiceError["code"] });
+    ).rejects.toMatchObject({ code: "MONTHLY_ADVANCE_DUPLICATE" satisfies MonthlyAdvanceServiceError["code"] });
   });
 
   it("returns existing entry when update payload is empty", async () => {
     const supabase = createSupabaseStub();
-    vi.spyOn(MonthlyConditionService, "getById").mockResolvedValue(BASE_DTO);
+    vi.spyOn(MonthlyAdvanceService, "getById").mockResolvedValue(BASE_DTO);
 
-    const result = await MonthlyConditionService.update(supabase, { role: "admin" }, BASE_ROW.id, {});
+    const result = await MonthlyAdvanceService.update(supabase, { role: "admin" }, BASE_ROW.id, {});
 
     expect(result).toEqual(BASE_DTO);
   });
 
   it("blocks updates when linked reports are realized", async () => {
-    vi.spyOn(MonthlyConditionService, "getById").mockResolvedValue(BASE_DTO);
+    vi.spyOn(MonthlyAdvanceService, "getById").mockResolvedValue(BASE_DTO);
 
     const { supabase, reportsBuilder } = createSupabaseForUpdate({
       reportsResult: { data: { id: "report-1" }, error: null },
@@ -115,9 +115,9 @@ describe("MonthlyConditionService", () => {
     });
 
     await expect(
-      MonthlyConditionService.update(supabase, { role: "admin" }, BASE_ROW.id, { managerFee: 555.55 })
+      MonthlyAdvanceService.update(supabase, { role: "admin" }, BASE_ROW.id, { managerFee: 555.55 })
     ).rejects.toMatchObject({
-      code: "MONTHLY_CONDITION_LOCKED_BY_REPORTS" satisfies MonthlyConditionServiceError["code"],
+      code: "MONTHLY_ADVANCE_LOCKED_BY_REPORTS" satisfies MonthlyAdvanceServiceError["code"],
     });
 
     expect(reportsBuilder.maybeSingle).toHaveBeenCalled();
@@ -126,8 +126,8 @@ describe("MonthlyConditionService", () => {
   it("maps foreign key violations on delete to locked error", async () => {
     const { supabase } = createSupabaseForDelete({ error: { code: "23503", message: "fk" } });
 
-    await expect(MonthlyConditionService.delete(supabase, { role: "admin" }, BASE_ROW.id)).rejects.toMatchObject({
-      code: "MONTHLY_CONDITION_LOCKED_BY_REPORTS" satisfies MonthlyConditionServiceError["code"],
+    await expect(MonthlyAdvanceService.delete(supabase, { role: "admin" }, BASE_ROW.id)).rejects.toMatchObject({
+      code: "MONTHLY_ADVANCE_LOCKED_BY_REPORTS" satisfies MonthlyAdvanceServiceError["code"],
     });
   });
 });

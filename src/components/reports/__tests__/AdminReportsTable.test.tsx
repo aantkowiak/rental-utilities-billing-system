@@ -255,4 +255,3 @@ function buildEmailAttempt(overrides: Partial<ReportEmailAttemptDTO> = {}): Repo
     errorMessage: overrides.errorMessage ?? "",
   };
 }
-

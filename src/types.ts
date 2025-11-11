@@ -23,7 +23,7 @@ type CamelCase<S extends string> = S extends `${infer H}_${infer R}` ? `${Lowerc
 type PropertyRow = Tables<"properties">;
 type ProfileRow = Tables<"profiles">;
 type ContractRow = Tables<"contracts">;
-type MonthlyConditionRow = Tables<"monthly_conditions">;
+type MonthlyAdvanceRow = Tables<"monthly_conditions">;
 type ReadingRow = Tables<"readings">;
 type ReportRow = Tables<"reports">;
 type ReportEmailRow = Tables<"report_emails">;
@@ -41,7 +41,7 @@ export interface ContractPeriod {
 export type ContractDTO = Omit<Camelize<ContractRow>, "period"> & {
   period: ContractPeriod;
 };
-export type MonthlyConditionDTO = Camelize<MonthlyConditionRow>;
+export type MonthlyAdvanceDTO = Camelize<MonthlyAdvanceRow>;
 export type ReadingDTO = Camelize<ReadingRow>;
 export type ReadingOrigin = "tenant" | "admin_replacement";
 export type ReadingType = "regular" | "baseline";
@@ -72,9 +72,9 @@ export interface CreateContractCmd {
 
 export type UpdateContractCmd = Partial<CreateContractCmd>;
 
-/* 2.5 Monthly Conditions */
-export type CreateMonthlyConditionCmd = Pick<
-  MonthlyConditionDTO,
+/* 2.5 Monthly Advances */
+export type CreateMonthlyAdvanceCmd = Pick<
+  MonthlyAdvanceDTO,
   | "propertyId"
   | "month"
   | "managerFee"
@@ -86,7 +86,7 @@ export type CreateMonthlyConditionCmd = Pick<
   | "forecastHeating"
   | "advancePayment"
 >;
-export type UpdateMonthlyConditionCmd = Partial<CreateMonthlyConditionCmd>;
+export type UpdateMonthlyAdvanceCmd = Partial<CreateMonthlyAdvanceCmd>;
 
 /* 2.6 Readings */
 export type CreateReadingCmd = Pick<ReadingDTO, "propertyId" | "readingAt" | "coldM3" | "hotM3" | "heatingGj"> &

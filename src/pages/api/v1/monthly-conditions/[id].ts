@@ -1,13 +1,13 @@
 import type { APIRoute } from "astro";
 
 import { requireAuth } from "@/lib/api/auth";
-import { mapMonthlyConditionServiceError } from "@/lib/api/monthlyConditions";
+import { mapMonthlyAdvanceServiceError } from "@/lib/api/monthlyConditions";
 import { errorResponse } from "@/lib/errors";
-import { MonthlyConditionService } from "@/lib/services/MonthlyConditionService";
-import { buildMonthlyConditionResponse } from "@/types/monthlyConditions";
-import { UpdateMonthlyConditionSchema } from "@/lib/validators/monthlyConditions";
+import { MonthlyAdvanceService } from "@/lib/services/MonthlyConditionService";
+import { buildMonthlyAdvanceResponse } from "@/types/monthlyConditions";
+import { UpdateMonthlyAdvanceSchema } from "@/lib/validators/monthlyConditions";
 
-const missingIdResponse = () => errorResponse(400, "validation_error", "Monthly condition id is required");
+const missingIdResponse = () => errorResponse(400, "validation_error", "Monthly advance id is required");
 
 export const GET: APIRoute = async ({ request, locals, params }) => {
   const auth = await requireAuth(request, locals);
@@ -15,24 +15,24 @@ export const GET: APIRoute = async ({ request, locals, params }) => {
     return auth.response;
   }
 
-  const monthlyConditionId = params.id;
-  if (!monthlyConditionId) {
+  const monthlyAdvanceId = params.id;
+  if (!monthlyAdvanceId) {
     return missingIdResponse();
   }
 
   try {
-    const monthlyCondition = await MonthlyConditionService.getById(
+    const monthlyAdvance = await MonthlyAdvanceService.getById(
       locals.supabase,
       { role: auth.role, tenantPropertyId: auth.propertyId },
-      monthlyConditionId
+      monthlyAdvanceId
     );
 
-    return new Response(JSON.stringify(buildMonthlyConditionResponse(monthlyCondition)), {
+    return new Response(JSON.stringify(buildMonthlyAdvanceResponse(monthlyAdvance)), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    return mapMonthlyConditionServiceError(error);
+    return mapMonthlyAdvanceServiceError(error);
   }
 };
 
@@ -42,8 +42,8 @@ export const PATCH: APIRoute = async ({ request, locals, params }) => {
     return auth.response;
   }
 
-  const monthlyConditionId = params.id;
-  if (!monthlyConditionId) {
+  const monthlyAdvanceId = params.id;
+  if (!monthlyAdvanceId) {
     return missingIdResponse();
   }
 
@@ -54,7 +54,7 @@ export const PATCH: APIRoute = async ({ request, locals, params }) => {
     return errorResponse(400, "invalid_json", "Malformed JSON in request body");
   }
 
-  const validation = UpdateMonthlyConditionSchema.safeParse(payload);
+  const validation = UpdateMonthlyAdvanceSchema.safeParse(payload);
   if (!validation.success) {
     return errorResponse(400, "validation_error", "Invalid request data", {
       errors: validation.error.format(),
@@ -62,19 +62,19 @@ export const PATCH: APIRoute = async ({ request, locals, params }) => {
   }
 
   try {
-    const updated = await MonthlyConditionService.update(
+    const updated = await MonthlyAdvanceService.update(
       locals.supabase,
       { role: auth.role, tenantPropertyId: auth.propertyId },
-      monthlyConditionId,
+      monthlyAdvanceId,
       validation.data
     );
 
-    return new Response(JSON.stringify(buildMonthlyConditionResponse(updated)), {
+    return new Response(JSON.stringify(buildMonthlyAdvanceResponse(updated)), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    return mapMonthlyConditionServiceError(error);
+    return mapMonthlyAdvanceServiceError(error);
   }
 };
 
@@ -84,20 +84,20 @@ export const DELETE: APIRoute = async ({ request, locals, params }) => {
     return auth.response;
   }
 
-  const monthlyConditionId = params.id;
-  if (!monthlyConditionId) {
+  const monthlyAdvanceId = params.id;
+  if (!monthlyAdvanceId) {
     return missingIdResponse();
   }
 
   try {
-    await MonthlyConditionService.delete(
+    await MonthlyAdvanceService.delete(
       locals.supabase,
       { role: auth.role, tenantPropertyId: auth.propertyId },
-      monthlyConditionId
+      monthlyAdvanceId
     );
 
     return new Response(null, { status: 204 });
   } catch (error) {
-    return mapMonthlyConditionServiceError(error);
+    return mapMonthlyAdvanceServiceError(error);
   }
 };

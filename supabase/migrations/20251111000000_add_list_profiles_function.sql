@@ -5,7 +5,8 @@
 --          email addresses from auth.users
 -- =====================================================================
 
--- Function to list profiles with emails (admin only)
+-- Function to list all users with their profiles (admin only)
+-- Note: Authorization is checked at the API endpoint level
 create or replace function list_profiles_with_emails()
 returns table (
   user_id uuid,
@@ -16,34 +17,22 @@ returns table (
   updated_at timestamptz,
   email text
 )
-language plpgsql
+language sql
 security definer
 set search_path = public
 as $$
-begin
-  -- Check if caller is admin
-  if not exists (
-    select 1 from profiles
-    where profiles.user_id = auth.uid()
-    and profiles.role = 'admin'
-  ) then
-    raise exception 'Permission denied: admin role required';
-  end if;
-
-  -- Return profiles with emails
-  return query
+  -- Return all users from auth.users with their profiles (if they exist)
   select
-    p.user_id,
-    p.role,
+    au.id as user_id,
+    coalesce(p.role, 'tenant') as role,
     p.property_id,
     p.display_name,
-    p.created_at,
-    p.updated_at,
-    au.email::text as email
-  from profiles p
-  inner join auth.users au on au.id = p.user_id
-  order by p.created_at desc;
-end;
+    coalesce(p.created_at, au.created_at) as created_at,
+    coalesce(p.updated_at, au.updated_at) as updated_at,
+    coalesce(au.email, '')::text as email
+  from auth.users au
+  left join profiles p on p.user_id = au.id
+  order by au.created_at desc;
 $$;
 
 comment on function list_profiles_with_emails() is 

@@ -32,4 +32,3 @@ export const GET: APIRoute = async ({ request, locals }) => {
     return errorResponse(500, "internal_error", "An unexpected error occurred");
   }
 };
-

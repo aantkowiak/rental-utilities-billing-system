@@ -153,7 +153,12 @@ export class ContractService {
       return this.getById(supabase, context, contractId);
     }
 
-    const { data, error } = await supabase.from("contracts").update(updateData).eq("id", contractId).select("*").single();
+    const { data, error } = await supabase
+      .from("contracts")
+      .update(updateData)
+      .eq("id", contractId)
+      .select("*")
+      .single();
 
     if (error || !data) {
       if (error?.code === "PGRST116") {
@@ -205,4 +210,3 @@ function mapRowToContractDto(row: ContractRow): ContractDTO {
     updatedAt: row.updated_at,
   };
 }
-

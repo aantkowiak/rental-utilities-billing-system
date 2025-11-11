@@ -6,7 +6,11 @@ export interface ApiError {
 }
 
 export async function apiGet<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { ...init, method: "GET", headers: { "Content-Type": "application/json", ...(init?.headers || {}) } });
+  const res = await fetch(url, {
+    ...init,
+    method: "GET",
+    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+  });
   const json = await res.json();
 
   if (!res.ok) {

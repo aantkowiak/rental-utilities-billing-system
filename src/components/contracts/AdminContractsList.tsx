@@ -9,14 +9,6 @@ import type { ListContractsResponse, ContractResponse } from "@/types/contracts"
 import type { PropertyListResponse } from "@/lib/services/PropertyService";
 import type { ProfileListResponse, ProfileWithEmail } from "@/lib/services/ProfileService";
 
-type ActiveFilter = "all" | "active" | "inactive";
-
-interface FiltersState {
-  propertyId: string;
-  tenantUserId: string;
-  active: ActiveFilter;
-}
-
 interface FormState {
   propertyId: string;
   tenantUserId: string;
@@ -26,41 +18,9 @@ interface FormState {
 
 type FormField = keyof FormState;
 
-const FILTERS_STORAGE_KEY = "admin-contracts:filters";
-
 const DATE_FORMATTER = new Intl.DateTimeFormat("pl-PL", {
   dateStyle: "medium",
 });
-
-function resolveInitialFilters(): FiltersState {
-  if (typeof window === "undefined") {
-    return {
-      propertyId: "",
-      tenantUserId: "",
-      active: "all",
-    };
-  }
-
-  const params = new URLSearchParams(window.location.search);
-  const storedRaw = window.localStorage.getItem(FILTERS_STORAGE_KEY);
-  let stored: Partial<FiltersState> = {};
-
-  if (storedRaw) {
-    try {
-      stored = JSON.parse(storedRaw) as Partial<FiltersState>;
-    } catch {
-      stored = {};
-    }
-  }
-
-  const active = (params.get("active") as ActiveFilter | null) ?? stored.active ?? "all";
-
-  return {
-    propertyId: params.get("propertyId") ?? stored.propertyId ?? "",
-    tenantUserId: params.get("tenantUserId") ?? stored.tenantUserId ?? "",
-    active: active === "active" || active === "inactive" ? active : "all",
-  };
-}
 
 function buildDefaultFormState(): FormState {
   return {
@@ -186,11 +146,11 @@ const ContractRow = memo(function ContractRow({
 
   return (
     <tr className="border-t border-border bg-background/80">
-      <td className="px-4 py-3">
-        <div className="space-y-1">
-          <span className="font-medium text-foreground">{contract.id}</span>
-          <span className="text-xs text-muted-foreground">Nieruchomość: {propertyLabel}</span>
-          <span className="text-xs text-muted-foreground">Najemca: {userEmail}</span>
+      <td className="px-4 py-4 w-[55%]">
+        <div className="space-y-1 text-sm">
+          <div className="text-muted-foreground">Nieruchomość: {propertyLabel}</div>
+          <div className="text-muted-foreground">Najemca: {userEmail}</div>
+          <div className="text-xs text-muted-foreground/70">{contract.id}</div>
         </div>
       </td>
       <td className="px-4 py-3">
@@ -203,7 +163,9 @@ const ContractRow = memo(function ContractRow({
         <span
           className={[
             "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-            active ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700" : "border-muted bg-muted/30 text-muted-foreground",
+            active
+              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700"
+              : "border-muted bg-muted/30 text-muted-foreground",
           ].join(" ")}
         >
           {active ? "Aktywna" : "Nieaktywna"}
@@ -236,7 +198,6 @@ const ContractRow = memo(function ContractRow({
 function AdminContractsContent(): JSX.Element {
   const { pushToast } = useToast();
 
-  const [filters, setFilters] = useState<FiltersState>(() => resolveInitialFilters());
   const [items, setItems] = useState<ContractDTO[]>([]);
   const [properties, setProperties] = useState<PropertyDTO[]>([]);
   const [users, setUsers] = useState<ProfileWithEmail[]>([]);
@@ -252,24 +213,6 @@ function AdminContractsContent(): JSX.Element {
   const [editing, setEditing] = useState<ContractDTO | null>(null);
   const reloadPromiseRef = useRef<Promise<void> | null>(null);
 
-  const queryString = useMemo(() => {
-    const params = new URLSearchParams();
-
-    if (filters.propertyId) {
-      params.set("propertyId", filters.propertyId);
-    }
-
-    if (filters.tenantUserId) {
-      params.set("tenantUserId", filters.tenantUserId);
-    }
-
-    if (filters.active !== "all") {
-      params.set("active", filters.active === "active" ? "true" : "false");
-    }
-
-    return params.toString();
-  }, [filters]);
-
   const tableItems = useMemo(
     () =>
       items.map((contract) => ({
@@ -281,36 +224,6 @@ function AdminContractsContent(): JSX.Element {
 
   const actionsLocked = Boolean(actionAccessError);
   const submitDisabled = formPending || actionsLocked;
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const url = new URL(window.location.href);
-
-    if (filters.propertyId) {
-      url.searchParams.set("propertyId", filters.propertyId);
-    } else {
-      url.searchParams.delete("propertyId");
-    }
-
-    if (filters.tenantUserId) {
-      url.searchParams.set("tenantUserId", filters.tenantUserId);
-    } else {
-      url.searchParams.delete("tenantUserId");
-    }
-
-    if (filters.active !== "all") {
-      url.searchParams.set("active", filters.active);
-    } else {
-      url.searchParams.delete("active");
-    }
-
-    window.history.replaceState(null, "", url.toString());
-
-    window.localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
-  }, [filters]);
 
   const loadProperties = useCallback(async () => {
     try {
@@ -347,9 +260,7 @@ function AdminContractsContent(): JSX.Element {
     setActionAccessError(null);
 
     try {
-      const response = await apiGet<ListContractsResponse>(
-        queryString ? `/api/v1/contracts?${queryString}` : "/api/v1/contracts"
-      );
+      const response = await apiGet<ListContractsResponse>("/api/v1/contracts");
       setItems(Array.isArray(response.items) ? response.items : []);
       setDeletePendingById({});
     } catch (error) {
@@ -370,7 +281,7 @@ function AdminContractsContent(): JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, [pushToast, queryString]);
+  }, [pushToast]);
 
   const requestReload = useCallback(() => {
     if (reloadPromiseRef.current) {
@@ -402,13 +313,6 @@ function AdminContractsContent(): JSX.Element {
       /* błąd obsłużony wewnątrz loadContracts */
     });
   }, [loadContracts]);
-
-  const handleFiltersChange = useCallback((field: keyof FiltersState, value: string) => {
-    setFilters((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
-  }, []);
 
   const resetForm = useCallback(() => {
     setFormState(buildDefaultFormState());
@@ -611,7 +515,18 @@ function AdminContractsContent(): JSX.Element {
         setFormPending(false);
       }
     },
-    [actionsLocked, editing, formPending, formState, handleMutationFailure, items, pushToast, requestReload, resetForm, validateForm]
+    [
+      actionsLocked,
+      editing,
+      formPending,
+      formState,
+      handleMutationFailure,
+      items,
+      pushToast,
+      requestReload,
+      resetForm,
+      validateForm,
+    ]
   );
 
   const handleEdit = useCallback((contract: ContractDTO) => {
@@ -700,60 +615,6 @@ function AdminContractsContent(): JSX.Element {
 
   return (
     <section className="space-y-8">
-      <div className="rounded-lg border bg-card p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-foreground">Filtry</h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground" htmlFor="admin-contracts-property">
-              Identyfikator nieruchomości
-            </label>
-            <input
-              id="admin-contracts-property"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-              placeholder="UUID nieruchomości"
-              value={filters.propertyId}
-              list="admin-contract-property-options"
-              onChange={(event: ChangeEvent<HTMLInputElement>) => handleFiltersChange("propertyId", event.target.value)}
-              disabled={loading}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground" htmlFor="admin-contracts-tenant">
-              Identyfikator najemcy
-            </label>
-            <input
-              id="admin-contracts-tenant"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-              placeholder="UUID użytkownika"
-              value={filters.tenantUserId}
-              list="admin-contract-tenant-options"
-              onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                handleFiltersChange("tenantUserId", event.target.value)
-              }
-              disabled={loading}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground" htmlFor="admin-contracts-active">
-              Status
-            </label>
-            <select
-              id="admin-contracts-active"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-              value={filters.active}
-              onChange={(event: ChangeEvent<HTMLSelectElement>) =>
-                handleFiltersChange("active", event.target.value as ActiveFilter)
-              }
-              disabled={loading}
-            >
-              <option value="all">Wszystkie</option>
-              <option value="active">Aktywne</option>
-              <option value="inactive">Nieaktywne</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
       {accessError ? <ErrorAlert error={accessError} /> : null}
       {fetchError ? <ErrorAlert error={fetchError} /> : null}
       {actionAccessError ? <ErrorAlert error={actionAccessError} /> : null}
@@ -890,8 +751,8 @@ function AdminContractsContent(): JSX.Element {
           <table className="w-full border-separate border-spacing-0 text-sm">
             <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-4 py-2 text-left font-medium">Umowa</th>
-                <th className="px-4 py-2 text-left font-medium">Okres</th>
+                <th className="px-4 py-2 text-left font-medium w-[20%]">Umowa</th>
+                <th className="px-4 py-2 text-left font-medium w-[40%]">Okres</th>
                 <th className="px-4 py-2 text-left font-medium">Status</th>
                 <th className="px-4 py-2 text-left font-medium">Utworzono</th>
                 <th className="px-4 py-2 text-right font-medium">Akcje</th>

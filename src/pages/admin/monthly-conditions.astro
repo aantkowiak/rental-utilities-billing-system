@@ -1,7 +1,7 @@
 ---
 import Layout from "../../layouts/Layout.astro";
 import { RoleNav } from "@/components/nav/RoleNav";
-import { MonthlyConditionsTable } from "@/components/monthly/MonthlyConditionsTable";
+import { MonthlyAdvancesTable } from "@/components/monthly/MonthlyConditionsTable";
 import { requireAuth } from "@/lib/api/auth";
 
 const auth = await requireAuth(Astro.request, Astro.locals, { requireAdmin: true });
@@ -9,7 +9,7 @@ if (!auth.success) {
   return auth.response;
 }
 
-const pageTitle = "Warunki miesięczne";
+const pageTitle = "Zaliczki miesięczne";
 ---
 
 <Layout title={pageTitle}>
@@ -21,7 +21,7 @@ const pageTitle = "Warunki miesięczne";
   </a>
 
   <header class="border-b bg-card">
-    <div class="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-6">
+    <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6">
       <div>
         <p class="text-sm text-muted-foreground">Panel administratora</p>
         <h1 class="text-2xl font-semibold text-foreground">{pageTitle}</h1>
@@ -30,7 +30,7 @@ const pageTitle = "Warunki miesięczne";
     </div>
   </header>
 
-  <main id="main-content" class="mx-auto w-full max-w-5xl px-4 py-8" role="main">
-    <MonthlyConditionsTable client:load />
+  <main id="main-content" class="mx-auto w-full max-w-7xl px-4 py-8" role="main">
+    <MonthlyAdvancesTable client:load />
   </main>
 </Layout>

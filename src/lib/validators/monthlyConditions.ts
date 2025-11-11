@@ -16,7 +16,7 @@ const monthSchema = z
     message: "month must be the first day of a month (YYYY-MM-01)",
   });
 
-export const MonthlyConditionsListQuerySchema = z.object({
+export const MonthlyAdvancesListQuerySchema = z.object({
   propertyId: z.string().uuid().optional(),
   month: z
     .string()
@@ -27,7 +27,7 @@ export const MonthlyConditionsListQuerySchema = z.object({
     }),
 });
 
-const BaseMonthlyConditionSchema = z.object({
+const BaseMonthlyAdvanceSchema = z.object({
   propertyId: z.string().uuid({ message: "propertyId must be a valid UUID" }),
   month: monthSchema,
   managerFee: monetarySchema,
@@ -40,9 +40,9 @@ const BaseMonthlyConditionSchema = z.object({
   advancePayment: monetarySchema,
 });
 
-export const CreateMonthlyConditionSchema = BaseMonthlyConditionSchema;
+export const CreateMonthlyAdvanceSchema = BaseMonthlyAdvanceSchema;
 
-export const UpdateMonthlyConditionSchema = BaseMonthlyConditionSchema.partial().superRefine((value, ctx) => {
+export const UpdateMonthlyAdvanceSchema = BaseMonthlyAdvanceSchema.partial().superRefine((value, ctx) => {
   const hasAnyField = Object.values(value).some((field) => field !== undefined);
 
   if (!hasAnyField) {

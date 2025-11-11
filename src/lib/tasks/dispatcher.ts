@@ -52,11 +52,7 @@ const defaultTaskEnqueuer: TaskEnqueuer = async (job) => {
   });
 
   if (error) {
-    throw new TaskDispatchError(
-      job.taskName,
-      error.message ?? "Unknown Supabase function error",
-      error
-    );
+    throw new TaskDispatchError(job.taskName, error.message ?? "Unknown Supabase function error", error);
   }
 };
 
@@ -91,6 +87,3 @@ export async function dispatchTask(taskName: SchedulerTaskName, payload: TaskPay
     payload,
   });
 }
-
-
-

@@ -23,7 +23,10 @@ const apiPatchMock = apiPatch as unknown as vi.Mock;
 const apiDeleteMock = apiDelete as unknown as vi.Mock;
 
 beforeEach(() => {
-  vi.stubGlobal("confirm", vi.fn(() => true));
+  vi.stubGlobal(
+    "confirm",
+    vi.fn(() => true)
+  );
 });
 
 afterEach(() => {
@@ -365,5 +368,3 @@ function getFormInput(label: string): HTMLInputElement {
   const inputs = screen.getAllByLabelText(label);
   return inputs[inputs.length - 1] as HTMLInputElement;
 }
-
-

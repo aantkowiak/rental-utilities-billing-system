@@ -20,5 +20,3 @@ export function ErrorAlert({ error }: ErrorAlertProps): JSX.Element | null {
     </div>
   );
 }
-
-

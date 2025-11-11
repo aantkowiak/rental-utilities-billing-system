@@ -92,11 +92,7 @@ export class PropertyService {
    * @returns Property as PropertyDTO
    * @throws Error with "PROPERTY_NOT_FOUND" if not found or no access
    */
-  static async getById(
-    supabase: SupabaseClient<Database>,
-    role: string,
-    propertyId: string
-  ): Promise<PropertyDTO> {
+  static async getById(supabase: SupabaseClient<Database>, role: string, propertyId: string): Promise<PropertyDTO> {
     // Query property - RLS automatically filters for tenants
     const { data, error } = await supabase.from("properties").select("*").eq("id", propertyId).single();
 
@@ -207,4 +203,3 @@ export class PropertyService {
     }
   }
 }
-

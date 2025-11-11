@@ -31,4 +31,3 @@ export const UpdateContractSchema = z
       ctx.addIssue({ code: "custom", message: "At least one field must be provided" });
     }
   });
-

@@ -4,18 +4,14 @@ import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
 import { Button } from "@/components/ui/button";
 import { apiDelete, apiGet, apiPatch, apiPost, type ApiError } from "@/lib/client/http";
-import type { MonthlyConditionDTO } from "@/types";
-import type {
-  MonthlyConditionListResponse,
-  MonthlyConditionResponse,
-} from "@/types/monthlyConditions";
+import type { MonthlyAdvanceDTO, PropertyDTO } from "@/types";
+import type { MonthlyAdvanceListResponse, MonthlyAdvanceResponse } from "@/types/monthlyConditions";
+import type { PropertyListResponse } from "@/lib/services/PropertyService";
 
-const PROPERTY_STORAGE_KEY = "admin-monthly:propertyId";
-const MONTH_STORAGE_KEY = "admin-monthly:month";
+const PROPERTY_STORAGE_KEY = "admin-monthly-advances:propertyId";
 
 interface FiltersState {
   propertyId: string;
-  month: string;
 }
 
 interface FormState {
@@ -72,46 +68,32 @@ const FIELD_PROPS: Partial<Record<FormField, InputHTMLAttributes<HTMLInputElemen
   advancePayment: { inputMode: "decimal", placeholder: "0.00" },
 };
 
-function resolveInitialMonth(value?: string): string {
-  if (value && /^\d{4}-\d{2}$/.test(value)) {
-    return value;
-  }
+function resolveInitialMonth(): string {
   const now = new Date();
   return `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, "0")}`;
-}
-
-function normalizeMonth(value: string, fallback: string): string {
-  if (value && /^\d{4}-\d{2}$/.test(value)) {
-    return value;
-  }
-  return fallback;
 }
 
 function resolveInitialFilters(): FiltersState {
   if (typeof window === "undefined") {
     return {
       propertyId: "",
-      month: resolveInitialMonth(),
     };
   }
 
   const params = new URLSearchParams(window.location.search);
   const propertyParam = params.get("propertyId") ?? "";
-  const monthParam = params.get("month") ?? "";
 
   const storedProperty = window.localStorage.getItem(PROPERTY_STORAGE_KEY) ?? "";
-  const storedMonth = window.localStorage.getItem(MONTH_STORAGE_KEY) ?? "";
 
   return {
     propertyId: propertyParam || storedProperty,
-    month: resolveInitialMonth(monthParam || storedMonth),
   };
 }
 
-function buildFormState(dto: MonthlyConditionDTO): FormState {
+function buildFormState(dto: MonthlyAdvanceDTO): FormState {
   return {
     id: dto.id,
-    month: dto.month,
+    month: dto.month.substring(0, 7),
     managerFee: dto.managerFee.toString(),
     priceCold: dto.priceCold.toString(),
     priceHotHeating: dto.priceHotHeating.toString(),
@@ -181,7 +163,7 @@ function isCreateDraftDirty(draft: FormState, referenceMonth: string): boolean {
 function mapDraftToPayload(draft: FormState, propertyId: string) {
   return {
     propertyId,
-    month: draft.month,
+    month: `${draft.month}-01`,
     managerFee: Number.parseFloat(draft.managerFee),
     priceCold: Number.parseFloat(draft.priceCold),
     priceHotHeating: Number.parseFloat(draft.priceHotHeating),
@@ -201,7 +183,7 @@ function validateDraft(draft: FormState, requireMonth = true): Partial<Record<Fo
   }
 
   for (const field of NUMERIC_FIELDS) {
-    const raw = draft[field];
+    const raw = draft[field] ?? "";
     const parsed = Number.parseFloat(raw);
     if (raw === "" || raw === undefined) {
       errors[field] = "Pole jest wymagane.";
@@ -213,15 +195,15 @@ function validateDraft(draft: FormState, requireMonth = true): Partial<Record<Fo
   return errors;
 }
 
-interface MonthlyConditionsContentProps {
+interface MonthlyAdvancesContentProps {
   useOwnProvider?: boolean;
 }
 
-function MonthlyConditionsContent(): JSX.Element {
+function MonthlyAdvancesContent(): JSX.Element {
   const { pushToast } = useToast();
 
   const [filters, setFilters] = useState<FiltersState>(() => resolveInitialFilters());
-  const [items, setItems] = useState<MonthlyConditionDTO[]>([]);
+  const [items, setItems] = useState<MonthlyAdvanceDTO[]>([]);
 
   const [draftsById, setDraftsById] = useState<DraftMap>({});
   const [draftErrorsById, setDraftErrorsById] = useState<DraftErrorsMap>({});
@@ -238,6 +220,7 @@ function MonthlyConditionsContent(): JSX.Element {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [actionAccessError, setActionAccessError] = useState<string | null>(null);
+  const [properties, setProperties] = useState<PropertyDTO[]>([]);
 
   const baselineDrafts = useMemo(() => {
     const map: DraftMap = {};
@@ -258,14 +241,9 @@ function MonthlyConditionsContent(): JSX.Element {
     } else {
       url.searchParams.delete("propertyId");
     }
-    if (filters.month) {
-      url.searchParams.set("month", filters.month);
-    } else {
-      url.searchParams.delete("month");
-    }
 
     window.history.replaceState(null, "", url.toString());
-  }, [filters.propertyId, filters.month]);
+  }, [filters.propertyId]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -273,8 +251,21 @@ function MonthlyConditionsContent(): JSX.Element {
     }
 
     window.localStorage.setItem(PROPERTY_STORAGE_KEY, filters.propertyId);
-    window.localStorage.setItem(MONTH_STORAGE_KEY, filters.month);
-  }, [filters.propertyId, filters.month]);
+  }, [filters.propertyId]);
+
+  const loadProperties = useCallback(async () => {
+    try {
+      const response = await apiGet<PropertyListResponse>("/api/v1/properties");
+      setProperties(Array.isArray(response.items) ? response.items : []);
+    } catch (error) {
+      const apiError = toApiError(error);
+      pushToast({
+        variant: "error",
+        title: "Nie udało się pobrać nieruchomości",
+        description: apiError.message,
+      });
+    }
+  }, [pushToast]);
 
   const loadConditions = useCallback(async () => {
     if (!filters.propertyId) {
@@ -295,11 +286,8 @@ function MonthlyConditionsContent(): JSX.Element {
     try {
       const params = new URLSearchParams();
       params.set("propertyId", filters.propertyId);
-      if (filters.month) {
-        params.set("month", filters.month);
-      }
 
-      const response = await apiGet<MonthlyConditionListResponse>(`/api/v1/monthly-conditions?${params.toString()}`);
+      const response = await apiGet<MonthlyAdvanceListResponse>(`/api/v1/monthly-conditions?${params.toString()}`);
       const sorted = Array.isArray(response.items)
         ? [...response.items].sort((a, b) => b.month.localeCompare(a.month))
         : [];
@@ -313,7 +301,7 @@ function MonthlyConditionsContent(): JSX.Element {
       setDraftErrorsById({});
       setLockedById({});
       setCreateLockedMessage(null);
-      setCreateDraft(buildEmptyFormState(filters.month));
+      setCreateDraft(buildEmptyFormState(resolveInitialMonth()));
       setCreateErrors({});
     } catch (error) {
       const apiError = toApiError(error);
@@ -328,13 +316,19 @@ function MonthlyConditionsContent(): JSX.Element {
       setFetchError(apiError.message);
       pushToast({
         variant: "error",
-        title: "Nie udało się pobrać warunków miesięcznych",
+        title: "Nie udało się pobrać zaliczek miesięcznych",
         description: apiError.message,
       });
     } finally {
       setLoading(false);
     }
-  }, [filters.month, filters.propertyId, pushToast]);
+  }, [filters.propertyId, pushToast]);
+
+  useEffect(() => {
+    loadProperties().catch(() => {
+      /* obsługa w loadProperties */
+    });
+  }, [loadProperties]);
 
   useEffect(() => {
     loadConditions().catch(() => {
@@ -355,8 +349,8 @@ function MonthlyConditionsContent(): JSX.Element {
       }
     }
 
-    return isCreateDraftDirty(createDraft, filters.month);
-  }, [baselineDrafts, createDraft, draftsById, filters.month, filters.propertyId, items]);
+    return isCreateDraftDirty(createDraft, resolveInitialMonth());
+  }, [baselineDrafts, createDraft, draftsById, filters.propertyId, items]);
 
   const confirmDiscardChanges = useCallback(() => {
     if (!hasUnsavedChanges) {
@@ -366,7 +360,7 @@ function MonthlyConditionsContent(): JSX.Element {
   }, [hasUnsavedChanges]);
 
   const handleFiltersPropertyChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
+    (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       const value = event.target.value.trim();
       if (value === filters.propertyId) {
         return;
@@ -383,33 +377,10 @@ function MonthlyConditionsContent(): JSX.Element {
       setDraftErrorsById({});
       setLockedById({});
       setCreateLockedMessage(null);
-      setCreateDraft(buildEmptyFormState(filters.month));
+      setCreateDraft(buildEmptyFormState(resolveInitialMonth()));
       setCreateErrors({});
     },
-    [confirmDiscardChanges, filters.month, filters.propertyId]
-  );
-
-  const handleFiltersMonthChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const sanitized = normalizeMonth(event.target.value, filters.month);
-      if (sanitized === filters.month) {
-        return;
-      }
-
-      if (!confirmDiscardChanges()) {
-        return;
-      }
-
-      setFilters((prev) => ({
-        ...prev,
-        month: sanitized,
-      }));
-      setCreateDraft(buildEmptyFormState(sanitized));
-      setCreateErrors({});
-      setLockedById({});
-      setCreateLockedMessage(null);
-    },
-    [confirmDiscardChanges, filters.month]
+    [confirmDiscardChanges, filters.propertyId]
   );
 
   const handleDraftChange = useCallback((id: string, field: FormField, value: string) => {
@@ -506,13 +477,13 @@ function MonthlyConditionsContent(): JSX.Element {
       setActionAccessError(null);
 
       try {
-        await apiPatch<MonthlyConditionResponse>(`/api/v1/monthly-conditions/${encodeURIComponent(id)}`, {
+        await apiPatch<MonthlyAdvanceResponse>(`/api/v1/monthly-conditions/${encodeURIComponent(id)}`, {
           ...mapDraftToPayload(draft, filters.propertyId),
         });
 
         pushToast({
           variant: "success",
-          title: "Zapisano warunki",
+          title: "Zapisano zaliczkę",
           description: `Zmiany dla miesiąca ${draft.month} zostały zapisane.`,
         });
         await loadConditions();
@@ -521,10 +492,10 @@ function MonthlyConditionsContent(): JSX.Element {
 
         if (apiError.code === "forbidden") {
           setActionAccessError(apiError.message);
-        } else if (apiError.code === "monthly_condition_locked") {
+        } else if (apiError.code === "monthly_advance_locked") {
           setLockedById((prev) => ({
             ...prev,
-            [id]: apiError.message || "Warunki są zablokowane przez zaksięgowane raporty.",
+            [id]: apiError.message || "Zaliczka jest zablokowana przez zaksięgowane raporty.",
           }));
         } else if (apiError.code === "validation_error") {
           const extracted = extractFieldErrors(apiError.details);
@@ -541,7 +512,7 @@ function MonthlyConditionsContent(): JSX.Element {
           }));
         } else {
           const isConflict = apiError.code === "conflict" || apiError.status === 409;
-          const isNotFound = apiError.code === "monthly_condition_not_found" || apiError.status === 404;
+          const isNotFound = apiError.code === "monthly_advance_not_found" || apiError.status === 404;
           if (isConflict) {
             pushToast({
               variant: "info",
@@ -553,13 +524,13 @@ function MonthlyConditionsContent(): JSX.Element {
             pushToast({
               variant: "info",
               title: "Rekord nie istnieje",
-              description: "Warunki zostały zaktualizowane lub usunięte przez innego użytkownika.",
+              description: "Zaliczka została zaktualizowana lub usunięta przez innego użytkownika.",
             });
             await loadConditions();
           } else if (!apiError.status || apiError.status >= 500) {
             pushToast({
               variant: "error",
-              title: "Nie udało się zapisać warunków",
+              title: "Nie udało się zapisać zaliczki",
               description: apiError.message,
             });
           }
@@ -581,7 +552,7 @@ function MonthlyConditionsContent(): JSX.Element {
         return;
       }
 
-      const confirmed = window.confirm("Czy na pewno chcesz usunąć te warunki?");
+      const confirmed = window.confirm("Czy na pewno chcesz usunąć tę zaliczkę?");
       if (!confirmed) {
         return;
       }
@@ -593,7 +564,7 @@ function MonthlyConditionsContent(): JSX.Element {
         await apiDelete(`/api/v1/monthly-conditions/${encodeURIComponent(id)}`);
         pushToast({
           variant: "success",
-          title: "Usunięto warunki",
+          title: "Usunięto zaliczkę",
           description: "Rekord został pomyślnie usunięty.",
         });
         await loadConditions();
@@ -602,29 +573,29 @@ function MonthlyConditionsContent(): JSX.Element {
 
         if (apiError.code === "forbidden") {
           setActionAccessError(apiError.message);
-        } else if (apiError.code === "monthly_condition_locked") {
+        } else if (apiError.code === "monthly_advance_locked") {
           setLockedById((prev) => ({
             ...prev,
-            [id]: apiError.message || "Nie można usunąć warunków powiązanych z raportami.",
+            [id]: apiError.message || "Nie można usunąć zaliczki powiązanej z raportami.",
           }));
           pushToast({
             variant: "info",
-            title: "Warunki zablokowane",
+            title: "Zaliczka zablokowana",
             description: apiError.message,
           });
         } else {
-          const isNotFound = apiError.code === "monthly_condition_not_found" || apiError.status === 404;
+          const isNotFound = apiError.code === "monthly_advance_not_found" || apiError.status === 404;
           if (isNotFound) {
             pushToast({
               variant: "info",
               title: "Rekord nie istnieje",
-              description: "Warunki zostały już usunięte.",
+              description: "Zaliczka została już usunięta.",
             });
             await loadConditions();
           } else if (!apiError.status || apiError.status >= 500) {
             pushToast({
               variant: "error",
-              title: "Nie udało się usunąć warunków",
+              title: "Nie udało się usunąć zaliczki",
               description: apiError.message,
             });
           }
@@ -644,7 +615,7 @@ function MonthlyConditionsContent(): JSX.Element {
     if (!filters.propertyId) {
       setCreateErrors((prev) => ({
         ...prev,
-        month: "Wybierz nieruchomość przed dodaniem warunków.",
+        month: "Wybierz nieruchomość przed dodaniem zaliczki.",
       }));
       return;
     }
@@ -660,15 +631,18 @@ function MonthlyConditionsContent(): JSX.Element {
     setCreateLockedMessage(null);
 
     try {
-      await apiPost<MonthlyConditionResponse>("/api/v1/monthly-conditions", mapDraftToPayload(createDraft, filters.propertyId));
+      await apiPost<MonthlyAdvanceResponse>(
+        "/api/v1/monthly-conditions",
+        mapDraftToPayload(createDraft, filters.propertyId)
+      );
 
       pushToast({
         variant: "success",
-        title: "Dodano warunki",
-        description: `Warunki dla miesiąca ${createDraft.month} zostały utworzone.`,
+        title: "Dodano zaliczkę",
+        description: `Zaliczka dla miesiąca ${createDraft.month} została utworzona.`,
       });
 
-      setCreateDraft(buildEmptyFormState(filters.month));
+      setCreateDraft(buildEmptyFormState(resolveInitialMonth()));
       setCreateErrors({});
       await loadConditions();
     } catch (error) {
@@ -676,8 +650,8 @@ function MonthlyConditionsContent(): JSX.Element {
 
       if (apiError.code === "forbidden") {
         setActionAccessError(apiError.message);
-      } else if (apiError.code === "monthly_condition_locked") {
-        setCreateLockedMessage(apiError.message || "Nie można dodać warunków z powodu zablokowanych raportów.");
+      } else if (apiError.code === "monthly_advance_locked") {
+        setCreateLockedMessage(apiError.message || "Nie można dodać zaliczki z powodu zablokowanych raportów.");
       } else if (apiError.code === "validation_error") {
         const extracted = extractFieldErrors(apiError.details);
         if (Object.keys(extracted).length > 0) {
@@ -688,21 +662,21 @@ function MonthlyConditionsContent(): JSX.Element {
       } else if (apiError.code === "conflict" || apiError.status === 409) {
         pushToast({
           variant: "info",
-          title: "Warunki już istnieją",
+          title: "Zaliczka już istnieje",
           description: apiError.message,
         });
         await loadConditions();
       } else if (!apiError.status || apiError.status >= 500) {
         pushToast({
           variant: "error",
-          title: "Nie udało się dodać warunków",
+          title: "Nie udało się dodać zaliczki",
           description: apiError.message,
         });
       }
     } finally {
       setPendingCreate(false);
     }
-  }, [createDraft, filters.month, filters.propertyId, loadConditions, pushToast]);
+  }, [createDraft, filters.propertyId, loadConditions, pushToast]);
 
   const handleRefresh = useCallback(() => {
     loadConditions().catch(() => {
@@ -713,34 +687,23 @@ function MonthlyConditionsContent(): JSX.Element {
   return (
     <section className="space-y-8">
       <div className="rounded-lg border bg-card p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-foreground">Filtry</h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground" htmlFor="monthly-filter-property">
-              Identyfikator nieruchomości
-            </label>
-            <input
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-              id="monthly-filter-property"
-              placeholder="UUID nieruchomości"
-              value={filters.propertyId}
-              onChange={handleFiltersPropertyChange}
-            />
-            <p className="text-xs text-muted-foreground">Wymagany do wczytania danych i wykonywania operacji.</p>
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground" htmlFor="monthly-filter-month">
-              Miesiąc rozliczeniowy
-            </label>
-            <input
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-              id="monthly-filter-month"
-              type="month"
-              value={filters.month}
-              onChange={handleFiltersMonthChange}
-            />
-            <p className="text-xs text-muted-foreground">Przechowywane w adresie URL i pamięci przeglądarki.</p>
-          </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-foreground" htmlFor="monthly-filter-property">
+            Nieruchomość
+          </label>
+          <select
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+            id="monthly-filter-property"
+            value={filters.propertyId}
+            onChange={handleFiltersPropertyChange}
+          >
+            <option value="">-- Wybierz nieruchomość --</option>
+            {properties.map((property) => (
+              <option key={property.id} value={property.id}>
+                {property.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -749,7 +712,10 @@ function MonthlyConditionsContent(): JSX.Element {
       {actionAccessError ? <ErrorAlert error={actionAccessError} /> : null}
 
       {lockMessages.length > 0 ? (
-        <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900" role="status">
+        <div
+          className="space-y-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+          role="status"
+        >
           {lockMessages.map((message) => (
             <p key={message}>{message}</p>
           ))}
@@ -758,26 +724,14 @@ function MonthlyConditionsContent(): JSX.Element {
 
       <div className="space-y-4 rounded-lg border bg-card p-6 shadow-sm">
         <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Warunki miesięczne</h2>
-            <p className="text-sm text-muted-foreground">
-              {filters.propertyId
-                ? `Zarządzaj warunkami dla nieruchomości ${filters.propertyId}.`
-                : "Wybierz nieruchomość, aby rozpocząć edycję warunków."}
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={handleRefresh}
-            disabled={loading || !filters.propertyId}
-          >
+          <h2 className="text-lg font-semibold text-foreground">Zaliczki miesięczne</h2>
+          <Button type="button" variant="secondary" onClick={handleRefresh} disabled={loading || !filters.propertyId}>
             Odśwież
           </Button>
         </header>
 
         <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full min-w-[960px] border-collapse text-sm">
+          <table className="w-full border-collapse text-sm">
             <thead className="bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground md:sticky md:top-0">
               <tr>
                 <th className="px-3 py-2 text-left font-semibold">Miesiąc</th>
@@ -796,13 +750,13 @@ function MonthlyConditionsContent(): JSX.Element {
               {loading ? (
                 <tr>
                   <td className="px-3 py-4 text-center text-muted-foreground" colSpan={10}>
-                    Ładowanie warunków…
+                    Ładowanie zaliczek…
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
                   <td className="px-3 py-4 text-center text-muted-foreground" colSpan={10}>
-                    Brak warunków dla wybranych filtrów.
+                    Brak zaliczek dla wybranych filtrów.
                   </td>
                 </tr>
               ) : (
@@ -811,7 +765,7 @@ function MonthlyConditionsContent(): JSX.Element {
                   const draft = draftsById[item.id] ?? baseline;
 
                   return (
-                    <MonthlyConditionRow
+                    <MonthlyAdvanceRow
                       key={item.id}
                       id={item.id}
                       draft={draft}
@@ -832,7 +786,7 @@ function MonthlyConditionsContent(): JSX.Element {
                 <tr className="bg-muted/20">
                   {DRAFT_FIELDS.map((field) => (
                     <td key={field} className="px-3 py-3 align-top">
-                      <ConditionInput
+                      <AdvanceInput
                         value={createDraft[field] ?? ""}
                         onChange={(value) => handleCreateDraftChange(field, value)}
                         disabled={pendingCreate || Boolean(createLockedMessage)}
@@ -853,7 +807,7 @@ function MonthlyConditionsContent(): JSX.Element {
                         onClick={handleCreate}
                         title={createLockedMessage ?? undefined}
                       >
-                        {pendingCreate ? "Dodawanie…" : "Dodaj warunki"}
+                        {pendingCreate ? "Dodawanie…" : "Dodaj zaliczkę"}
                       </Button>
                     </div>
                   </td>
@@ -867,19 +821,19 @@ function MonthlyConditionsContent(): JSX.Element {
   );
 }
 
-export function MonthlyConditionsTable({ useOwnProvider }: MonthlyConditionsContentProps = {}): JSX.Element {
+export function MonthlyAdvancesTable({ useOwnProvider }: MonthlyAdvancesContentProps = {}): JSX.Element {
   if (useOwnProvider) {
     return (
       <ToastProvider>
-        <MonthlyConditionsContent />
+        <MonthlyAdvancesContent />
       </ToastProvider>
     );
   }
 
-  return <MonthlyConditionsContent />;
+  return <MonthlyAdvancesContent />;
 }
 
-interface ConditionInputProps {
+interface AdvanceInputProps {
   value: string;
   onChange: (value: string) => void;
   disabled: boolean;
@@ -887,7 +841,7 @@ interface ConditionInputProps {
   inputProps?: InputHTMLAttributes<HTMLInputElement>;
 }
 
-function ConditionInput({ value, onChange, disabled, error, inputProps }: ConditionInputProps): JSX.Element {
+function AdvanceInput({ value, onChange, disabled, error, inputProps }: AdvanceInputProps): JSX.Element {
   return (
     <div className="space-y-1">
       <input
@@ -905,7 +859,7 @@ function ConditionInput({ value, onChange, disabled, error, inputProps }: Condit
   );
 }
 
-interface MonthlyConditionRowProps {
+interface MonthlyAdvanceRowProps {
   id: string;
   draft: FormState;
   baseline?: FormState;
@@ -918,7 +872,7 @@ interface MonthlyConditionRowProps {
   onDelete: (id: string) => void;
 }
 
-const MonthlyConditionRow = memo(function MonthlyConditionRow({
+const MonthlyAdvanceRow = memo(function MonthlyAdvanceRow({
   id,
   draft,
   baseline,
@@ -929,7 +883,7 @@ const MonthlyConditionRow = memo(function MonthlyConditionRow({
   onFieldChange,
   onSave,
   onDelete,
-}: MonthlyConditionRowProps): JSX.Element {
+}: MonthlyAdvanceRowProps): JSX.Element {
   const isDirty = baseline ? !areDraftsEqual(draft, baseline) : true;
   const isLocked = Boolean(lockReason);
   const rowClassName = isDirty ? "bg-muted/40" : undefined;
@@ -938,7 +892,7 @@ const MonthlyConditionRow = memo(function MonthlyConditionRow({
     <tr className={rowClassName}>
       {DRAFT_FIELDS.map((field) => (
         <td key={field} className="px-3 py-3 align-top">
-          <ConditionInput
+          <AdvanceInput
             value={draft[field] ?? ""}
             onChange={(value) => onFieldChange(id, field, value)}
             disabled={pending || isLocked}
@@ -974,5 +928,3 @@ const MonthlyConditionRow = memo(function MonthlyConditionRow({
     </tr>
   );
 });
-
-
