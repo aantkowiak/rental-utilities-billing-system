@@ -4,8 +4,10 @@ import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
 import { Button } from "@/components/ui/button";
 import { apiDelete, apiGet, apiPatch, apiPost, type ApiError } from "@/lib/client/http";
-import type { ContractDTO, ContractPeriod, CreateContractCmd, UpdateContractCmd } from "@/types";
+import type { ContractDTO, ContractPeriod, CreateContractCmd, UpdateContractCmd, PropertyDTO } from "@/types";
 import type { ListContractsResponse, ContractResponse } from "@/types/contracts";
+import type { PropertyListResponse } from "@/lib/services/PropertyService";
+import type { ProfileListResponse, ProfileWithEmail } from "@/lib/services/ProfileService";
 
 type ActiveFilter = "all" | "active" | "inactive";
 
@@ -163,6 +165,8 @@ interface ContractRowProps {
   contract: ContractDTO;
   deletePending: boolean;
   actionsLocked: boolean;
+  properties: PropertyDTO[];
+  users: ProfileWithEmail[];
   onEdit: (contract: ContractDTO) => void;
   onDelete: (contract: ContractDTO) => Promise<void>;
 }
@@ -171,18 +175,22 @@ const ContractRow = memo(function ContractRow({
   contract,
   deletePending,
   actionsLocked,
+  properties,
+  users,
   onEdit,
   onDelete,
 }: ContractRowProps): JSX.Element {
   const active = isActive(contract.period);
+  const propertyLabel = properties.find((p) => p.id === contract.propertyId)?.label ?? contract.propertyId;
+  const userEmail = users.find((u) => u.userId === contract.tenantUserId)?.email ?? contract.tenantUserId;
 
   return (
     <tr className="border-t border-border bg-background/80">
       <td className="px-4 py-3">
         <div className="space-y-1">
           <span className="font-medium text-foreground">{contract.id}</span>
-          <span className="text-xs text-muted-foreground">Nieruchomość: {contract.propertyId}</span>
-          <span className="text-xs text-muted-foreground">Najemca: {contract.tenantUserId}</span>
+          <span className="text-xs text-muted-foreground">Nieruchomość: {propertyLabel}</span>
+          <span className="text-xs text-muted-foreground">Najemca: {userEmail}</span>
         </div>
       </td>
       <td className="px-4 py-3">
@@ -230,6 +238,8 @@ function AdminContractsContent(): JSX.Element {
 
   const [filters, setFilters] = useState<FiltersState>(() => resolveInitialFilters());
   const [items, setItems] = useState<ContractDTO[]>([]);
+  const [properties, setProperties] = useState<PropertyDTO[]>([]);
+  const [users, setUsers] = useState<ProfileWithEmail[]>([]);
   const [loading, setLoading] = useState(false);
   const [formPending, setFormPending] = useState(false);
   const [deletePendingById, setDeletePendingById] = useState<Record<string, boolean>>({});
@@ -254,31 +264,11 @@ function AdminContractsContent(): JSX.Element {
     }
 
     if (filters.active !== "all") {
-      params.set("active", filters.active);
+      params.set("active", filters.active === "active" ? "true" : "false");
     }
 
     return params.toString();
   }, [filters]);
-
-  const propertyOptions = useMemo(() => {
-    const unique = new Set<string>();
-    for (const contract of items) {
-      if (contract.propertyId) {
-        unique.add(contract.propertyId);
-      }
-    }
-    return Array.from(unique).sort();
-  }, [items]);
-
-  const tenantOptions = useMemo(() => {
-    const unique = new Set<string>();
-    for (const contract of items) {
-      if (contract.tenantUserId) {
-        unique.add(contract.tenantUserId);
-      }
-    }
-    return Array.from(unique).sort();
-  }, [items]);
 
   const tableItems = useMemo(
     () =>
@@ -321,6 +311,34 @@ function AdminContractsContent(): JSX.Element {
 
     window.localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(filters));
   }, [filters]);
+
+  const loadProperties = useCallback(async () => {
+    try {
+      const response = await apiGet<PropertyListResponse>("/api/v1/properties");
+      setProperties(Array.isArray(response.items) ? response.items : []);
+    } catch (error) {
+      const apiError = toApiError(error);
+      pushToast({
+        variant: "error",
+        title: "Nie udało się pobrać nieruchomości",
+        description: apiError.message,
+      });
+    }
+  }, [pushToast]);
+
+  const loadUsers = useCallback(async () => {
+    try {
+      const response = await apiGet<ProfileListResponse>("/api/v1/profiles");
+      setUsers(Array.isArray(response.items) ? response.items : []);
+    } catch (error) {
+      const apiError = toApiError(error);
+      pushToast({
+        variant: "error",
+        title: "Nie udało się pobrać użytkowników",
+        description: apiError.message,
+      });
+    }
+  }, [pushToast]);
 
   const loadContracts = useCallback(async () => {
     setLoading(true);
@@ -366,6 +384,18 @@ function AdminContractsContent(): JSX.Element {
 
     return reloadPromiseRef.current;
   }, [loadContracts]);
+
+  useEffect(() => {
+    loadProperties().catch(() => {
+      /* błąd obsłużony wewnątrz loadProperties */
+    });
+  }, [loadProperties]);
+
+  useEffect(() => {
+    loadUsers().catch(() => {
+      /* błąd obsłużony wewnątrz loadUsers */
+    });
+  }, [loadUsers]);
 
   useEffect(() => {
     loadContracts().catch(() => {
@@ -428,11 +458,11 @@ function AdminContractsContent(): JSX.Element {
     const errors: Partial<Record<FormField, string>> = {};
 
     if (!state.propertyId.trim()) {
-      errors.propertyId = "Wprowadź identyfikator nieruchomości.";
+      errors.propertyId = "Wybierz nieruchomość.";
     }
 
     if (!state.tenantUserId.trim()) {
-      errors.tenantUserId = "Wprowadź identyfikator najemcy.";
+      errors.tenantUserId = "Wybierz najemcę.";
     }
 
     if (!state.periodFrom) {
@@ -473,8 +503,8 @@ function AdminContractsContent(): JSX.Element {
         propertyId: formState.propertyId.trim(),
         tenantUserId: formState.tenantUserId.trim(),
         period: {
-          from: new Date(formState.periodFrom).toISOString(),
-          to: new Date(formState.periodTo).toISOString(),
+          from: formState.periodFrom,
+          to: formState.periodTo,
         },
       };
 
@@ -751,34 +781,46 @@ function AdminContractsContent(): JSX.Element {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground" htmlFor="admin-contract-property-id">
-                Identyfikator nieruchomości
+                Nieruchomość
               </label>
-              <input
+              <select
                 id="admin-contract-property-id"
                 className={buildInputClasses(fieldErrors.propertyId)}
                 value={formState.propertyId}
-                onChange={(event: ChangeEvent<HTMLInputElement>) => handleFormChange("propertyId", event.target.value)}
+                onChange={(event: ChangeEvent<HTMLSelectElement>) => handleFormChange("propertyId", event.target.value)}
                 disabled={submitDisabled}
-                list="admin-contract-property-options"
                 required
-              />
+              >
+                <option value="">-- Wybierz nieruchomość --</option>
+                {properties.map((property) => (
+                  <option key={property.id} value={property.id}>
+                    {property.label}
+                  </option>
+                ))}
+              </select>
               {fieldErrors.propertyId ? <p className="text-sm text-destructive">{fieldErrors.propertyId}</p> : null}
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground" htmlFor="admin-contract-tenant-id">
-                Identyfikator najemcy
+                Najemca
               </label>
-              <input
+              <select
                 id="admin-contract-tenant-id"
                 className={buildInputClasses(fieldErrors.tenantUserId)}
                 value={formState.tenantUserId}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                onChange={(event: ChangeEvent<HTMLSelectElement>) =>
                   handleFormChange("tenantUserId", event.target.value)
                 }
                 disabled={submitDisabled}
-                list="admin-contract-tenant-options"
                 required
-              />
+              >
+                <option value="">-- Wybierz najemcę --</option>
+                {users.map((user) => (
+                  <option key={user.userId} value={user.userId}>
+                    {user.email}
+                  </option>
+                ))}
+              </select>
               {fieldErrors.tenantUserId ? <p className="text-sm text-destructive">{fieldErrors.tenantUserId}</p> : null}
             </div>
           </div>
@@ -869,79 +911,23 @@ function AdminContractsContent(): JSX.Element {
                   </td>
                 </tr>
               ) : (
-                tableItems.map(({ contract, deletePending }) => {
-                  const active = isActive(contract.period);
-                  return (
-                    <tr key={contract.id} className="border-t border-border bg-background/80">
-                      <td className="px-4 py-3">
-                        <div className="space-y-1">
-                          <span className="font-medium text-foreground">{contract.id}</span>
-                          <span className="text-xs text-muted-foreground">Nieruchomość: {contract.propertyId}</span>
-                          <span className="text-xs text-muted-foreground">Najemca: {contract.tenantUserId}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col text-sm">
-                          <span>Od: {formatDate(contract.period.from)}</span>
-                          <span>Do: {formatDate(contract.period.to)}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={[
-                            "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
-                            active
-                              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-700"
-                              : "border-muted bg-muted/30 text-muted-foreground",
-                          ].join(" ")}
-                        >
-                          {active ? "Aktywna" : "Nieaktywna"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{formatDate(contract.createdAt)}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            disabled={actionsLocked}
-                            onClick={() => handleEdit(contract)}
-                          >
-                            Edytuj
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            disabled={deletePending || actionsLocked}
-                            onClick={() => {
-                              handleDelete(contract).catch(() => {
-                                /* obsłużone w handleDelete */
-                              });
-                            }}
-                          >
-                            Usuń
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
+                tableItems.map(({ contract, deletePending }) => (
+                  <ContractRow
+                    key={contract.id}
+                    contract={contract}
+                    deletePending={deletePending}
+                    actionsLocked={actionsLocked}
+                    properties={properties}
+                    users={users}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                  />
+                ))
               )}
             </tbody>
           </table>
         </div>
       </div>
-
-      <datalist id="admin-contract-property-options">
-        {propertyOptions.map((option) => (
-          <option key={option} value={option} />
-        ))}
-      </datalist>
-      <datalist id="admin-contract-tenant-options">
-        {tenantOptions.map((option) => (
-          <option key={option} value={option} />
-        ))}
-      </datalist>
     </section>
   );
 }

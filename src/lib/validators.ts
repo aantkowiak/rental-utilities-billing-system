@@ -38,15 +38,13 @@ export const CreatePropertySchema = z.object({
     .max(100, "Label must be 100 characters or less"),
   startMonth: z
     .string()
+    .regex(/^\d{4}-\d{2}$/, "Start month must be in YYYY-MM format")
     .refine((val) => {
-      // Check if valid ISO date string
-      const date = new Date(val);
-      if (isNaN(date.getTime())) return false;
-      
-      // Check if first day of month
-      const isoString = date.toISOString().split("T")[0];
-      return isoString.endsWith("-01");
-    }, "Start month must be a valid date and the first day of a month (YYYY-MM-01)"),
+      // Validate it's a real month (01-12)
+      const [, month] = val.split("-");
+      const monthNum = parseInt(month, 10);
+      return monthNum >= 1 && monthNum <= 12;
+    }, "Month must be between 01 and 12"),
 });
 
 /**

@@ -25,7 +25,8 @@ export class PropertyService {
     const items: PropertyDTO[] = (data || []).map((row) => ({
       id: row.id,
       label: row.label,
-      startMonth: row.start_month,
+      // Convert YYYY-MM-DD back to YYYY-MM for API response
+      startMonth: row.start_month.slice(0, 7),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
@@ -44,12 +45,15 @@ export class PropertyService {
    * @throws Error if property creation fails or validation fails
    */
   static async create(supabase: SupabaseClient<Database>, cmd: CreatePropertyCmd): Promise<PropertyDTO> {
+    // Convert YYYY-MM to YYYY-MM-01 (first day of month)
+    const startMonthDate = `${cmd.startMonth}-01`;
+
     // Insert new property
     const { data, error } = await supabase
       .from("properties")
       .insert({
         label: cmd.label,
-        start_month: cmd.startMonth,
+        start_month: startMonthDate,
       })
       .select("*")
       .single();
@@ -70,7 +74,8 @@ export class PropertyService {
     const propertyDTO: PropertyDTO = {
       id: data.id,
       label: data.label,
-      startMonth: data.start_month,
+      // Convert YYYY-MM-DD back to YYYY-MM for API response
+      startMonth: data.start_month.slice(0, 7),
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -111,7 +116,8 @@ export class PropertyService {
     const propertyDTO: PropertyDTO = {
       id: data.id,
       label: data.label,
-      startMonth: data.start_month,
+      // Convert YYYY-MM-DD back to YYYY-MM for API response
+      startMonth: data.start_month.slice(0, 7),
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -141,7 +147,8 @@ export class PropertyService {
     }
 
     if (cmd.startMonth !== undefined) {
-      updateData.start_month = cmd.startMonth;
+      // Convert YYYY-MM to YYYY-MM-01 (first day of month)
+      updateData.start_month = `${cmd.startMonth}-01`;
     }
 
     // Perform update and fetch the updated row
@@ -172,7 +179,8 @@ export class PropertyService {
     const propertyDTO: PropertyDTO = {
       id: data.id,
       label: data.label,
-      startMonth: data.start_month,
+      // Convert YYYY-MM-DD back to YYYY-MM for API response
+      startMonth: data.start_month.slice(0, 7),
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };

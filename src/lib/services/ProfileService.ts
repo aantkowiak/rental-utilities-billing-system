@@ -3,11 +3,48 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/db/database.types";
 import type { ProfileDTO } from "@/types";
 
+export interface ProfileWithEmail extends ProfileDTO {
+  email: string;
+}
+
+export interface ProfileListResponse {
+  items: ProfileWithEmail[];
+}
+
 /**
  * Service for managing user profile operations.
  * Handles business logic and database interactions for profile updates.
  */
 export class ProfileService {
+  /**
+   * Lists all user profiles with their emails.
+   * Available only for admins.
+   *
+   * @param supabase - Supabase client instance
+   * @returns List of profiles with emails
+   * @throws Error if database operation fails
+   */
+  static async list(supabase: SupabaseClient<Database>): Promise<ProfileListResponse> {
+    const { data, error } = await supabase.rpc("list_profiles_with_emails");
+
+    if (error) {
+      throw new Error(`Database error: ${error.message}`);
+    }
+
+    const profiles = data ?? [];
+
+    const items: ProfileWithEmail[] = profiles.map((row) => ({
+      userId: row.user_id,
+      role: row.role,
+      propertyId: row.property_id,
+      displayName: row.display_name,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      email: row.email,
+    }));
+
+    return { items };
+  }
   /**
    * Updates the display name for a user's profile.
    *
