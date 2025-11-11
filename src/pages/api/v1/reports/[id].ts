@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
-import { createSupabaseClient } from "@/db/supabase.client";
-import { AppError } from "@/lib/errors";
+import { requireAuth } from "@/lib/api/auth";
+import { errorResponse } from "@/lib/errors";
 import { z } from "zod";
 
 export const prerender = false;
@@ -11,7 +11,7 @@ const UpdateReportStatusSchema = z.object({
 
 export const GET: APIRoute = async ({ params, request, locals }) => {
   try {
-    const supabase = createSupabaseClient(request, locals);
+    const supabase = locals.supabase;
     const { id } = params;
 
     if (!id) {
@@ -98,15 +98,7 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
       contractId: report.contract_id,
       month: report.month.substring(0, 7),
       status: report.status,
-      balanceRaw: report.balance_raw,
-      actualRentRaw: report.actual_rent_raw,
-      fixedCostRaw: report.fixed_cost_raw,
-      meterCostColdRaw: report.meter_cost_cold_raw,
-      meterCostHotRaw: report.meter_cost_hot_raw,
-      meterCostHeatingRaw: report.meter_cost_heating_raw,
-      anchorReadingId: report.anchor_reading_id,
-      anchorReadingNextId: report.anchor_reading_next_id,
-      monthlyConditionsId: report.monthly_conditions_id,
+      sent: report.sent,
       realizedAt: report.realized_at,
       createdAt: report.created_at,
       updatedAt: report.updated_at,
@@ -151,7 +143,7 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
 
 export const PATCH: APIRoute = async ({ params, request, locals }) => {
   try {
-    const supabase = createSupabaseClient(request, locals);
+    const supabase = locals.supabase;
     const { id } = params;
 
     if (!id) {

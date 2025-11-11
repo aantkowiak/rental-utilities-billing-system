@@ -19,13 +19,20 @@ export type Camelize<T> = {
 /* Simple snake → camel implementation (handles single underscore) */
 type CamelCase<S extends string> = S extends `${infer H}_${infer R}` ? `${Lowercase<H>}${Capitalize<CamelCase<R>>}` : S;
 
+/**
+ * Year-Month string in YYYY-MM format.
+ * Used for UI inputs and API payloads.
+ */
+export type YearMonth = string;
+
 /* ---------- raw DB row aliases ---------- */
 type PropertyRow = Tables<"properties">;
 type ProfileRow = Tables<"profiles">;
 type ContractRow = Tables<"contracts">;
-type MonthlyAdvanceRow = Tables<"monthly_conditions">;
+type MonthlyAdvanceRow = Tables<"monthly_advances">;
 type ReadingRow = Tables<"readings">;
 type ReportRow = Tables<"reports">;
+type ReportItemRow = Tables<"report_items">;
 type ReportEmailRow = Tables<"report_emails">;
 type ReportEmailAttemptRow = Tables<"report_email_attempts">;
 
@@ -46,6 +53,7 @@ export type ReadingDTO = Camelize<ReadingRow>;
 export type ReadingOrigin = "tenant" | "admin_replacement";
 export type ReadingType = "regular" | "baseline";
 export type ReportDTO = Camelize<ReportRow>;
+export type ReportItemDTO = Camelize<ReportItemRow>;
 export type ReportEmailDTO = Camelize<ReportEmailRow>;
 export type ReportEmailAttemptDTO = Camelize<ReportEmailAttemptRow>;
 
@@ -90,7 +98,7 @@ export type UpdateMonthlyAdvanceCmd = Partial<CreateMonthlyAdvanceCmd>;
 
 /* 2.6 Readings */
 export type CreateReadingCmd = Pick<ReadingDTO, "propertyId" | "readingAt" | "coldM3" | "hotM3" | "heatingGj"> &
-  Partial<Pick<ReadingDTO, "commentText" | "commentVisibleToTenant">>;
+  Partial<Pick<ReadingDTO, "commentText" | "commentVisibleToTenant" | "baseForMonth" | "finalForMonth">>;
 
 export type UpdateReadingCmd = Partial<CreateReadingCmd>;
 
@@ -101,16 +109,25 @@ export type CreateReadingReplacementCmd = Pick<
   effectiveMonth: string;
 } & Partial<Pick<ReadingDTO, "commentText" | "commentVisibleToTenant">>;
 
-export interface RecalculateAnchorsCmd {
-  propertyId: string;
-  fromMonth?: string;
-  toMonth?: string;
+/**
+ * Command to update month assignments for a reading.
+ * Used by admin to set baseForMonth and/or finalForMonth.
+ */
+export interface UpdateReadingMonthsCmd {
+  baseForMonth?: YearMonth | null;
+  finalForMonth?: YearMonth | null;
 }
 
 /* 2.7 Reports */
-export type GenerateReportCmd = Pick<ReportDTO, "contractId" | "month">;
+export interface GenerateReportCmd {
+  contractId: string;
+  month: YearMonth;
+}
 export interface UpdateReportStatusCmd {
   status: "realized" | "unlocked";
+}
+export interface UpdateReportSentCmd {
+  sent: boolean;
 }
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface RegenerateReportCmd {

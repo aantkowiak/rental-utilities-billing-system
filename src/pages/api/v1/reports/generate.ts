@@ -62,7 +62,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         REPORT_FORBIDDEN: 403,
         REPORT_DUPLICATE: 409,
         CONTRACT_NOT_FOUND: 404,
-        MISSING_ANCHOR_READINGS: 422,
+        MISSING_READING_PAIR: 422,
         MISSING_MONTHLY_CONDITIONS: 422,
         DATABASE_ERROR: 500,
       };
@@ -73,4 +73,3 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return errorResponse(500, "internal_error", "Wystąpił nieoczekiwany błąd.");
   }
 };
-

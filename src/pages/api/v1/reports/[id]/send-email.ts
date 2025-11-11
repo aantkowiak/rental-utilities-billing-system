@@ -1,12 +1,12 @@
 import type { APIRoute } from "astro";
-import { createSupabaseClient } from "@/db/supabase.client";
-import { AppError } from "@/lib/errors";
+import { requireAuth } from "@/lib/api/auth";
+import { errorResponse } from "@/lib/errors";
 
 export const prerender = false;
 
 export const POST: APIRoute = async ({ params, request, locals }) => {
   try {
-    const supabase = createSupabaseClient(request, locals);
+    const supabase = locals.supabase;
     const { id } = params;
 
     if (!id) {

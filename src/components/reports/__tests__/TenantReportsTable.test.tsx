@@ -190,20 +190,12 @@ function buildTenantReportListItem({
 
 function buildReport(overrides: Partial<ReportDTO>): ReportDTO {
   return {
-    actualRentRaw: overrides.actualRentRaw ?? 0,
-    anchorReadingId: overrides.anchorReadingId ?? "anchor-1",
-    anchorReadingNextId: overrides.anchorReadingNextId ?? "anchor-next-1",
-    balanceRaw: overrides.balanceRaw ?? 0,
     contractId: overrides.contractId ?? `contract-${overrides.id ?? "report-1"}`,
     createdAt: overrides.createdAt ?? new Date("2024-02-01T00:00:00Z").toISOString(),
-    fixedCostRaw: overrides.fixedCostRaw ?? 0,
     id: overrides.id ?? "report-1",
-    meterCostColdRaw: overrides.meterCostColdRaw ?? 0,
-    meterCostHeatingRaw: overrides.meterCostHeatingRaw ?? 0,
-    meterCostHotRaw: overrides.meterCostHotRaw ?? 0,
     month: overrides.month ?? "2024-02",
-    monthlyConditionsId: overrides.monthlyConditionsId ?? "conditions-1",
     realizedAt: overrides.realizedAt ?? null,
+    sent: overrides.sent ?? false,
     status: overrides.status ?? "pending",
     updatedAt: overrides.updatedAt ?? new Date("2024-02-01T00:00:00Z").toISOString(),
   };

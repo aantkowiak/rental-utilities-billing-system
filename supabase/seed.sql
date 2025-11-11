@@ -2,7 +2,7 @@
 -- Seed Data for Rental Utilities Billing System
 -- =====================================================================
 -- Purpose: Populate database with test data for development
--- Includes: Properties, profiles, contracts, monthly conditions, and
+-- Includes: Properties, profiles, contracts, monthly advances, and
 --          historical readings for the last 12 months
 -- =====================================================================
 
@@ -13,7 +13,7 @@ TRUNCATE TABLE report_email_attempts CASCADE;
 TRUNCATE TABLE report_emails CASCADE;
 TRUNCATE TABLE reports CASCADE;
 TRUNCATE TABLE readings CASCADE;
-TRUNCATE TABLE monthly_conditions CASCADE;
+TRUNCATE TABLE monthly_advances CASCADE;
 TRUNCATE TABLE contracts CASCADE;
 TRUNCATE TABLE profiles CASCADE;
 TRUNCATE TABLE properties CASCADE;
@@ -105,32 +105,32 @@ INSERT INTO profiles (user_id, role, property_id, display_name, created_at, upda
 -- =====================================================================
 -- Contracts
 -- =====================================================================
--- Contract for Tenant 1 - started 13 months ago, ongoing
+-- Contract for Tenant 1 - started 13 months ago, ends in 2030
 INSERT INTO contracts (id, property_id, tenant_user_id, period, created_at, updated_at) VALUES
   (
     '20000000-0000-0000-0000-000000000001',
     '10000000-0000-0000-0000-000000000001',
     '00000000-0000-0000-0000-000000000002',
-    tstzrange((now() - interval '13 months')::timestamptz, NULL, '[)'),
+    tstzrange((now() - interval '13 months')::timestamptz, '2030-12-31T23:59:59Z'::timestamptz, '[)'),
     now(),
     now()
   );
 
--- Contract for Tenant 2 - started 13 months ago, ongoing
+-- Contract for Tenant 2 - started 13 months ago, ends in 2030
 INSERT INTO contracts (id, property_id, tenant_user_id, period, created_at, updated_at) VALUES
   (
     '20000000-0000-0000-0000-000000000002',
     '10000000-0000-0000-0000-000000000002',
     '00000000-0000-0000-0000-000000000003',
-    tstzrange((now() - interval '13 months')::timestamptz, NULL, '[)'),
+    tstzrange((now() - interval '13 months')::timestamptz, '2030-12-31T23:59:59Z'::timestamptz, '[)'),
     now(),
     now()
   );
 
 -- =====================================================================
--- Monthly Conditions
+-- Monthly Advances
 -- =====================================================================
--- Generate monthly conditions for the last 13 months for both properties
+-- Generate monthly advances for the last 13 months for both properties
 DO $$
 DECLARE
   month_offset integer;
@@ -143,7 +143,7 @@ BEGIN
     FOR month_offset IN 0..12 LOOP
       current_month := date_trunc('month', now() - (month_offset || ' months')::interval)::date;
       
-      INSERT INTO monthly_conditions (
+      INSERT INTO monthly_advances (
         property_id,
         month,
         manager_fee,
@@ -383,6 +383,58 @@ BEGIN
 END $$;
 
 -- =====================================================================
+-- Assign base_for_month and final_for_month to readings
+-- =====================================================================
+DO $$
+DECLARE
+  property_rec record;
+  month_offset integer;
+  current_month date;
+  base_reading_id uuid;
+  final_reading_id uuid;
+BEGIN
+  FOR property_rec IN SELECT id FROM properties LOOP
+    FOR month_offset IN 0..12 LOOP
+      current_month := date_trunc('month', now() - (month_offset || ' months')::interval)::date;
+      
+      -- Find the first reading at or after the start of this month
+      SELECT id INTO base_reading_id
+      FROM readings
+      WHERE property_id = property_rec.id
+        AND reading_at >= current_month::timestamptz
+        AND reading_at < (current_month + interval '1 month')::timestamptz
+        AND deleted_at IS NULL
+      ORDER BY reading_at ASC
+      LIMIT 1;
+      
+      -- Find the first reading at or after the start of next month  
+      SELECT id INTO final_reading_id
+      FROM readings
+      WHERE property_id = property_rec.id
+        AND reading_at >= (current_month + interval '1 month')::timestamptz
+        AND reading_at < (current_month + interval '2 months')::timestamptz
+        AND deleted_at IS NULL
+      ORDER BY reading_at ASC
+      LIMIT 1;
+      
+      -- Assign base_for_month
+      IF base_reading_id IS NOT NULL THEN
+        UPDATE readings
+        SET base_for_month = current_month
+        WHERE id = base_reading_id;
+      END IF;
+      
+      -- Assign final_for_month
+      IF final_reading_id IS NOT NULL THEN
+        UPDATE readings
+        SET final_for_month = current_month
+        WHERE id = final_reading_id;
+      END IF;
+    END LOOP;
+  END LOOP;
+END $$;
+
+-- =====================================================================
 -- Summary
 -- =====================================================================
 DO $$
@@ -390,13 +442,13 @@ DECLARE
   properties_count integer;
   profiles_count integer;
   contracts_count integer;
-  monthly_conditions_count integer;
+  monthly_advances_count integer;
   readings_count integer;
 BEGIN
   SELECT count(*) INTO properties_count FROM properties;
   SELECT count(*) INTO profiles_count FROM profiles;
   SELECT count(*) INTO contracts_count FROM contracts;
-  SELECT count(*) INTO monthly_conditions_count FROM monthly_conditions;
+  SELECT count(*) INTO monthly_advances_count FROM monthly_advances;
   SELECT count(*) INTO readings_count FROM readings WHERE deleted_at IS NULL;
   
   RAISE NOTICE '=================================================';
@@ -405,7 +457,7 @@ BEGIN
   RAISE NOTICE 'Properties created: %', properties_count;
   RAISE NOTICE 'Profiles created: %', profiles_count;
   RAISE NOTICE 'Contracts created: %', contracts_count;
-  RAISE NOTICE 'Monthly conditions created: %', monthly_conditions_count;
+  RAISE NOTICE 'Monthly advances created: %', monthly_advances_count;
   RAISE NOTICE 'Readings created: %', readings_count;
   RAISE NOTICE '=================================================';
   RAISE NOTICE 'Test Users:';

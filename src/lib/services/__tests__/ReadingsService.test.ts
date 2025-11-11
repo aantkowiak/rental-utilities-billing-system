@@ -11,6 +11,8 @@ const BASE_ROW: Database["public"]["Tables"]["readings"]["Row"] = {
   property_id: "property-1",
   reading_at: "2024-05-10T00:00:00.000Z",
   effective_month: null,
+  base_for_month: null,
+  final_for_month: null,
   origin: "tenant",
   reading_type: "regular",
   cold_m3: 10,
@@ -31,6 +33,8 @@ const BASE_DTO: ReadingDTO = {
   propertyId: "property-1",
   readingAt: "2024-05-10T00:00:00.000Z",
   effectiveMonth: null,
+  baseForMonth: null,
+  finalForMonth: null,
   origin: "tenant",
   readingType: "regular",
   coldM3: 10,
@@ -176,6 +180,129 @@ describe("ReadingsService", () => {
       code: "READING_NOT_FOUND",
     });
   });
+
+  describe("updateMonths", () => {
+    it("updates base_for_month and final_for_month", async () => {
+      const updatedRow = {
+        ...BASE_ROW,
+        base_for_month: "2024-05-01",
+        final_for_month: "2024-06-01",
+      };
+      const { supabase } = createSupabaseForUpdate({ data: updatedRow, error: null });
+
+      const result = await ReadingsService.updateMonths(supabase, "reading-1", {
+        baseForMonth: "2024-05",
+        finalForMonth: "2024-06",
+      });
+
+      expect(result.baseForMonth).toBe("2024-05-01");
+      expect(result.finalForMonth).toBe("2024-06-01");
+    });
+
+    it("handles unique constraint violations", async () => {
+      const { supabase } = createSupabaseForUpdate({
+        data: null,
+        error: { code: "23505", message: "duplicate" },
+      });
+
+      await expect(
+        ReadingsService.updateMonths(supabase, "reading-1", {
+          baseForMonth: "2024-05",
+        })
+      ).rejects.toMatchObject({
+        code: "DATABASE_ERROR",
+        message: expect.stringContaining("already assigned"),
+      });
+    });
+  });
+
+  describe("findPairForPropertyAndMonth", () => {
+    it("returns pair when both base and final exist", async () => {
+      const baseRow = { ...BASE_ROW, id: "base-1", base_for_month: "2024-05-01" };
+      const finalRow = { ...BASE_ROW, id: "final-1", final_for_month: "2024-05-01" };
+
+      const supabase = {
+        from: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                is: vi.fn().mockReturnValue({
+                  maybeSingle: vi
+                    .fn()
+                    .mockResolvedValueOnce({ data: baseRow, error: null })
+                    .mockResolvedValueOnce({ data: finalRow, error: null }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      } as unknown as SupabaseClient<Database>;
+
+      const pair = await ReadingsService.findPairForPropertyAndMonth(supabase, "property-1", "2024-05");
+
+      expect(pair).not.toBeNull();
+      expect(pair?.base.id).toBe("base-1");
+      expect(pair?.final.id).toBe("final-1");
+    });
+
+    it("returns null when base is missing", async () => {
+      const supabase = {
+        from: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                is: vi.fn().mockReturnValue({
+                  maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+                }),
+              }),
+            }),
+          }),
+        }),
+      } as unknown as SupabaseClient<Database>;
+
+      const pair = await ReadingsService.findPairForPropertyAndMonth(supabase, "property-1", "2024-05");
+
+      expect(pair).toBeNull();
+    });
+  });
+
+  describe("getAffectedMonths", () => {
+    it("returns both months when both are set", async () => {
+      vi.spyOn(ReadingsService, "getById").mockResolvedValue({
+        ...BASE_DTO,
+        baseForMonth: "2024-05-01",
+        finalForMonth: "2024-06-01",
+      });
+
+      const months = await ReadingsService.getAffectedMonths(createSupabaseStub(), "reading-1");
+
+      expect(months).toEqual(["2024-05", "2024-06"]);
+    });
+
+    it("returns single month when only base is set", async () => {
+      vi.spyOn(ReadingsService, "getById").mockResolvedValue({
+        ...BASE_DTO,
+        baseForMonth: "2024-05-01",
+        finalForMonth: null,
+      });
+
+      const months = await ReadingsService.getAffectedMonths(createSupabaseStub(), "reading-1");
+
+      expect(months).toEqual(["2024-05"]);
+    });
+
+    it("returns empty array when no months are set", async () => {
+      vi.spyOn(ReadingsService, "getById").mockResolvedValue({
+        ...BASE_DTO,
+        baseForMonth: null,
+        finalForMonth: null,
+      });
+
+      const months = await ReadingsService.getAffectedMonths(createSupabaseStub(), "reading-1");
+
+      expect(months).toEqual([]);
+    });
+  });
 });
 
 function createSupabaseStub(): SupabaseClient<Database> {
@@ -246,6 +373,27 @@ function createSupabaseForSoftDelete(result: { data: unknown; error: { code?: st
   const select = vi.fn().mockReturnValue({ single });
   const isMethod = vi.fn().mockReturnValue({ select });
   const eqMethod = vi.fn().mockReturnValue({ is: isMethod, select });
+  const update = vi.fn().mockReturnValue({ eq: eqMethod });
+  const builder = {
+    update,
+  };
+
+  const supabase = {
+    from: vi.fn(() => builder),
+  } as unknown as SupabaseClient<Database>;
+
+  return { supabase };
+}
+
+function createSupabaseForUpdate(result: {
+  data: Database["public"]["Tables"]["readings"]["Row"] | null;
+  error: { code?: string; message?: string } | null;
+}): {
+  supabase: SupabaseClient<Database>;
+} {
+  const single = vi.fn().mockResolvedValue(result);
+  const select = vi.fn().mockReturnValue({ single });
+  const eqMethod = vi.fn().mockReturnValue({ select });
   const update = vi.fn().mockReturnValue({ eq: eqMethod });
   const builder = {
     update,

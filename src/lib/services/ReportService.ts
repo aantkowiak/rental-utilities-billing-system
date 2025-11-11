@@ -1,24 +1,25 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/db/database.types";
-import type { ReportDTO } from "@/types";
+import type { ReportDTO, ReportItemDTO, YearMonth } from "@/types";
+import { yearMonthToISODate, isoDateToYearMonth } from "@/lib/date/month";
+import { ReadingsService, type ReadingPair } from "./ReadingsService";
 
 /* eslint-disable @typescript-eslint/no-extraneous-class */
 
 type Supabase = SupabaseClient<Database>;
 type ReportsTable = Database["public"]["Tables"]["reports"];
 type ReportRow = ReportsTable["Row"];
-type ReadingsTable = Database["public"]["Tables"]["readings"];
-type ReadingRow = ReadingsTable["Row"];
-type MonthlyConditionsTable = Database["public"]["Tables"]["monthly_conditions"];
-type MonthlyConditionsRow = MonthlyConditionsTable["Row"];
+type ReportItemRow = Database["public"]["Tables"]["report_items"]["Row"];
+type MonthlyAdvancesTable = Database["public"]["Tables"]["monthly_advances"];
+type MonthlyAdvancesRow = MonthlyAdvancesTable["Row"];
 
 export type ReportServiceErrorCode =
   | "REPORT_NOT_FOUND"
   | "REPORT_FORBIDDEN"
   | "REPORT_DUPLICATE"
   | "CONTRACT_NOT_FOUND"
-  | "MISSING_ANCHOR_READINGS"
+  | "MISSING_READING_PAIR"
   | "MISSING_MONTHLY_CONDITIONS"
   | "DATABASE_ERROR";
 
@@ -37,41 +38,41 @@ export interface ReportAccessContext {
   userId: string;
 }
 
-interface AnchorReadings {
-  currentMonth: ReadingRow;
-  nextMonth: ReadingRow;
-}
-
-interface ReportCalculation {
+interface ReportItemCalculation {
+  propertyId: string;
+  baselineReadingId: string;
+  finalReadingId: string;
+  usageColdM3: number;
+  usageHotM3: number;
+  usageHeatingGj: number;
+  costColdRaw: number;
+  costHotRaw: number;
+  costHeatingRaw: number;
   fixedCostRaw: number;
-  meterCostColdRaw: number;
-  meterCostHotRaw: number;
-  meterCostHeatingRaw: number;
-  actualRentRaw: number;
-  balanceRaw: number;
+  amountRaw: number;
 }
 
 export class ReportService {
   /**
    * Generate a new report for a given contract and month.
-   * This will:
+   * New logic:
    * 1. Validate contract exists and user has access
-   * 2. Find anchor readings for month M and M+1
+   * 2. Find reading pair (base and final) for the property and month
    * 3. Fetch monthly conditions for the month
-   * 4. Calculate costs
-   * 5. Create report record
+   * 4. Calculate costs for the single property (one item)
+   * 5. Create report record with report_items
    */
   static async generate(
     supabase: Supabase,
     context: ReportAccessContext,
     contractId: string,
-    month: string
+    month: YearMonth
   ): Promise<ReportDTO> {
     // Step 1: Validate contract and get property
     const contract = await this.getContractWithAccess(supabase, context, contractId);
 
     // Step 2: Format month as first day of month (YYYY-MM-DD)
-    const monthDate = `${month}-01`;
+    const monthDate = yearMonthToISODate(month);
 
     // Step 3: Check if report already exists
     const existingReport = await this.findExistingReport(supabase, contractId, monthDate);
@@ -82,31 +83,29 @@ export class ReportService {
       );
     }
 
-    // Step 4: Find anchor readings
-    const anchors = await this.findAnchorReadings(supabase, contract.property_id, monthDate);
+    // Step 4: Find reading pair for the property and month
+    const pair = await ReadingsService.findPairForPropertyAndMonth(supabase, contract.property_id, month);
+    if (!pair) {
+      throw new ReportServiceError(
+        "MISSING_READING_PAIR",
+        `Brak pary odczytów (bazowy i finalny) dla nieruchomości i miesiąca ${month}.`
+      );
+    }
 
     // Step 5: Fetch monthly conditions
     const conditions = await this.getMonthlyConditions(supabase, contract.property_id, monthDate);
 
-    // Step 6: Calculate costs
-    const calculation = this.calculateReportCosts(anchors, conditions);
+    // Step 6: Calculate costs for this property
+    const itemCalc = this.calculateReportItem(pair, conditions, contract.property_id);
 
-    // Step 7: Create report
+    // Step 7: Create report (without cost columns, those are now in report_items)
     const { data: newReport, error: insertError } = await supabase
       .from("reports")
       .insert({
         contract_id: contractId,
         month: monthDate,
         status: "draft",
-        anchor_reading_id: anchors.currentMonth.id,
-        anchor_reading_next_id: anchors.nextMonth.id,
-        monthly_conditions_id: conditions.id,
-        fixed_cost_raw: calculation.fixedCostRaw,
-        meter_cost_cold_raw: calculation.meterCostColdRaw,
-        meter_cost_hot_raw: calculation.meterCostHotRaw,
-        meter_cost_heating_raw: calculation.meterCostHeatingRaw,
-        actual_rent_raw: calculation.actualRentRaw,
-        balance_raw: calculation.balanceRaw,
+        sent: false,
       })
       .select()
       .single();
@@ -116,7 +115,207 @@ export class ReportService {
       throw new ReportServiceError("DATABASE_ERROR", "Nie udało się utworzyć raportu.");
     }
 
+    // Step 8: Create report_item
+    const { error: itemError } = await supabase.from("report_items").insert({
+      report_id: newReport.id,
+      property_id: itemCalc.propertyId,
+      baseline_reading_id: itemCalc.baselineReadingId,
+      final_reading_id: itemCalc.finalReadingId,
+      usage_cold_m3: itemCalc.usageColdM3,
+      usage_hot_m3: itemCalc.usageHotM3,
+      usage_heating_gj: itemCalc.usageHeatingGj,
+      cost_cold_raw: itemCalc.costColdRaw,
+      cost_hot_raw: itemCalc.costHotRaw,
+      cost_heating_raw: itemCalc.costHeatingRaw,
+      fixed_cost_raw: itemCalc.fixedCostRaw,
+      amount_raw: itemCalc.amountRaw,
+    });
+
+    if (itemError) {
+      console.error("[ReportService.generate] Error creating report_item:", itemError);
+      // Rollback: delete the report
+      await supabase.from("reports").delete().eq("id", newReport.id);
+      throw new ReportServiceError("DATABASE_ERROR", "Nie udało się utworzyć pozycji raportu.");
+    }
+
     return mapReportRowToDto(newReport);
+  }
+
+  /**
+   * Regenerate (rebuild) an existing report.
+   * Deletes old report_items and recalculates based on current readings and conditions.
+   */
+  static async regenerate(supabase: Supabase, context: ReportAccessContext, reportId: string): Promise<ReportDTO> {
+    // Get existing report
+    const { data: report, error: reportError } = await supabase
+      .from("reports")
+      .select("*, contracts!inner(id, property_id, tenant_user_id)")
+      .eq("id", reportId)
+      .single();
+
+    if (reportError || !report) {
+      throw new ReportServiceError("REPORT_NOT_FOUND", "Raport nie został znaleziony.");
+    }
+
+    // Check access
+    const contract = report.contracts;
+    if (context.role === "tenant" && contract.tenant_user_id !== context.userId) {
+      throw new ReportServiceError("REPORT_FORBIDDEN", "Brak uprawnień do tego raportu.");
+    }
+
+    const month = isoDateToYearMonth(report.month);
+    const propertyId = contract.property_id;
+
+    // Find reading pair
+    const pair = await ReadingsService.findPairForPropertyAndMonth(supabase, propertyId, month);
+    if (!pair) {
+      // No pair available - delete report and items
+      await supabase.from("reports").delete().eq("id", reportId);
+      throw new ReportServiceError(
+        "MISSING_READING_PAIR",
+        `Brak pary odczytów dla miesiąca ${month}. Raport został usunięty.`
+      );
+    }
+
+    // Fetch monthly conditions
+    const conditions = await this.getMonthlyConditions(supabase, propertyId, report.month);
+
+    // Calculate new item
+    const itemCalc = this.calculateReportItem(pair, conditions, propertyId);
+
+    // Delete old items
+    await supabase.from("report_items").delete().eq("report_id", reportId);
+
+    // Insert new item
+    const { error: itemError } = await supabase.from("report_items").insert({
+      report_id: reportId,
+      property_id: itemCalc.propertyId,
+      baseline_reading_id: itemCalc.baselineReadingId,
+      final_reading_id: itemCalc.finalReadingId,
+      usage_cold_m3: itemCalc.usageColdM3,
+      usage_hot_m3: itemCalc.usageHotM3,
+      usage_heating_gj: itemCalc.usageHeatingGj,
+      cost_cold_raw: itemCalc.costColdRaw,
+      cost_hot_raw: itemCalc.costHotRaw,
+      cost_heating_raw: itemCalc.costHeatingRaw,
+      fixed_cost_raw: itemCalc.fixedCostRaw,
+      amount_raw: itemCalc.amountRaw,
+    });
+
+    if (itemError) {
+      console.error("[ReportService.regenerate] Error creating report_item:", itemError);
+      throw new ReportServiceError("DATABASE_ERROR", "Nie udało się odtworzyć pozycji raportu.");
+    }
+
+    // Return updated report
+    const { data: updatedReport } = await supabase.from("reports").select("*").eq("id", reportId).single();
+
+    return mapReportRowToDto(updatedReport!);
+  }
+
+  /**
+   * Recompute reports affected by a reading change.
+   * This is called after updating a reading's baseForMonth or finalForMonth.
+   */
+  static async recomputeForReading(supabase: Supabase, readingId: string): Promise<void> {
+    // Get affected months
+    const months = await ReadingsService.getAffectedMonths(supabase, readingId);
+
+    // Get the property for this reading
+    const reading = await ReadingsService.getById(supabase, readingId);
+    const propertyId = reading.propertyId;
+
+    // For each month, find all reports for contracts on this property
+    for (const month of months) {
+      const monthISO = yearMonthToISODate(month);
+
+      // Find all reports for this property and month
+      const { data: reports } = await supabase
+        .from("reports")
+        .select("id, contract_id, contracts!inner(property_id)")
+        .eq("month", monthISO)
+        .eq("contracts.property_id", propertyId);
+
+      if (!reports || reports.length === 0) {
+        continue;
+      }
+
+      // Regenerate each report
+      for (const report of reports) {
+        try {
+          // Check if pair still exists
+          const pair = await ReadingsService.findPairForPropertyAndMonth(supabase, propertyId, month);
+
+          if (!pair) {
+            // No pair - delete report
+            await supabase.from("reports").delete().eq("id", report.id);
+            console.info(`[ReportService.recomputeForReading] Deleted report ${report.id} (no pair for ${month})`);
+            continue;
+          }
+
+          // Regenerate with admin context (bypass access checks)
+          await this.regenerate(supabase, { role: "admin", userId: "system" }, report.id);
+          console.info(`[ReportService.recomputeForReading] Regenerated report ${report.id}`);
+        } catch (error) {
+          console.error(`[ReportService.recomputeForReading] Error regenerating report ${report.id}:`, error);
+        }
+      }
+    }
+  }
+
+  /**
+   * Update report sent status
+   */
+  static async updateSent(supabase: Supabase, reportId: string, sent: boolean): Promise<ReportDTO> {
+    const { data, error } = await supabase.from("reports").update({ sent }).eq("id", reportId).select().single();
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        throw new ReportServiceError("REPORT_NOT_FOUND", "Raport nie został znaleziony.");
+      }
+      throw new ReportServiceError("DATABASE_ERROR", error.message);
+    }
+
+    return mapReportRowToDto(data);
+  }
+
+  /**
+   * Get report by ID with access check
+   */
+  static async getById(supabase: Supabase, context: ReportAccessContext, reportId: string): Promise<ReportDTO> {
+    const { data: report, error } = await supabase
+      .from("reports")
+      .select("*, contracts!inner(tenant_user_id)")
+      .eq("id", reportId)
+      .single();
+
+    if (error || !report) {
+      throw new ReportServiceError("REPORT_NOT_FOUND", "Raport nie został znaleziony.");
+    }
+
+    // Check access
+    if (context.role === "tenant" && report.contracts.tenant_user_id !== context.userId) {
+      throw new ReportServiceError("REPORT_FORBIDDEN", "Brak uprawnień do tego raportu.");
+    }
+
+    return mapReportRowToDto(report);
+  }
+
+  /**
+   * Get report items for a report
+   */
+  static async getItems(supabase: Supabase, reportId: string): Promise<ReportItemDTO[]> {
+    const { data, error } = await supabase
+      .from("report_items")
+      .select("*")
+      .eq("report_id", reportId)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw new ReportServiceError("DATABASE_ERROR", error.message);
+    }
+
+    return (data ?? []).map(mapReportItemRowToDto);
   }
 
   /**
@@ -164,117 +363,15 @@ export class ReportService {
   }
 
   /**
-   * Find anchor readings for the given month (M) and next month (M+1)
-   * According to FR-006:
-   * 1. If admin_replacement with effective_month exists, use it
-   * 2. Otherwise, use latest reading in -3/+5 day window
-   */
-  private static async findAnchorReadings(
-    supabase: Supabase,
-    propertyId: string,
-    monthDate: string
-  ): Promise<AnchorReadings> {
-    // Calculate next month
-    const currentDate = new Date(monthDate);
-    const nextMonthDate = new Date(currentDate);
-    nextMonthDate.setMonth(nextMonthDate.getMonth() + 1);
-    const nextMonth = nextMonthDate.toISOString().substring(0, 10);
-
-    // Find anchor for current month
-    const currentAnchor = await this.findAnchorForMonth(supabase, propertyId, monthDate);
-
-    // Find anchor for next month
-    const nextAnchor = await this.findAnchorForMonth(supabase, propertyId, nextMonth);
-
-    // Validate we have both anchors
-    const missingAnchors: string[] = [];
-    if (!currentAnchor) {
-      missingAnchors.push(monthDate.substring(0, 7));
-    }
-    if (!nextAnchor) {
-      missingAnchors.push(nextMonth.substring(0, 7));
-    }
-
-    if (missingAnchors.length > 0) {
-      throw new ReportServiceError(
-        "MISSING_ANCHOR_READINGS",
-        `Brak odczytów dla miesięcy: ${missingAnchors.join(", ")}. Dodaj odczyty w systemie przed wygenerowaniem raportu.`,
-        { missingMonths: missingAnchors }
-      );
-    }
-
-    return {
-      currentMonth: currentAnchor,
-      nextMonth: nextAnchor,
-    };
-  }
-
-  /**
-   * Find anchor reading for a specific month
-   * FR-006: Try admin replacement first, then fall back to latest reading in window
-   */
-  private static async findAnchorForMonth(
-    supabase: Supabase,
-    propertyId: string,
-    monthDate: string
-  ): Promise<ReadingRow | null> {
-    // Step 1: Check for admin replacement with effective_month
-    const { data: adminReplacement } = await supabase
-      .from("readings")
-      .select("*")
-      .eq("property_id", propertyId)
-      .eq("effective_month", monthDate)
-      .eq("origin", "admin_replacement")
-      .is("deleted_at", null)
-      .maybeSingle();
-
-    if (adminReplacement) {
-      return adminReplacement;
-    }
-
-    // Step 2: Find latest reading in the -3/+5 day window
-    // Window: last 3 days of previous month through first 5 days of current month
-    const monthStart = new Date(monthDate);
-    const prevMonth = new Date(monthStart);
-    prevMonth.setMonth(prevMonth.getMonth() - 1);
-
-    // Calculate window boundaries
-    const windowStart = new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0); // Last day of prev month
-    windowStart.setDate(windowStart.getDate() - 2); // Go back 2 more days (last 3 days)
-    windowStart.setHours(0, 0, 0, 0);
-
-    const windowEnd = new Date(monthStart);
-    windowEnd.setDate(5); // First 5 days
-    windowEnd.setHours(23, 59, 59, 999);
-
-    const { data: readings } = await supabase
-      .from("readings")
-      .select("*")
-      .eq("property_id", propertyId)
-      .gte("reading_at", windowStart.toISOString())
-      .lte("reading_at", windowEnd.toISOString())
-      .is("deleted_at", null)
-      .order("reading_at", { ascending: false })
-      .order("id", { ascending: false })
-      .limit(1);
-
-    if (readings && readings.length > 0) {
-      return readings[0];
-    }
-
-    return null;
-  }
-
-  /**
    * Get monthly conditions for the given property and month
    */
   private static async getMonthlyConditions(
     supabase: Supabase,
     propertyId: string,
     monthDate: string
-  ): Promise<MonthlyConditionsRow> {
+  ): Promise<MonthlyAdvancesRow> {
     const { data: conditions, error } = await supabase
-      .from("monthly_conditions")
+      .from("monthly_advances")
       .select("*")
       .eq("property_id", propertyId)
       .eq("month", monthDate)
@@ -291,27 +388,30 @@ export class ReportService {
   }
 
   /**
-   * Calculate report costs based on anchor readings and monthly conditions
+   * Calculate report item costs based on reading pair and monthly conditions.
    * According to FR-011 from PRD:
    * - cold water cost = consumption_cold × price_cold
    * - hot water cost = consumption_hot × (price_cold + price_heating_hot)
    * - heating cost = consumption_heating × price_heating
    * - fixed_cost = manager_fee - (forecast_cold × price_cold + forecast_hot × (price_cold + price_heating_hot) + forecast_heating × price_heating)
-   * - actual_rent = fixed_cost + (sum of meter costs)
-   * - balance = advance_payment - actual_rent
+   * - amount = fixed_cost + (sum of meter costs)
    */
-  private static calculateReportCosts(anchors: AnchorReadings, conditions: MonthlyConditionsRow): ReportCalculation {
-    // Calculate consumption (difference between next and current reading)
-    const consumptionCold = Number(anchors.nextMonth.cold_m3) - Number(anchors.currentMonth.cold_m3);
-    const consumptionHot = Number(anchors.nextMonth.hot_m3) - Number(anchors.currentMonth.hot_m3);
-    const consumptionHeating = Number(anchors.nextMonth.heating_gj) - Number(anchors.currentMonth.heating_gj);
+  private static calculateReportItem(
+    pair: ReadingPair,
+    conditions: MonthlyAdvancesRow,
+    propertyId: string
+  ): ReportItemCalculation {
+    // Calculate consumption (difference between final and base reading)
+    // Ensure non-negative (max with 0)
+    const usageColdM3 = Math.max(0, Number(pair.final.coldM3) - Number(pair.base.coldM3));
+    const usageHotM3 = Math.max(0, Number(pair.final.hotM3) - Number(pair.base.hotM3));
+    const usageHeatingGj = Math.max(0, Number(pair.final.heatingGj) - Number(pair.base.heatingGj));
 
     // Get prices
     const priceCold = Number(conditions.price_cold);
     const priceHotHeating = Number(conditions.price_hot_heating);
     const priceHeating = Number(conditions.price_heating);
     const managerFee = Number(conditions.manager_fee);
-    const advancePayment = Number(conditions.advance_payment);
 
     // Get forecasts
     const forecastCold = Number(conditions.forecast_cold);
@@ -319,28 +419,30 @@ export class ReportService {
     const forecastHeating = Number(conditions.forecast_heating);
 
     // Calculate meter costs
-    const meterCostColdRaw = consumptionCold * priceCold;
-    const meterCostHotRaw = consumptionHot * (priceCold + priceHotHeating);
-    const meterCostHeatingRaw = consumptionHeating * priceHeating;
+    const costColdRaw = usageColdM3 * priceCold;
+    const costHotRaw = usageHotM3 * (priceCold + priceHotHeating);
+    const costHeatingRaw = usageHeatingGj * priceHeating;
 
     // Calculate fixed cost (manager fee minus forecast costs)
     const forecastCostTotal =
       forecastCold * priceCold + forecastHot * (priceCold + priceHotHeating) + forecastHeating * priceHeating;
     const fixedCostRaw = managerFee - forecastCostTotal;
 
-    // Calculate actual rent (fixed cost + all meter costs)
-    const actualRentRaw = fixedCostRaw + meterCostColdRaw + meterCostHotRaw + meterCostHeatingRaw;
-
-    // Calculate balance (advance payment - actual rent)
-    const balanceRaw = advancePayment - actualRentRaw;
+    // Calculate total amount for this item (fixed cost + all meter costs)
+    const amountRaw = fixedCostRaw + costColdRaw + costHotRaw + costHeatingRaw;
 
     return {
+      propertyId,
+      baselineReadingId: pair.base.id,
+      finalReadingId: pair.final.id,
+      usageColdM3,
+      usageHotM3,
+      usageHeatingGj,
+      costColdRaw,
+      costHotRaw,
+      costHeatingRaw,
       fixedCostRaw,
-      meterCostColdRaw,
-      meterCostHotRaw,
-      meterCostHeatingRaw,
-      actualRentRaw,
-      balanceRaw,
+      amountRaw,
     };
   }
 }
@@ -354,18 +456,32 @@ function mapReportRowToDto(row: ReportRow): ReportDTO {
     contractId: row.contract_id,
     month: row.month.substring(0, 7), // Convert "YYYY-MM-DD" to "YYYY-MM"
     status: row.status as ReportDTO["status"],
-    anchorReadingId: row.anchor_reading_id,
-    anchorReadingNextId: row.anchor_reading_next_id,
-    monthlyConditionsId: row.monthly_conditions_id,
-    fixedCostRaw: Number(row.fixed_cost_raw),
-    meterCostColdRaw: Number(row.meter_cost_cold_raw),
-    meterCostHotRaw: Number(row.meter_cost_hot_raw),
-    meterCostHeatingRaw: Number(row.meter_cost_heating_raw),
-    actualRentRaw: Number(row.actual_rent_raw),
-    balanceRaw: Number(row.balance_raw),
+    sent: row.sent,
     realizedAt: row.realized_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
+/**
+ * Map report_item row to DTO
+ */
+function mapReportItemRowToDto(row: ReportItemRow): ReportItemDTO {
+  return {
+    id: row.id,
+    reportId: row.report_id,
+    propertyId: row.property_id,
+    baselineReadingId: row.baseline_reading_id,
+    finalReadingId: row.final_reading_id,
+    usageColdM3: Number(row.usage_cold_m3),
+    usageHotM3: Number(row.usage_hot_m3),
+    usageHeatingGj: Number(row.usage_heating_gj),
+    costColdRaw: Number(row.cost_cold_raw),
+    costHotRaw: Number(row.cost_hot_raw),
+    costHeatingRaw: Number(row.cost_heating_raw),
+    fixedCostRaw: Number(row.fixed_cost_raw),
+    amountRaw: Number(row.amount_raw),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}

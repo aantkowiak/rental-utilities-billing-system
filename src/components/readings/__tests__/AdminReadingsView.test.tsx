@@ -222,56 +222,8 @@ describe("AdminReadingsView", () => {
         expect.objectContaining({ propertyId: "property-1" })
       )
     );
-    await waitFor(() =>
-      expect(apiPostMock).toHaveBeenNthCalledWith(
-        2,
-        "/api/v1/readings/recalculate-anchors",
-        expect.objectContaining({ propertyId: "property-1" })
-      )
-    );
-
     expect(await screen.findByText(/Dodano odczyt zastępczy/i)).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-  });
-
-  it("plans anchor recalculation and hides overlay after completion", async () => {
-    const reading = buildReading({ id: "anchor-reading" });
-
-    apiGetMock.mockImplementation((url: string) => {
-      if (url === "/api/v1/properties") {
-        return Promise.resolve({ items: [{ id: "property-1", label: "Test Property" }] });
-      }
-      return Promise.resolve({ items: [reading] } satisfies ReadingListResponse);
-    });
-
-    let resolvePost: ((value: unknown) => void) | undefined;
-    apiPostMock.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolvePost = resolve;
-        })
-    );
-
-    render(<AdminReadingsView />);
-
-    const planButton = await screen.findByRole("button", { name: /Zaplanuj przeliczenie/i });
-    fireEvent.click(planButton);
-
-    expect(await screen.findByText(/Planowanie przeliczenia kotwic/i)).toBeInTheDocument();
-
-    resolvePost?.({});
-
-    await waitFor(() =>
-      expect(apiPostMock).toHaveBeenCalledWith(
-        "/api/v1/readings/recalculate-anchors",
-        expect.objectContaining({
-          propertyId: "property-1",
-        })
-      )
-    );
-
-    await waitFor(() => expect(screen.queryByText(/Planowanie przeliczenia kotwic/i)).not.toBeInTheDocument());
-    expect(await screen.findByText(/Rekalkulacja zaplanowana/i)).toBeInTheDocument();
   });
 });
 

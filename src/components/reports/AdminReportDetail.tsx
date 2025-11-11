@@ -169,58 +169,7 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
     return Boolean(permissions.canToggleRealized);
   }, [permissions, report]);
 
-  const displayLineItems = useMemo(() => {
-    if (lineItems.length > 0) {
-      return lineItems;
-    }
-
-    if (!report) {
-      return [];
-    }
-
-    return [
-      {
-        id: "actual-rent",
-        label: "Czynsz bieżący",
-        amountRaw: report.actualRentRaw,
-      },
-      {
-        id: "fixed-cost",
-        label: "Koszty stałe",
-        amountRaw: report.fixedCostRaw,
-      },
-      {
-        id: "meter-cold",
-        label: "Koszt zimnej wody",
-        amountRaw: report.meterCostColdRaw,
-      },
-      {
-        id: "meter-hot",
-        label: "Koszt ciepłej wody",
-        amountRaw: report.meterCostHotRaw,
-      },
-      {
-        id: "meter-heating",
-        label: "Koszt ogrzewania",
-        amountRaw: report.meterCostHeatingRaw,
-      },
-    ];
-  }, [lineItems, report]);
-
-  const summaryItems = useMemo(() => {
-    if (!report) {
-      return [] as { id: string; label: string; value: number | null | undefined; emphasize?: boolean }[];
-    }
-
-    return [
-      { id: "actualRent", label: "Czynsz bieżący", value: report.actualRentRaw },
-      { id: "fixedCost", label: "Koszty stałe", value: report.fixedCostRaw },
-      { id: "cold", label: "Koszt zużycia zimnej wody", value: report.meterCostColdRaw },
-      { id: "hot", label: "Koszt zużycia ciepłej wody", value: report.meterCostHotRaw },
-      { id: "heating", label: "Koszt ogrzewania", value: report.meterCostHeatingRaw },
-      { id: "balance", label: "Saldo", value: report.balanceRaw, emphasize: true },
-    ];
-  }, [report]);
+  // Note: Line items and cost summaries are now displayed via ReportItemsView component
 
   return (
     <section className="space-y-6">
@@ -272,56 +221,6 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
                 label="Zaksięgowano"
                 value={report.realizedAt ? formatDateTime(report.realizedAt) : "Nie zaksięgowano"}
               />
-            </dl>
-          </section>
-
-          <section className="rounded-lg border bg-card p-6 shadow-sm">
-            <h3 className="text-base font-semibold text-foreground">Pozycje rozliczenia</h3>
-            <div className="mt-4 overflow-hidden rounded-md border">
-              {displayLineItems.length > 0 ? (
-                <table className="w-full border-separate border-spacing-0 text-sm">
-                  <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium">Pozycja</th>
-                      <th className="px-4 py-2 text-left font-medium">Opis</th>
-                      <th className="px-4 py-2 text-right font-medium">Kwota</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayLineItems.map((item) => (
-                      <tr key={item.id} className="border-t border-border bg-background/80">
-                        <td className="px-4 py-2">
-                          <div className="flex flex-col">
-                            <span className="font-medium text-foreground">{item.label}</span>
-                            {item.category ? (
-                              <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                                {item.category}
-                              </span>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td className="px-4 py-2 text-sm text-muted-foreground">
-                          {item.description ? item.description : "—"}
-                        </td>
-                        <td className="px-4 py-2 text-right text-sm font-medium text-foreground">
-                          {formatMoney(item.amountRaw)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <p className="px-4 py-3 text-sm text-muted-foreground">Brak pozycji w raporcie.</p>
-              )}
-            </div>
-          </section>
-
-          <section className="rounded-lg border bg-card p-6 shadow-sm">
-            <h3 className="text-base font-semibold text-foreground">Podsumowanie kwot</h3>
-            <dl className="mt-4 grid gap-4 sm:grid-cols-2">
-              {summaryItems.map((item) => (
-                <AmountItem key={item.id} label={item.label} value={item.value} emphasize={item.emphasize} />
-              ))}
             </dl>
           </section>
 

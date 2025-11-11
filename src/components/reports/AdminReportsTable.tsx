@@ -225,7 +225,6 @@ const AdminReportRow = memo(function AdminReportRowComponent({
       `inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_STYLE_MAP[item.report.status]}`,
     [item.report.status]
   );
-  const balanceLabel = useMemo(() => formatCurrency(item.report.balanceRaw), [item.report.balanceRaw]);
   const emailSummary = useMemo(() => formatEmailAttemptSummary(item.lastEmailAttempt), [item.lastEmailAttempt]);
   const emailDetailsButtonLabel = emailDetailsOpen ? "Ukryj szczegóły" : "Szczegóły e-mail";
 
@@ -275,12 +274,6 @@ const AdminReportRow = memo(function AdminReportRowComponent({
         <div className="space-y-1">
           <span className={statusClassName}>{statusLabel}</span>
           <p className="text-xs text-muted-foreground">Aktualizacja: {formatDateTime(item.report.updatedAt)}</p>
-        </div>
-      </td>
-      <td className="px-4 py-3 align-top">
-        <div className="space-y-1">
-          <span className="text-sm font-semibold text-foreground">{balanceLabel}</span>
-          <p className="text-xs text-muted-foreground">Saldo bieżącego miesiąca</p>
         </div>
       </td>
       <td className="px-4 py-3 align-top">
@@ -360,6 +353,7 @@ const AdminReportsContent = memo(function AdminReportsContentComponent(): JSX.El
   const [regeneratePendingById, setRegeneratePendingById] = useState<PendingMap>({});
   const [resendPendingById, setResendPendingById] = useState<PendingMap>({});
   const [togglePendingById, setTogglePendingById] = useState<PendingMap>({});
+  const [generatingAll, setGeneratingAll] = useState(false);
   const lastLoadedQueryRef = useRef<string | null>(null);
   const loadingRef = useRef(false);
   const invalidatePromiseRef = useRef<Promise<void> | null>(null);
@@ -757,23 +751,123 @@ const AdminReportsContent = memo(function AdminReportsContentComponent(): JSX.El
     togglePendingById,
   ]);
 
+  const handleGenerateAll = useCallback(async () => {
+    if (generatingAll || !month) {
+      return;
+    }
+
+    setGeneratingAll(true);
+    setActionAccessError(null);
+
+    try {
+      // Fetch all active contracts
+      const contractsResponse = await apiGet<{ items: { id: string; propertyId: string }[] }>(
+        "/api/v1/contracts?active=true"
+      );
+
+      const contracts = contractsResponse.items || [];
+
+      if (contracts.length === 0) {
+        pushToast({
+          variant: "info",
+          title: "Brak aktywnych umów",
+          description: "Nie znaleziono aktywnych umów do wygenerowania raportów.",
+        });
+        setGeneratingAll(false);
+        return;
+      }
+
+      // Generate reports for each contract
+      let successCount = 0;
+      let skipCount = 0;
+      let errorCount = 0;
+
+      for (const contract of contracts) {
+        try {
+          await apiPost("/api/v1/reports/generate", {
+            contractId: contract.id,
+            month: month,
+          });
+          successCount++;
+        } catch (error) {
+          const apiError = toApiError(error);
+          // Skip if report already exists
+          if (apiError.code === "report_duplicate") {
+            skipCount++;
+          } else {
+            errorCount++;
+            console.error(`Failed to generate report for contract ${contract.id}:`, apiError);
+          }
+        }
+      }
+
+      // Show summary toast
+      if (successCount > 0) {
+        pushToast({
+          variant: "success",
+          title: "Raporty wygenerowane",
+          description: `Wygenerowano ${successCount} ${successCount === 1 ? "raport" : "raportów"}${skipCount > 0 ? `, pominięto ${skipCount} istniejących` : ""}${errorCount > 0 ? `, błędów: ${errorCount}` : ""}.`,
+        });
+      } else if (skipCount > 0) {
+        pushToast({
+          variant: "info",
+          title: "Raporty już istnieją",
+          description: `Wszystkie raporty dla tego miesiąca już istnieją (${skipCount}).`,
+        });
+      } else {
+        pushToast({
+          variant: "error",
+          title: "Błąd generowania",
+          description: `Nie udało się wygenerować żadnego raportu (błędów: ${errorCount}).`,
+        });
+      }
+
+      // Reload reports
+      await loadReports({ force: true });
+    } catch (error) {
+      const apiError = toApiError(error);
+      pushToast({
+        variant: "error",
+        title: "Błąd generowania raportów",
+        description: apiError.message,
+      });
+    } finally {
+      setGeneratingAll(false);
+    }
+  }, [generatingAll, month, pushToast, loadReports]);
+
   return (
     <section className="space-y-8">
       <div className="rounded-lg border bg-card p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-foreground">Filtry</h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground" htmlFor="admin-reports-month">
-              Miesiąc rozliczeniowy
-            </label>
-            <input
-              className="w-full max-w-xs rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-              id="admin-reports-month"
-              type="month"
-              value={month}
-              onChange={handleMonthChange}
-            />
-            <p className="text-xs text-muted-foreground">Filtr jest zapisywany w adresie URL i pamięci przeglądarki.</p>
+        <div className="mt-4 space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground" htmlFor="admin-reports-month">
+                Miesiąc rozliczeniowy
+              </label>
+              <input
+                className="w-full max-w-xs rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                id="admin-reports-month"
+                type="month"
+                value={month}
+                onChange={handleMonthChange}
+              />
+              <p className="text-xs text-muted-foreground">Filtr jest zapisywany w adresie URL i pamięci przeglądarki.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 border-t pt-4">
+            <Button
+              variant="default"
+              type="button"
+              onClick={handleGenerateAll}
+              disabled={generatingAll || !month}
+            >
+              {generatingAll ? "Generowanie..." : "Generuj wszystkie raporty"}
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Automatycznie wygeneruje raporty dla wszystkich aktywnych umów w wybranym miesiącu.
+            </p>
           </div>
         </div>
       </div>
@@ -929,7 +1023,6 @@ function areReportItemsEqual(previous: AdminReportListItem, next: AdminReportLis
   return (
     previous.report.updatedAt === next.report.updatedAt &&
     previous.report.status === next.report.status &&
-    previous.report.balanceRaw === next.report.balanceRaw &&
     previous.report.month === next.report.month &&
     previous.report.contractId === next.report.contractId &&
     previous.report.realizedAt === next.report.realizedAt &&

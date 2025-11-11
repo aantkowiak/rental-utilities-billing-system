@@ -1,10 +1,10 @@
 import type { APIRoute } from "astro";
 
 import { requireAuth } from "@/lib/api/auth";
-import { mapReadingsServiceError, toMonthStart } from "@/lib/api/readings";
+import { mapReadingsServiceError } from "@/lib/api/readings";
 import { errorResponse } from "@/lib/errors";
-import { enqueueAnchorRecalculation } from "@/lib/jobs/recalculateAnchors";
 import { ReadingsService } from "@/lib/services/ReadingsService";
+import { ReportService } from "@/lib/services/ReportService";
 import { createReplacementReadingSchema } from "@/lib/validation/readings";
 
 export const POST: APIRoute = async ({ request, locals, params }) => {
@@ -35,20 +35,11 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   try {
     const reading = await ReadingsService.createReplacement(locals.supabase, readingId, validation.data);
 
-    const monthBasis = reading.effectiveMonth ?? reading.readingAt;
-    const monthStart = monthBasis ? toMonthStart(monthBasis) : null;
-    if (monthStart) {
-      Promise.resolve(
-        enqueueAnchorRecalculation(locals.supabase, {
-          propertyId: reading.propertyId,
-          fromMonth: monthStart,
-          toMonth: monthStart,
-        })
-      ).catch((jobError) => {
-        // eslint-disable-next-line no-console
-        console.error("[POST /v1/readings/:id/replacement] Failed to queue anchor recalculation", jobError);
-      });
-    }
+    // Trigger report recomputation in background if reading has month assignments
+    Promise.resolve(ReportService.recomputeForReading(locals.supabase, reading.id)).catch((recomputeError) => {
+      // eslint-disable-next-line no-console
+      console.error("[POST /v1/readings/:id/replacement] Failed to recompute reports", recomputeError);
+    });
 
     return new Response(JSON.stringify({ reading }), {
       status: 201,

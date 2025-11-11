@@ -3,7 +3,6 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEve
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
 import { Button } from "@/components/ui/button";
-import { AnchorRecalcPanel } from "@/components/tasks/AnchorRecalcPanel";
 import { ReplacementForm } from "@/components/readings/ReplacementForm";
 import { apiDelete, apiGet, apiPatch, apiPost, type ApiError } from "@/lib/client/http";
 import type { CreateReadingCmd, ReadingDTO, UpdateReadingCmd, PropertyDTO } from "@/types";
@@ -92,7 +91,6 @@ function fromLocalDateTimeInput(value: string): string | null {
 
   return date.toISOString();
 }
-
 
 function toApiError(error: unknown): ApiError {
   if (error && typeof error === "object" && "code" in error && "message" in error) {
@@ -884,15 +882,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
         </section>
       </div>
 
-      <AnchorRecalcPanel
-        propertyId={filters.propertyId}
-        propertyLabel={properties.find((p) => p.id === filters.propertyId)?.label}
-        disabled={!filters.propertyId}
-        onSuccess={handleRecalcSuccess}
-        onPendingChange={setRecalcPending}
-      />
-
-      {recalcPending ? (
+      {false ? (
         <div
           aria-live="assertive"
           className="fixed inset-0 z-40 flex items-center justify-center bg-background/75 p-4 backdrop-blur-sm"
@@ -1039,6 +1029,18 @@ const AdminReadingRow = memo(function AdminReadingRow({
               <div className="text-muted-foreground">{formatMonth(item.readingAt)}</div>
             </>
           )}
+          {item.baseForMonth ? (
+            <>
+              <div className="font-medium text-foreground mt-2">Bazowy dla:</div>
+              <div className="text-muted-foreground">{item.baseForMonth}</div>
+            </>
+          ) : null}
+          {item.finalForMonth ? (
+            <>
+              <div className="font-medium text-foreground mt-2">Finalny dla:</div>
+              <div className="text-muted-foreground">{item.finalForMonth}</div>
+            </>
+          ) : null}
         </div>
       </td>
       <td className="px-4 py-3 text-sm text-muted-foreground">{item.commentText ? item.commentText : "—"}</td>

@@ -2,6 +2,7 @@
 import Layout from "../../../layouts/Layout.astro";
 import { RoleNav } from "@/components/nav/RoleNav";
 import { AdminReportDetail } from "@/components/reports/AdminReportDetail";
+import { ReportItemsView } from "@/components/reports/ReportItemsView";
 import { requireAuth } from "@/lib/api/auth";
 
 const auth = await requireAuth(Astro.request, Astro.locals, { requireAdmin: true });
@@ -31,7 +32,8 @@ const pageTitle = "Szczegóły raportu — administrator";
     </div>
   </header>
 
-  <main id="main-content" class="mx-auto w-full max-w-5xl px-4 py-8" role="main">
+  <main id="main-content" class="mx-auto w-full max-w-5xl px-4 py-8 space-y-6" role="main">
     <AdminReportDetail client:load reportId={reportId} />
+    <ReportItemsView client:load reportId={reportId} />
   </main>
 </Layout>

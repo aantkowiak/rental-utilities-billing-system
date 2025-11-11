@@ -5,29 +5,28 @@ import { errorResponse } from "@/lib/errors";
 import { ReportService, ReportServiceError } from "@/lib/services/ReportService";
 
 /**
- * POST /api/v1/reports/:id/regenerate
- * Regenerate (rebuild) an existing report.
- * Admin only.
+ * GET /api/v1/reports/:id/items
+ * Get report items for a report.
  */
-export const POST: APIRoute = async ({ request, locals, params }) => {
+export const GET: APIRoute = async ({ request, locals, params }) => {
   const reportId = params.id;
   if (!reportId) {
     return errorResponse(400, "invalid_request", "Report ID is required");
   }
 
-  const auth = await requireAuth(request, locals, { requireAdmin: true });
+  const auth = await requireAuth(request, locals);
   if (!auth.success) {
     return auth.response;
   }
 
   try {
-    const report = await ReportService.regenerate(
-      locals.supabase,
-      { role: auth.role, userId: auth.userId },
-      reportId
-    );
+    // First verify access to the report
+    await ReportService.getById(locals.supabase, { role: auth.role, userId: auth.userId }, reportId);
 
-    return new Response(JSON.stringify({ report }), {
+    // Then get items
+    const items = await ReportService.getItems(locals.supabase, reportId);
+
+    return new Response(JSON.stringify({ items }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
     });
@@ -36,9 +35,6 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
       const statusMap: Record<string, number> = {
         REPORT_NOT_FOUND: 404,
         REPORT_FORBIDDEN: 403,
-        CONTRACT_NOT_FOUND: 404,
-        MISSING_READING_PAIR: 400,
-        MISSING_MONTHLY_CONDITIONS: 400,
         DATABASE_ERROR: 500,
       };
 
@@ -48,3 +44,4 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
     return errorResponse(500, "internal_error", "Unexpected error occurred");
   }
 };
+

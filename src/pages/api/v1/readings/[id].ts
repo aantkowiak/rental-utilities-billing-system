@@ -1,10 +1,10 @@
 import type { APIRoute } from "astro";
 
 import { requireAuth } from "@/lib/api/auth";
-import { guardTenantPropertyAccess, mapReadingsServiceError, toMonthStart } from "@/lib/api/readings";
+import { guardTenantPropertyAccess, mapReadingsServiceError } from "@/lib/api/readings";
 import { errorResponse } from "@/lib/errors";
-import { enqueueAnchorRecalculation } from "@/lib/jobs/recalculateAnchors";
 import { ReadingsService } from "@/lib/services/ReadingsService";
+import { ReportService } from "@/lib/services/ReportService";
 import { updateReadingSchema } from "@/lib/validation/readings";
 
 export const GET: APIRoute = async ({ request, locals, params }) => {
@@ -82,19 +82,11 @@ export const PATCH: APIRoute = async ({ request, locals, params }) => {
       role: auth.role,
     });
 
-    const monthStart = toMonthStart(reading.readingAt);
-    if (monthStart) {
-      Promise.resolve(
-        enqueueAnchorRecalculation(locals.supabase, {
-          propertyId: reading.propertyId,
-          fromMonth: monthStart,
-          toMonth: monthStart,
-        })
-      ).catch((jobError) => {
-        // eslint-disable-next-line no-console
-        console.error("[PATCH /v1/readings/:id] Failed to queue anchor recalculation", jobError);
-      });
-    }
+    // Trigger report recomputation in background
+    Promise.resolve(ReportService.recomputeForReading(locals.supabase, readingId)).catch((recomputeError) => {
+      // eslint-disable-next-line no-console
+      console.error("[PATCH /v1/readings/:id] Failed to recompute reports", recomputeError);
+    });
 
     return new Response(JSON.stringify({ reading }), {
       status: 200,
@@ -131,19 +123,11 @@ export const DELETE: APIRoute = async ({ request, locals, params }) => {
 
     await ReadingsService.softDelete(locals.supabase, readingId);
 
-    const monthStart = toMonthStart(existing.readingAt);
-    if (monthStart) {
-      Promise.resolve(
-        enqueueAnchorRecalculation(locals.supabase, {
-          propertyId: existing.propertyId,
-          fromMonth: monthStart,
-          toMonth: monthStart,
-        })
-      ).catch((jobError) => {
-        // eslint-disable-next-line no-console
-        console.error("[DELETE /v1/readings/:id] Failed to queue anchor recalculation", jobError);
-      });
-    }
+    // Trigger report recomputation in background
+    Promise.resolve(ReportService.recomputeForReading(locals.supabase, readingId)).catch((recomputeError) => {
+      // eslint-disable-next-line no-console
+      console.error("[DELETE /v1/readings/:id] Failed to recompute reports", recomputeError);
+    });
 
     return new Response(null, { status: 204 });
   } catch (error) {

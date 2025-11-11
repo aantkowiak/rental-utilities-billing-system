@@ -48,7 +48,7 @@
   - `/app/reports`: list with month filter; detail `/app/reports/:id`.
 - Admin:
   - `/admin/readings`: list grouped by month; create/edit readings (backdate), replacement modal, anchor recalc; anchor badge.
-  - `/admin/monthly-conditions`: per-month form; forecast=0 info; block edits if linked realized reports.
+  - `/admin/monthly-advances`: per-month form; forecast=0 info; block edits if linked realized reports.
   - `/admin/reports`: list/detail; generate/regenerate/resend; realized toggle; unlock confirm; disabled generate with inline reason.
   - `/admin/properties`, `/admin/contracts`: simple lists and detail edits as needed for MVP onboarding (inline in Properties).
 
@@ -56,7 +56,7 @@
 - Auth/session via Supabase; on boot call `/v1/me`; attach JWT via `http.ts`.
 - Endpoints:
   - Readings: `/v1/readings` CRUD, `/v1/readings/{id}/replacement`, `/v1/readings/recalculate-anchors`.
-  - Monthly conditions: `/v1/monthly-conditions` CRUD.
+  - Monthly advances: `/v1/monthly-advances` CRUD.
   - Reports: `/v1/reports`, `/v1/reports/generate`, `/v1/reports/{id}`, `/v1/reports/{id}/regenerate`, `/v1/reports/{id}/send-email`.
   - Profiles: `/v1/me` (and minimal `/v1/profiles/{userId}` for admin).
 - TanStack Query keys per resource/filters; in-memory only; refetch on focus/60s; invalidate minimal scopes after mutations.

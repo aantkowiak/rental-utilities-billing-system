@@ -151,58 +151,7 @@ function TenantReportDetailContent({ reportId }: TenantReportDetailProps): JSX.E
   const resendDisabledReason = permissions?.sendEmailDisabledReason ?? null;
   const showFetchError = Boolean(fetchError) && !report;
 
-  const displayLineItems = useMemo(() => {
-    if (lineItems.length > 0) {
-      return lineItems;
-    }
-
-    if (!report) {
-      return [];
-    }
-
-    return [
-      {
-        id: "actual-rent",
-        label: "Czynsz bieżący",
-        amountRaw: report.actualRentRaw,
-      },
-      {
-        id: "fixed-cost",
-        label: "Koszty stałe",
-        amountRaw: report.fixedCostRaw,
-      },
-      {
-        id: "meter-cold",
-        label: "Koszt zimnej wody",
-        amountRaw: report.meterCostColdRaw,
-      },
-      {
-        id: "meter-hot",
-        label: "Koszt ciepłej wody",
-        amountRaw: report.meterCostHotRaw,
-      },
-      {
-        id: "meter-heating",
-        label: "Koszt ogrzewania",
-        amountRaw: report.meterCostHeatingRaw,
-      },
-    ];
-  }, [lineItems, report]);
-
-  const totals = useMemo(
-    () =>
-      report
-        ? {
-            actualRentRaw: report.actualRentRaw,
-            fixedCostRaw: report.fixedCostRaw,
-            meterCostColdRaw: report.meterCostColdRaw,
-            meterCostHotRaw: report.meterCostHotRaw,
-            meterCostHeatingRaw: report.meterCostHeatingRaw,
-            balanceRaw: report.balanceRaw,
-          }
-        : null,
-    [report]
-  );
+  // Note: Line items and cost summaries are now displayed via ReportItemsView component
 
   const handleResend = useCallback(async () => {
     if (!report || pendingResend || !canResend) {
@@ -297,10 +246,6 @@ function TenantReportDetailContent({ reportId }: TenantReportDetailProps): JSX.E
               />
             </dl>
           </section>
-
-          <TenantReportLineItems items={displayLineItems} />
-
-          {totals ? <TenantReportTotals totals={totals} /> : null}
 
           <section className="rounded-lg border bg-card p-6 shadow-sm">
             <h3 className="text-base font-semibold text-foreground">Ostatnia próba wysyłki e-mail</h3>

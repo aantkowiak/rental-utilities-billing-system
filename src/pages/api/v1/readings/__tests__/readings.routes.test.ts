@@ -6,10 +6,11 @@ const getByIdMock = vi.fn();
 const updateMock = vi.fn();
 const softDeleteMock = vi.fn();
 const replacementMock = vi.fn();
+const updateMonthsMock = vi.fn();
 
 const PROPERTY_ID = "7969601d-b9cc-43bf-90df-969784aa87f1";
 
-const enqueueMock = vi.fn().mockImplementation(() => Promise.resolve());
+const recomputeForReadingMock = vi.fn().mockImplementation(() => Promise.resolve());
 
 vi.mock("@/lib/services/ReadingsService", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/ReadingsService")>(
@@ -25,12 +26,15 @@ vi.mock("@/lib/services/ReadingsService", async () => {
       update: updateMock,
       softDelete: softDeleteMock,
       createReplacement: replacementMock,
+      updateMonths: updateMonthsMock,
     },
   };
 });
 
-vi.mock("@/lib/jobs/recalculateAnchors", () => ({
-  enqueueAnchorRecalculation: enqueueMock,
+vi.mock("@/lib/services/ReportService", () => ({
+  ReportService: {
+    recomputeForReading: recomputeForReadingMock,
+  },
 }));
 
 describe("Readings API routes", () => {
@@ -79,7 +83,7 @@ describe("Readings API routes", () => {
     expect(payload.items).toEqual([]);
   });
 
-  it("creates readings and queues anchor recalculation", async () => {
+  it("creates readings and triggers report recomputation", async () => {
     createMock.mockResolvedValue({
       id: "reading-1",
       propertyId: PROPERTY_ID,
@@ -126,10 +130,7 @@ describe("Readings API routes", () => {
     expect(payload.reading.id).toBe("reading-1");
     expect(response.status).toBe(201);
     expect(createMock).toHaveBeenCalledTimes(1);
-    expect(enqueueMock).toHaveBeenCalledWith(expect.anything(), {
-      propertyId: PROPERTY_ID,
-      fromMonth: "2024-05-01",
-      toMonth: "2024-05-01",
+    expect(recomputeForReadingMock).toHaveBeenCalledWith(expect.anything(), "reading-1");
     });
   });
 
@@ -159,34 +160,6 @@ describe("Readings API routes", () => {
     } as any);
 
     expect(response.status).toBe(403);
-  });
-
-  it("enqueues recalculation via admin endpoint", async () => {
-    const { POST } = await import("../recalculate-anchors");
-
-    process.env.TEST_AUTH_ROLE = "admin";
-    delete process.env.TEST_AUTH_PROPERTY_ID;
-
-    const url = new URL("http://localhost/v1/readings/recalculate-anchors");
-    const response = await POST({
-      request: new Request(url, {
-        method: "POST",
-        headers: new Headers({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
-          propertyId: PROPERTY_ID,
-          fromMonth: "2024-01-01",
-          toMonth: "2024-03-01",
-        }),
-      }),
-      locals: createLocals(),
-    } as any);
-
-    expect(response.status).toBe(202);
-    expect(enqueueMock).toHaveBeenCalledWith(expect.anything(), {
-      propertyId: PROPERTY_ID,
-      fromMonth: "2024-01-01",
-      toMonth: "2024-03-01",
-    });
   });
 });
 

@@ -222,50 +222,50 @@ comment on policy "admins_select_all_contracts" on contracts is
   'Admins have full access to all contracts';
 
 -- =====================================================================
--- RLS Policies: monthly_conditions
+-- RLS Policies: monthly_advances
 -- =====================================================================
--- Access follows property access: tenants see conditions for their properties
+-- Access follows property access: tenants see advances for their properties
 -- Admins have full access
 -- =====================================================================
 
--- tenants can select monthly conditions for their properties
-create policy "tenants_select_contracted_monthly_conditions"
-  on monthly_conditions for select
+-- tenants can select monthly advances for their properties
+create policy "tenants_select_contracted_monthly_advances"
+  on monthly_advances for select
   to authenticated
   using (
     is_tenant() and 
     property_id = any(current_property_ids())
   );
 
--- admins can select all monthly conditions
-create policy "admins_select_all_monthly_conditions"
-  on monthly_conditions for select
+-- admins can select all monthly advances
+create policy "admins_select_all_monthly_advances"
+  on monthly_advances for select
   to authenticated
   using (is_admin());
 
--- admins can insert monthly conditions
-create policy "admins_insert_monthly_conditions"
-  on monthly_conditions for insert
+-- admins can insert monthly advances
+create policy "admins_insert_monthly_advances"
+  on monthly_advances for insert
   to authenticated
   with check (is_admin());
 
--- admins can update monthly conditions
-create policy "admins_update_monthly_conditions"
-  on monthly_conditions for update
+-- admins can update monthly advances
+create policy "admins_update_monthly_advances"
+  on monthly_advances for update
   to authenticated
   using (is_admin())
   with check (is_admin());
 
--- admins can delete monthly conditions
-create policy "admins_delete_monthly_conditions"
-  on monthly_conditions for delete
+-- admins can delete monthly advances
+create policy "admins_delete_monthly_advances"
+  on monthly_advances for delete
   to authenticated
   using (is_admin());
 
-comment on policy "tenants_select_contracted_monthly_conditions" on monthly_conditions is 
-  'Tenants can view monthly conditions for properties with active contracts';
-comment on policy "admins_select_all_monthly_conditions" on monthly_conditions is 
-  'Admins have full access to all monthly conditions';
+comment on policy "tenants_select_contracted_monthly_advances" on monthly_advances is 
+  'Tenants can view monthly advances for properties with active contracts';
+comment on policy "admins_select_all_monthly_advances" on monthly_advances is 
+  'Admins have full access to all monthly advances';
 
 -- =====================================================================
 -- RLS Policies: readings

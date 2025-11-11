@@ -56,6 +56,8 @@ export const listReadingsQuerySchema = z.object({
     .refine((value) => (value ? !Number.isNaN(Date.parse(value)) : true), { message: "to must be a valid ISO date" }),
 });
 
+// Deprecated: recalculateAnchorsSchema - anchors are no longer used
+// Kept for backward compatibility during migration, will be removed
 export const recalculateAnchorsSchema = z
   .object({
     propertyId: z.string().uuid({ message: "propertyId must be a valid UUID" }),

@@ -1,15 +1,20 @@
 import type { APIRoute } from "astro";
+import { z } from "zod";
 
 import { requireAuth } from "@/lib/api/auth";
 import { errorResponse } from "@/lib/errors";
 import { ReportService, ReportServiceError } from "@/lib/services/ReportService";
 
+const updateSentSchema = z.object({
+  sent: z.boolean(),
+});
+
 /**
- * POST /api/v1/reports/:id/regenerate
- * Regenerate (rebuild) an existing report.
+ * PATCH /api/v1/reports/:id/sent
+ * Update sent status for a report.
  * Admin only.
  */
-export const POST: APIRoute = async ({ request, locals, params }) => {
+export const PATCH: APIRoute = async ({ request, locals, params }) => {
   const reportId = params.id;
   if (!reportId) {
     return errorResponse(400, "invalid_request", "Report ID is required");
@@ -20,12 +25,22 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
     return auth.response;
   }
 
+  let body: unknown;
   try {
-    const report = await ReportService.regenerate(
-      locals.supabase,
-      { role: auth.role, userId: auth.userId },
-      reportId
-    );
+    body = await request.json();
+  } catch {
+    return errorResponse(400, "invalid_json", "Malformed JSON in request body");
+  }
+
+  const validation = updateSentSchema.safeParse(body);
+  if (!validation.success) {
+    return errorResponse(400, "validation_error", "Invalid request data", {
+      errors: validation.error.format(),
+    });
+  }
+
+  try {
+    const report = await ReportService.updateSent(locals.supabase, reportId, validation.data.sent);
 
     return new Response(JSON.stringify({ report }), {
       status: 200,
@@ -35,10 +50,6 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
     if (error instanceof ReportServiceError) {
       const statusMap: Record<string, number> = {
         REPORT_NOT_FOUND: 404,
-        REPORT_FORBIDDEN: 403,
-        CONTRACT_NOT_FOUND: 404,
-        MISSING_READING_PAIR: 400,
-        MISSING_MONTHLY_CONDITIONS: 400,
         DATABASE_ERROR: 500,
       };
 
@@ -48,3 +59,4 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
     return errorResponse(500, "internal_error", "Unexpected error occurred");
   }
 };
+

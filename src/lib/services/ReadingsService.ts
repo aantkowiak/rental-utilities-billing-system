@@ -8,7 +8,10 @@ import type {
   ReadingOrigin,
   ReadingType,
   UpdateReadingCmd,
+  UpdateReadingMonthsCmd,
+  YearMonth,
 } from "@/types";
+import { yearMonthToISODate } from "@/lib/date/month";
 import { isWithinTenantWindow } from "@/lib/validation/readings";
 import type { ReadingListFilters, ReadingListResponse } from "@/types/readings";
 import { buildReadingsListResponse } from "@/types/readings";
@@ -39,7 +42,13 @@ export type ReadingsServiceErrorCode =
   | "READING_WINDOW_VIOLATION"
   | "READING_DUPLICATE_REPLACEMENT"
   | "READING_PROPERTY_MISMATCH"
+  | "READING_PAIR_NOT_FOUND"
   | "DATABASE_ERROR";
+
+export interface ReadingPair {
+  base: ReadingDTO;
+  final: ReadingDTO;
+}
 
 export class ReadingsService {
   static async list(supabase: Supabase, filters: ReadingListFilters): Promise<ReadingListResponse> {
@@ -288,6 +297,130 @@ export class ReadingsService {
 
     return mapReadingRowToDto(data);
   }
+
+  /**
+   * Update month assignments (baseForMonth, finalForMonth) for a reading.
+   * Only admins can call this.
+   */
+  static async updateMonths(
+    supabase: Supabase,
+    readingId: string,
+    cmd: UpdateReadingMonthsCmd
+  ): Promise<ReadingDTO> {
+    const updatePayload: Database["public"]["Tables"]["readings"]["Update"] = {};
+
+    if (cmd.baseForMonth !== undefined) {
+      updatePayload.base_for_month = cmd.baseForMonth ? yearMonthToISODate(cmd.baseForMonth) : null;
+    }
+
+    if (cmd.finalForMonth !== undefined) {
+      updatePayload.final_for_month = cmd.finalForMonth ? yearMonthToISODate(cmd.finalForMonth) : null;
+    }
+
+    if (Object.keys(updatePayload).length === 0) {
+      return this.getById(supabase, readingId);
+    }
+
+    const { data, error } = await supabase
+      .from("readings")
+      .update(updatePayload)
+      .eq("id", readingId)
+      .select("*")
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        throw new ReadingsServiceError("READING_NOT_FOUND", "Reading not found");
+      }
+      // Handle unique constraint violations (23505)
+      if (error.code === "23505") {
+        throw new ReadingsServiceError(
+          "DATABASE_ERROR",
+          "Another reading is already assigned to this property and month"
+        );
+      }
+      throw new ReadingsServiceError("DATABASE_ERROR", error.message);
+    }
+
+    if (!data) {
+      throw new ReadingsServiceError("READING_NOT_FOUND", "Reading not found");
+    }
+
+    return mapReadingRowToDto(data);
+  }
+
+  /**
+   * Find a pair of readings (base and final) for a given property and month.
+   * Returns null if either base or final is missing.
+   */
+  static async findPairForPropertyAndMonth(
+    supabase: Supabase,
+    propertyId: string,
+    month: YearMonth
+  ): Promise<ReadingPair | null> {
+    const monthISO = yearMonthToISODate(month);
+
+    // Find base reading (base_for_month = month)
+    const { data: baseData, error: baseError } = await supabase
+      .from("readings")
+      .select("*")
+      .eq("property_id", propertyId)
+      .eq("base_for_month", monthISO)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (baseError) {
+      throw new ReadingsServiceError("DATABASE_ERROR", baseError.message);
+    }
+
+    if (!baseData) {
+      return null;
+    }
+
+    // Find final reading (final_for_month = month)
+    const { data: finalData, error: finalError } = await supabase
+      .from("readings")
+      .select("*")
+      .eq("property_id", propertyId)
+      .eq("final_for_month", monthISO)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (finalError) {
+      throw new ReadingsServiceError("DATABASE_ERROR", finalError.message);
+    }
+
+    if (!finalData) {
+      return null;
+    }
+
+    return {
+      base: mapReadingRowToDto(baseData),
+      final: mapReadingRowToDto(finalData),
+    };
+  }
+
+  /**
+   * Get all months affected by a reading (based on its base_for_month and final_for_month).
+   * Used for determining which reports need to be recomputed.
+   */
+  static async getAffectedMonths(supabase: Supabase, readingId: string): Promise<YearMonth[]> {
+    const reading = await this.getById(supabase, readingId);
+    const months: YearMonth[] = [];
+
+    if (reading.baseForMonth) {
+      months.push(reading.baseForMonth.substring(0, 7) as YearMonth);
+    }
+
+    if (reading.finalForMonth) {
+      const finalMonth = reading.finalForMonth.substring(0, 7) as YearMonth;
+      if (!months.includes(finalMonth)) {
+        months.push(finalMonth);
+      }
+    }
+
+    return months;
+  }
 }
 
 const deriveOriginForCreate = (): ReadingOrigin => "tenant";
@@ -299,6 +432,8 @@ const mapReadingRowToDto = (row: Database["public"]["Tables"]["readings"]["Row"]
   propertyId: row.property_id,
   readingAt: row.reading_at,
   effectiveMonth: row.effective_month,
+  baseForMonth: row.base_for_month,
+  finalForMonth: row.final_for_month,
   origin: row.origin as ReadingOrigin,
   readingType: row.reading_type as ReadingType,
   coldM3: toNumber(row.cold_m3),

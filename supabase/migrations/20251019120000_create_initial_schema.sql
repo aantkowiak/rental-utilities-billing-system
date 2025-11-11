@@ -8,7 +8,7 @@
 --   - properties: Rental properties with billing start dates
 --   - profiles: User profiles linked to auth.users
 --   - contracts: Tenant rental periods per property
---   - monthly_conditions: Monthly pricing and forecast data per property
+--   - monthly_advances: Monthly pricing and advance payment data per property
 --   - readings: Utility meter readings (cold/hot water, heating)
 --   - reports: Monthly billing reports per contract
 --   - report_emails: Email recipients for reports
@@ -124,13 +124,13 @@ comment on column contracts.period is 'Contract validity period as timestamp ran
 comment on constraint no_overlapping_contracts on contracts is 'Ensures no temporal overlap of contracts per property';
 
 -- =====================================================================
--- Table: monthly_conditions
+-- Table: monthly_advances
 -- =====================================================================
--- Monthly pricing and forecast data for each property.
+-- Monthly pricing and advance payment data for each property.
 -- Stores utility prices, forecasts, and advance payment amounts.
 -- =====================================================================
 
-create table monthly_conditions (
+create table monthly_advances (
   id uuid primary key default gen_random_uuid(),
   property_id uuid not null references properties(id),
   -- billing month (must be first day of month)
@@ -150,19 +150,19 @@ create table monthly_conditions (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   -- ensure only one record per property per month
-  constraint uq_monthly_conditions_property_month unique (property_id, month)
+  constraint uq_monthly_advances_property_month unique (property_id, month)
 );
 
 -- enable row level security
-alter table monthly_conditions enable row level security;
+alter table monthly_advances enable row level security;
 
--- index for efficient monthly condition lookups
-create index idx_monthly_conditions_property_month on monthly_conditions(property_id, month);
+-- index for efficient monthly advance lookups
+create index idx_monthly_advances_property_month on monthly_advances(property_id, month);
 
-comment on table monthly_conditions is 'Monthly pricing and forecast data per property';
-comment on column monthly_conditions.month is 'Billing month, must be first day of month';
-comment on column monthly_conditions.manager_fee is 'Property manager fee for the month';
-comment on column monthly_conditions.advance_payment is 'Monthly advance payment amount';
+comment on table monthly_advances is 'Monthly pricing and advance payment data per property';
+comment on column monthly_advances.month is 'Billing month, must be first day of month';
+comment on column monthly_advances.manager_fee is 'Property manager fee for the month';
+comment on column monthly_advances.advance_payment is 'Monthly advance payment amount';
 
 -- =====================================================================
 -- Table: readings
@@ -230,7 +230,7 @@ comment on column readings.cold_replaced is 'True if admin replaced tenant cold 
 -- Table: reports
 -- =====================================================================
 -- Monthly billing reports for contracts.
--- Links to readings and monthly conditions used for calculation.
+-- Links to readings and monthly advances used for calculation.
 -- Stores all cost calculations un-rounded for flexibility.
 -- =====================================================================
 
@@ -245,8 +245,8 @@ create table reports (
   anchor_reading_id uuid not null references readings(id),
   -- anchor reading at end of period (next month)
   anchor_reading_next_id uuid not null references readings(id),
-  -- monthly conditions used for calculation
-  monthly_conditions_id uuid not null references monthly_conditions(id),
+  -- monthly advances used for calculation
+  monthly_advances_id uuid not null references monthly_advances(id),
   -- calculated costs (stored un-rounded with high precision)
   fixed_cost_raw numeric(14,6) not null,
   meter_cost_cold_raw numeric(14,6) not null,
@@ -364,7 +364,7 @@ create trigger update_profiles_updated_at before update on profiles
 create trigger update_contracts_updated_at before update on contracts
   for each row execute function update_updated_at_column();
 
-create trigger update_monthly_conditions_updated_at before update on monthly_conditions
+create trigger update_monthly_advances_updated_at before update on monthly_advances
   for each row execute function update_updated_at_column();
 
 create trigger update_readings_updated_at before update on readings

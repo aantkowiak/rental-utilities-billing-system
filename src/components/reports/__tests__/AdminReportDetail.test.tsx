@@ -33,18 +33,9 @@ afterEach(() => {
 });
 
 describe("AdminReportDetail", () => {
-  it("renders report metadata, line items and totals after successful load", async () => {
+  it("renders report metadata after successful load", async () => {
     apiGetMock.mockResolvedValueOnce({
       report: buildReport({ id: "report-42", month: "2024-02" }),
-      lineItems: [
-        {
-          id: "item-1",
-          label: "Opłata serwisowa",
-          description: "Opis pozycji",
-          amountRaw: 4500,
-          category: "Serwis",
-        },
-      ],
       lastEmailAttempt: buildEmailAttempt({ status: "sent" }),
       permissions: {
         canRegenerate: true,
@@ -56,10 +47,8 @@ describe("AdminReportDetail", () => {
     render(<AdminReportDetail reportId="report-42" />);
 
     expect(await screen.findByRole("heading", { name: /luty 2024/i })).toBeInTheDocument();
-    expect(screen.getByText("Opłata serwisowa")).toBeInTheDocument();
-    expect(screen.getByText("Opis pozycji")).toBeInTheDocument();
-    expect(screen.getByText(/^Serwis$/i)).toBeInTheDocument();
-    expect(screen.getByText(/Saldo/i)).toBeInTheDocument();
+    expect(screen.getByText("report-42")).toBeInTheDocument();
+    expect(screen.getByText("contract-1")).toBeInTheDocument();
     expect(screen.getByText(/Status:\s*sent/i)).toBeInTheDocument();
   });
 
@@ -251,20 +240,12 @@ describe("AdminReportDetail", () => {
 
 function buildReport(overrides: Partial<ReportDTO>): ReportDTO {
   return {
-    actualRentRaw: overrides.actualRentRaw ?? 10000,
-    anchorReadingId: overrides.anchorReadingId ?? "anchor-1",
-    anchorReadingNextId: overrides.anchorReadingNextId ?? "anchor-2",
-    balanceRaw: overrides.balanceRaw ?? 0,
     contractId: overrides.contractId ?? "contract-1",
     createdAt: overrides.createdAt ?? "2024-02-01T10:00:00.000Z",
-    fixedCostRaw: overrides.fixedCostRaw ?? 2000,
     id: overrides.id ?? "report-1",
-    meterCostColdRaw: overrides.meterCostColdRaw ?? 3000,
-    meterCostHeatingRaw: overrides.meterCostHeatingRaw ?? 4000,
-    meterCostHotRaw: overrides.meterCostHotRaw ?? 5000,
     month: overrides.month ?? "2024-02",
-    monthlyConditionsId: overrides.monthlyConditionsId ?? "conditions-1",
     realizedAt: overrides.realizedAt ?? null,
+    sent: overrides.sent ?? false,
     status: overrides.status ?? "generated",
     updatedAt: overrides.updatedAt ?? "2024-02-02T12:00:00.000Z",
   };

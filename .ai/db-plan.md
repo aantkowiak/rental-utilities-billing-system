@@ -40,7 +40,7 @@ Additional constraints:
 
 ---
 
-### 1.4 monthly_conditions
+### 1.4 monthly_advances
 | Column | Type | Constraints |
 |--------|------|-------------|
 | id | uuid | PK, default `gen_random_uuid()` |
@@ -96,7 +96,7 @@ Partial uniqueness:
 | status | text | NOT NULL, CHECK (`status IN ('draft','realized','unlocked')`) |
 | anchor_reading_id | uuid | NOT NULL, FK → `readings(id)` |
 | anchor_reading_next_id | uuid | NOT NULL, FK → `readings(id)` |
-| monthly_conditions_id | uuid | NOT NULL, FK → `monthly_conditions(id)` |
+| monthly_advances_id | uuid | NOT NULL, FK → `monthly_advances(id)` |
 | fixed_cost_raw | numeric(14,6) | NOT NULL |
 | meter_cost_cold_raw | numeric(14,6) | NOT NULL |
 | meter_cost_hot_raw | numeric(14,6) | NOT NULL |
@@ -141,7 +141,7 @@ Index: (`report_email_id`).
 1. **properties 1-* contracts** – `contracts.property_id` FK.
 2. **contracts 1-* reports** – `reports.contract_id` FK.
 3. **properties 1-* readings** – `readings.property_id` FK.
-4. **properties 1-* monthly_conditions** – `monthly_conditions.property_id` FK.
+4. **properties 1-* monthly_advances** – `monthly_advances.property_id` FK.
 5. **reports 1-* report_emails** – `report_emails.report_id` FK.
 6. **report_emails 1-* report_email_attempts** – `report_email_attempts.report_email_id` FK.
 7. **auth.users 1-1 profiles** – `profiles.user_id` PK/FK.
@@ -151,7 +151,7 @@ Index: (`report_email_id`).
 |-------|-------|
 | readings | (`property_id`, `reading_at` DESC) |
 | readings | Partial UNIQUE (`property_id`, `effective_month`) WHERE `origin = 'admin_replacement'` |
-| monthly_conditions | UNIQUE (`property_id`, `month`) |
+| monthly_advances | UNIQUE (`property_id`, `month`) |
 | contracts | GIST EXCLUDE (`property_id` WITH =, `period` WITH &&) |
 | reports | UNIQUE (`contract_id`, `month`) |
 | report_emails | UNIQUE (`report_id`, `recipient_email`) |
@@ -176,7 +176,7 @@ $$;
 1. **properties**
    * tenants: `SELECT USING (id = ANY (current_property_ids()))`
    * admins: `SELECT USING (true)`
-2. **readings**, **monthly_conditions**, **reports**
+2. **readings**, **monthly_advances**, **reports**
    * tenants: `USING (property_id = ANY (current_property_ids()))`
    * admins: `USING (true)`
 3. **contracts**
