@@ -188,7 +188,39 @@ describe("ReadingsService", () => {
         base_for_month: "2024-05-01",
         final_for_month: "2024-06-01",
       };
-      const { supabase } = createSupabaseForUpdate({ data: updatedRow, error: null });
+
+      const single = vi.fn().mockResolvedValue({ data: updatedRow, error: null });
+      const select = vi.fn().mockReturnValue({ single });
+
+      const createChain = () => {
+        const clearResult = Promise.resolve({ error: null });
+        const chain: any = {
+          eq: vi.fn().mockReturnThis(),
+          is: vi.fn().mockReturnThis(),
+          neq: vi.fn().mockReturnThis(),
+          select,
+          then: clearResult.then.bind(clearResult),
+          catch: clearResult.catch.bind(clearResult),
+          finally: clearResult.finally.bind(clearResult),
+        };
+        return chain;
+      };
+
+      const update = vi.fn(() => createChain());
+      const builder = {
+        update,
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            is: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({ data: updatedRow, error: null }),
+            }),
+          }),
+        }),
+      };
+
+      const supabase = {
+        from: vi.fn(() => builder),
+      } as unknown as SupabaseClient<Database>;
 
       const result = await ReadingsService.updateMonths(supabase, "reading-1", {
         baseForMonth: "2024-05",
@@ -200,10 +232,41 @@ describe("ReadingsService", () => {
     });
 
     it("handles unique constraint violations", async () => {
-      const { supabase } = createSupabaseForUpdate({
+      const single = vi.fn().mockResolvedValue({
         data: null,
         error: { code: "23505", message: "duplicate" },
       });
+      const select = vi.fn().mockReturnValue({ single });
+
+      const createChain = () => {
+        const clearResult = Promise.resolve({ error: null });
+        const chain: any = {
+          eq: vi.fn().mockReturnThis(),
+          is: vi.fn().mockReturnThis(),
+          neq: vi.fn().mockReturnThis(),
+          select,
+          then: clearResult.then.bind(clearResult),
+          catch: clearResult.catch.bind(clearResult),
+          finally: clearResult.finally.bind(clearResult),
+        };
+        return chain;
+      };
+
+      const update = vi.fn(() => createChain());
+      const builder = {
+        update,
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            is: vi.fn().mockReturnValue({
+              single: vi.fn().mockResolvedValue({ data: BASE_ROW, error: null }),
+            }),
+          }),
+        }),
+      };
+
+      const supabase = {
+        from: vi.fn(() => builder),
+      } as unknown as SupabaseClient<Database>;
 
       await expect(
         ReadingsService.updateMonths(supabase, "reading-1", {
@@ -393,11 +456,23 @@ function createSupabaseForUpdate(result: {
 } {
   const single = vi.fn().mockResolvedValue(result);
   const select = vi.fn().mockReturnValue({ single });
-  const eqMethod = vi.fn().mockReturnValue({ select });
-  const update = vi.fn().mockReturnValue({ eq: eqMethod });
-  const builder = {
-    update,
+
+  const createChain = () => {
+    const clearResult = Promise.resolve({ error: null });
+    const chain: any = {
+      eq: vi.fn().mockReturnThis(),
+      is: vi.fn().mockReturnThis(),
+      neq: vi.fn().mockReturnThis(),
+      select,
+      then: clearResult.then.bind(clearResult),
+      catch: clearResult.catch.bind(clearResult),
+      finally: clearResult.finally.bind(clearResult),
+    };
+    return chain;
   };
+
+  const update = vi.fn(() => createChain());
+  const builder = { update };
 
   const supabase = {
     from: vi.fn(() => builder),

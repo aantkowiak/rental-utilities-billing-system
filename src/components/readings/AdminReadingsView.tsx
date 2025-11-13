@@ -3,11 +3,13 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEve
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
 import { Button } from "@/components/ui/button";
-import { ReplacementForm } from "@/components/readings/ReplacementForm";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { MessageSquare } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost, type ApiError } from "@/lib/client/http";
-import type { CreateReadingCmd, ReadingDTO, UpdateReadingCmd, PropertyDTO } from "@/types";
+import type { CreateReadingCmd, ReadingDTO, ReadingType, UpdateReadingCmd, PropertyDTO, YearMonth } from "@/types";
 import type { ReadingListResponse, ReadingResponse } from "@/types/readings";
 import type { PropertyListResponse } from "@/lib/services/PropertyService";
+import { getAllowedMonths, isoDateToYearMonth, isValidYearMonth } from "@/lib/date/month";
 
 const PROPERTY_STORAGE_KEY = "admin-readings:propertyId";
 
@@ -21,6 +23,9 @@ interface FormState {
   hotM3: string;
   heatingGj: string;
   commentText: string;
+  baseForMonth: string;
+  finalForMonth: string;
+  readingType: ReadingType;
 }
 
 type FormField = keyof FormState;
@@ -33,10 +38,6 @@ const DECIMAL_FORMATTER = new Intl.NumberFormat("pl-PL", {
 const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("pl-PL", {
   dateStyle: "medium",
   timeStyle: "short",
-});
-
-const DATE_FORMATTER = new Intl.DateTimeFormat("pl-PL", {
-  dateStyle: "medium",
 });
 
 function resolveInitialFilters(): FiltersState {
@@ -64,6 +65,9 @@ function buildDefaultFormState(): FormState {
     hotM3: "",
     heatingGj: "",
     commentText: "",
+    baseForMonth: "",
+    finalForMonth: "",
+    readingType: "regular",
   };
 }
 
@@ -137,14 +141,6 @@ function formatDateTime(value: string): string {
   return DATE_TIME_FORMATTER.format(date);
 }
 
-function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return DATE_FORMATTER.format(date);
-}
-
 function formatMonth(dateString: string): string {
   const date = new Date(dateString);
   if (Number.isNaN(date.getTime())) {
@@ -166,7 +162,6 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
   const [formPending, setFormPending] = useState(false);
   const [formPendingTargetId, setFormPendingTargetId] = useState<string | null>(null);
   const [deletePendingById, setDeletePendingById] = useState<Record<string, boolean>>({});
-  const [replacementPendingById, setReplacementPendingById] = useState<Record<string, boolean>>({});
   const [recalcPending, setRecalcPending] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
@@ -175,7 +170,6 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FormField, string>>>({});
   const [formState, setFormState] = useState<FormState>(() => buildDefaultFormState());
   const [editing, setEditing] = useState<ReadingDTO | null>(null);
-  const [replacementSource, setReplacementSource] = useState<ReadingDTO | null>(null);
   const [properties, setProperties] = useState<PropertyDTO[]>([]);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastLoadedFiltersRef = useRef<FiltersState | null>(null);
@@ -222,17 +216,6 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
       }
     };
   }, [filterInputs]);
-
-  const clearReplacementPending = useCallback((id: string) => {
-    setReplacementPendingById((prev) => {
-      if (!prev[id]) {
-        return prev;
-      }
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -380,15 +363,13 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
       hotM3: reading.hotM3.toString(),
       heatingGj: reading.heatingGj.toString(),
       commentText: reading.commentText ?? "",
+      baseForMonth: reading.baseForMonth ? isoDateToYearMonth(reading.baseForMonth) : "",
+      finalForMonth: reading.finalForMonth ? isoDateToYearMonth(reading.finalForMonth) : "",
+      readingType: reading.readingType,
     });
     setFieldErrors({});
     setFormError(null);
     setActionAccessError(null);
-  }, []);
-
-  const handleReplacementStart = useCallback((reading: ReadingDTO) => {
-    setActionAccessError(null);
-    setReplacementSource(reading);
   }, []);
 
   const handleDelete = useCallback(
@@ -501,6 +482,17 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
         basePayload.commentVisibleToTenant = false;
       }
 
+      // Add month assignments if provided
+      if (formState.baseForMonth && isValidYearMonth(formState.baseForMonth)) {
+        basePayload.baseForMonth = formState.baseForMonth as YearMonth;
+      }
+      if (formState.finalForMonth && isValidYearMonth(formState.finalForMonth)) {
+        basePayload.finalForMonth = formState.finalForMonth as YearMonth;
+      }
+
+      // Add reading type
+      basePayload.readingType = formState.readingType;
+
       setFormPending(true);
       setFormPendingTargetId(editing ? editing.id : null);
       setFormError(null);
@@ -540,6 +532,9 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
           hotM3: response.reading.hotM3.toString(),
           heatingGj: response.reading.heatingGj.toString(),
           commentText: response.reading.commentText ?? "",
+          baseForMonth: response.reading.baseForMonth ? isoDateToYearMonth(response.reading.baseForMonth) : "",
+          finalForMonth: response.reading.finalForMonth ? isoDateToYearMonth(response.reading.finalForMonth) : "",
+          readingType: response.reading.readingType,
         });
       } catch (error) {
         const apiError = toApiError(error);
@@ -587,54 +582,11 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
     resetForm();
   }, [resetForm]);
 
-  const closeReplacementModal = useCallback(() => {
-    if (replacementSource) {
-      clearReplacementPending(replacementSource.id);
-    }
-    setReplacementSource(null);
-    setActionAccessError(null);
-  }, [clearReplacementPending, replacementSource]);
-
-  const handleReplacementSuccess = useCallback(async () => {
-    pushToast({
-      variant: "success",
-      title: "Dodano odczyt zastępczy",
-      description: "Rekalkulacja kotwic została zaplanowana.",
-    });
-    closeReplacementModal();
-    await loadReadings({ force: true });
-  }, [closeReplacementModal, loadReadings, pushToast]);
-
-  const replacementModalPending = replacementSource ? Boolean(replacementPendingById[replacementSource.id]) : false;
-
-  const handleRecalcSuccess = useCallback(() => {
-    loadReadings({ force: true }).catch(() => {
-      /* obsłużone w loadReadings */
-    });
-  }, [loadReadings]);
-
   const handleRefreshClick = useCallback(() => {
     loadReadings({ force: true }).catch(() => {
       /* obsłużone w loadReadings */
     });
   }, [loadReadings]);
-
-  const handleReplacementPendingChange = useCallback(
-    (pending: boolean) => {
-      if (!replacementSource) {
-        return;
-      }
-
-      const { id } = replacementSource;
-      if (pending) {
-        setReplacementPendingById((prev) => ({ ...prev, [id]: true }));
-        return;
-      }
-
-      clearReplacementPending(id);
-    },
-    [clearReplacementPending, replacementSource]
-  );
 
   const renderedTableRows = useMemo(() => {
     if (loading) {
@@ -662,26 +614,13 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
         key={item.id}
         item={item}
         deletePending={Boolean(deletePendingById[item.id])}
-        replacementPending={Boolean(replacementPendingById[item.id])}
         updatePending={formPending && formPendingTargetId === item.id}
         recalcPending={recalcPending}
         onEdit={handleEdit}
-        onReplace={handleReplacementStart}
         onDelete={handleDelete}
       />
     ));
-  }, [
-    deletePendingById,
-    formPending,
-    formPendingTargetId,
-    handleDelete,
-    handleEdit,
-    handleReplacementStart,
-    items,
-    loading,
-    recalcPending,
-    replacementPendingById,
-  ]);
+  }, [deletePendingById, formPending, formPendingTargetId, handleDelete, handleEdit, items, loading, recalcPending]);
 
   return (
     <section aria-busy={recalcPending} className="space-y-8">
@@ -814,6 +753,84 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
               </div>
             </div>
 
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground" htmlFor="admin-reading-base-month">
+                  Bazowy dla miesiąca (opcjonalnie)
+                </label>
+                <select
+                  className={buildInputClasses(fieldErrors.baseForMonth)}
+                  data-admin-reading-field="baseForMonth"
+                  disabled={formPending || !filters.propertyId || recalcPending}
+                  id="admin-reading-base-month"
+                  value={formState.baseForMonth}
+                  onChange={(event) => handleFormChange("baseForMonth", event.target.value)}
+                >
+                  <option value="">Brak przypisania</option>
+                  {getAllowedMonths(6).map((month) => (
+                    <option key={month.token} value={month.token}>
+                      {month.label}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.baseForMonth ? (
+                  <p className="text-sm text-destructive">{fieldErrors.baseForMonth}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Określa początek okresu rozliczeniowego.</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground" htmlFor="admin-reading-final-month">
+                  Finalny dla miesiąca (opcjonalnie)
+                </label>
+                <select
+                  className={buildInputClasses(fieldErrors.finalForMonth)}
+                  data-admin-reading-field="finalForMonth"
+                  disabled={formPending || !filters.propertyId || recalcPending}
+                  id="admin-reading-final-month"
+                  value={formState.finalForMonth}
+                  onChange={(event) => handleFormChange("finalForMonth", event.target.value)}
+                >
+                  <option value="">Brak przypisania</option>
+                  {getAllowedMonths(6).map((month) => (
+                    <option key={month.token} value={month.token}>
+                      {month.label}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.finalForMonth ? (
+                  <p className="text-sm text-destructive">{fieldErrors.finalForMonth}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Określa koniec okresu rozliczeniowego.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground" htmlFor="admin-reading-type">
+                Typ odczytu
+              </label>
+              <select
+                className={buildInputClasses(fieldErrors.readingType)}
+                data-admin-reading-field="readingType"
+                disabled={formPending || !filters.propertyId || recalcPending}
+                id="admin-reading-type"
+                value={formState.readingType}
+                onChange={(event) => handleFormChange("readingType", event.target.value as ReadingType)}
+              >
+                <option value="regular">Regularny</option>
+                <option value="overwrite">Nadpisujący (np. zmiana licznika)</option>
+              </select>
+              {fieldErrors.readingType ? (
+                <p className="text-sm text-destructive">{fieldErrors.readingType}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Wybierz &ldquo;Nadpisujący&rdquo;, gdy odczyt zastępuje wcześniejsze wartości (np. wymiana licznika).
+                </p>
+              )}
+            </div>
+
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground" htmlFor="admin-reading-comment">
                 Notatka techniczna (tylko dla administratora)
@@ -872,7 +889,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
                   <th className="px-4 py-2 text-left font-medium">Wartości</th>
                   <th className="px-4 py-2 text-left font-medium">Typ</th>
                   <th className="px-4 py-2 text-left font-medium">Miesiące</th>
-                  <th className="px-4 py-2 text-left font-medium">Komentarz</th>
+                  <th className="px-4 py-2 text-center font-medium w-16"></th>
                   <th className="px-4 py-2 text-right font-medium">Akcje</th>
                 </tr>
               </thead>
@@ -881,75 +898,6 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
           </div>
         </section>
       </div>
-
-      {false ? (
-        <div
-          aria-live="assertive"
-          className="fixed inset-0 z-40 flex items-center justify-center bg-background/75 p-4 backdrop-blur-sm"
-          role="status"
-        >
-          <div className="flex flex-col items-center gap-3 rounded-lg border bg-card px-6 py-4 shadow-xl">
-            <div
-              aria-hidden="true"
-              className="size-10 animate-spin rounded-full border-2 border-muted border-t-transparent"
-            />
-            <p className="text-sm font-medium text-foreground">Planowanie przeliczenia kotwic…</p>
-            <p className="text-xs text-muted-foreground text-center">
-              Poczekaj na zakończenie operacji, aby uniknąć konfliktów danych.
-            </p>
-          </div>
-        </div>
-      ) : null}
-
-      {replacementSource ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
-          role="presentation"
-        >
-          <div
-            aria-busy={replacementModalPending}
-            aria-labelledby="replacement-modal-title"
-            aria-modal="true"
-            role="dialog"
-            className="relative w-full max-w-lg rounded-lg border bg-card p-6 shadow-xl"
-          >
-            {replacementModalPending ? (
-              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg bg-background/60">
-                <div className="flex flex-col items-center gap-3" aria-live="assertive">
-                  <div
-                    aria-hidden="true"
-                    className="size-8 animate-spin rounded-full border-2 border-muted border-t-transparent"
-                  />
-                  <p className="text-sm font-medium text-foreground">Zapisywanie odczytu zastępczego…</p>
-                </div>
-              </div>
-            ) : null}
-            <header className="mb-4 flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-semibold text-foreground" id="replacement-modal-title">
-                  Odczyt zastępczy
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Wprowadź wartości zastępcze. Po zapisaniu zostanie uruchomione ponowne wyliczenie kotwic.
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Źródło: {formatDate(replacementSource.readingAt)} • {formatNumber(replacementSource.coldM3)} /{" "}
-                  {formatNumber(replacementSource.hotM3)} / {formatNumber(replacementSource.heatingGj)}
-                </p>
-              </div>
-              <Button variant="ghost" type="button" onClick={closeReplacementModal} disabled={replacementModalPending}>
-                Zamknij
-              </Button>
-            </header>
-            <ReplacementForm
-              source={replacementSource}
-              onClose={closeReplacementModal}
-              onSuccess={handleReplacementSuccess}
-              onPendingChange={handleReplacementPendingChange}
-            />
-          </div>
-        </div>
-      ) : null}
     </section>
   );
 });
@@ -957,37 +905,29 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
 interface AdminReadingRowProps {
   item: ReadingDTO;
   deletePending: boolean;
-  replacementPending: boolean;
   updatePending: boolean;
   recalcPending: boolean;
   onEdit: (reading: ReadingDTO) => void;
-  onReplace: (reading: ReadingDTO) => void;
   onDelete: (reading: ReadingDTO) => void;
 }
 
 const AdminReadingRow = memo(function AdminReadingRow({
   item,
   deletePending,
-  replacementPending,
   updatePending,
   recalcPending,
   onEdit,
-  onReplace,
   onDelete,
 }: AdminReadingRowProps): JSX.Element {
   const handleEditClick = useCallback(() => {
     onEdit(item);
   }, [item, onEdit]);
 
-  const handleReplaceClick = useCallback(() => {
-    onReplace(item);
-  }, [item, onReplace]);
-
   const handleDeleteClick = useCallback(() => {
     onDelete(item);
   }, [item, onDelete]);
 
-  const rowBusy = deletePending || replacementPending || updatePending;
+  const rowBusy = deletePending || updatePending;
 
   return (
     <tr className="rounded-lg border border-border bg-background/80 align-top shadow-sm">
@@ -1012,7 +952,7 @@ const AdminReadingRow = memo(function AdminReadingRow({
             {item.origin === "admin_replacement" ? "Zastępczy" : "Regularny"}
           </span>
           <div className="text-xs text-muted-foreground">
-            {item.readingType === "baseline" ? "Kotwica" : "Odczyt cykliczny"}
+            {item.readingType === "overwrite" ? "Kotwica" : "Odczyt cykliczny"}
           </div>
         </div>
       </td>
@@ -1043,19 +983,30 @@ const AdminReadingRow = memo(function AdminReadingRow({
           ) : null}
         </div>
       </td>
-      <td className="px-4 py-3 text-sm text-muted-foreground">{item.commentText ? item.commentText : "—"}</td>
+      <td className="px-4 py-3 text-center">
+        {item.commentText ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Pokaż komentarz"
+              >
+                <MessageSquare className="h-4 w-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="max-w-xs">
+              <p className="text-sm">{item.commentText}</p>
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
       <td className="px-4 py-3">
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="secondary" type="button" disabled={rowBusy || recalcPending} onClick={handleEditClick}>
             Edytuj
-          </Button>
-          <Button
-            variant="ghost"
-            type="button"
-            disabled={replacementPending || recalcPending}
-            onClick={handleReplaceClick}
-          >
-            Zastąp
           </Button>
           <Button
             variant="destructive"

@@ -10,7 +10,7 @@ const updateMonthsMock = vi.fn();
 
 const PROPERTY_ID = "7969601d-b9cc-43bf-90df-969784aa87f1";
 
-const recomputeForReadingMock = vi.fn().mockImplementation(() => Promise.resolve());
+const recomputeAllMock = vi.fn().mockImplementation(() => Promise.resolve());
 
 vi.mock("@/lib/services/ReadingsService", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/ReadingsService")>(
@@ -33,7 +33,7 @@ vi.mock("@/lib/services/ReadingsService", async () => {
 
 vi.mock("@/lib/services/ReportService", () => ({
   ReportService: {
-    recomputeForReading: recomputeForReadingMock,
+    recomputeAll: recomputeAllMock,
   },
 }));
 
@@ -130,8 +130,7 @@ describe("Readings API routes", () => {
     expect(payload.reading.id).toBe("reading-1");
     expect(response.status).toBe(201);
     expect(createMock).toHaveBeenCalledTimes(1);
-    expect(recomputeForReadingMock).toHaveBeenCalledWith(expect.anything(), "reading-1");
-    });
+    expect(recomputeAllMock).toHaveBeenCalledWith(expect.anything());
   });
 
   it("maps service errors to HTTP responses", async () => {

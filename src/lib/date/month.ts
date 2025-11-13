@@ -103,3 +103,43 @@ export function isValidYearMonth(ym: string): ym is YearMonth {
   return month >= 1 && month <= 12;
 }
 
+export interface AllowedMonth {
+  token: YearMonth;
+  label: string;
+  date: Date;
+}
+
+export function formatYearMonthLabel(ym: YearMonth): string {
+  const date = yearMonthToDate(ym);
+  const formatter = new Intl.DateTimeFormat("pl-PL", {
+    year: "numeric",
+    month: "long",
+    timeZone: "UTC",
+  });
+  return formatter.format(date);
+}
+
+export function getAllowedMonths(monthsBack = 6, now = new Date()): AllowedMonth[] {
+  if (!Number.isInteger(monthsBack) || monthsBack < 0) {
+    throw new Error("monthsBack must be a non-negative integer");
+  }
+
+  if (!(now instanceof Date) || Number.isNaN(now.valueOf())) {
+    throw new Error("now must be a valid Date instance");
+  }
+
+  const allowedMonths: AllowedMonth[] = [];
+  const current = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+  for (let i = 0; i <= monthsBack; i += 1) {
+    const date = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() - i, 1));
+    const token = toYearMonth(date);
+    allowedMonths.push({
+      token,
+      label: formatYearMonthLabel(token),
+      date,
+    });
+  }
+
+  return allowedMonths;
+}

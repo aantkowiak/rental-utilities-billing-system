@@ -108,7 +108,9 @@ export class ReadingsService {
       throw new ReadingsServiceError("READING_NOT_FOUND", "Reading not found");
     }
 
-    return mapReadingRowToDto(data);
+    const updated = mapReadingRowToDto(data);
+    await this.clearConflictingAssignments(supabase, updated);
+    return updated;
   }
 
   static async create(supabase: Supabase, cmd: CreateReadingCmd, context: OperationContext): Promise<ReadingDTO> {
@@ -121,11 +123,19 @@ export class ReadingsService {
       }
     }
 
+    const baseMonthIso = toIsoMonthOrNull(cmd.baseForMonth);
+    const finalMonthIso = toIsoMonthOrNull(cmd.finalForMonth);
+
+    await this.clearMonthAssignment(supabase, cmd.propertyId, "base_for_month", baseMonthIso);
+    await this.clearMonthAssignment(supabase, cmd.propertyId, "final_for_month", finalMonthIso);
+
     const insertPayload = {
       property_id: cmd.propertyId,
       reading_at: cmd.readingAt,
       origin: deriveOriginForCreate(),
-      reading_type: defaultReadingType(),
+      reading_type: normalizeReadingType((cmd as { readingType?: string | null }).readingType),
+      base_for_month: baseMonthIso,
+      final_for_month: finalMonthIso,
       cold_m3: cmd.coldM3,
       hot_m3: cmd.hotM3,
       heating_gj: cmd.heatingGj,
@@ -147,7 +157,9 @@ export class ReadingsService {
       throw new ReadingsServiceError("DATABASE_ERROR", "Failed to create reading");
     }
 
-    return mapReadingRowToDto(data);
+    const updated = mapReadingRowToDto(data);
+    await this.clearConflictingAssignments(supabase, updated);
+    return updated;
   }
 
   static async update(
@@ -199,6 +211,27 @@ export class ReadingsService {
       updatePayload.comment_visible_to_tenant = cmd.commentVisibleToTenant;
     }
 
+    if (cmd.baseForMonth !== undefined) {
+      const nextBaseIso = toIsoMonthOrNull(cmd.baseForMonth);
+      updatePayload.base_for_month = nextBaseIso;
+      if (nextBaseIso && nextBaseIso !== existing.baseForMonth) {
+        await this.clearMonthAssignment(supabase, existing.propertyId, "base_for_month", nextBaseIso, existing.id);
+      }
+    }
+
+    if (cmd.finalForMonth !== undefined) {
+      const nextFinalIso = toIsoMonthOrNull(cmd.finalForMonth);
+      updatePayload.final_for_month = nextFinalIso;
+      if (nextFinalIso && nextFinalIso !== existing.finalForMonth) {
+        await this.clearMonthAssignment(supabase, existing.propertyId, "final_for_month", nextFinalIso, existing.id);
+      }
+    }
+
+    const readingTypeInput = (cmd as { readingType?: string | null }).readingType;
+    if (readingTypeInput !== undefined) {
+      updatePayload.reading_type = normalizeReadingType(readingTypeInput);
+    }
+
     if (Object.keys(updatePayload).length === 0) {
       return existing;
     }
@@ -221,7 +254,43 @@ export class ReadingsService {
       throw new ReadingsServiceError("READING_NOT_FOUND", "Reading not found");
     }
 
-    return mapReadingRowToDto(data);
+    const updated = mapReadingRowToDto(data);
+    await this.clearConflictingAssignments(supabase, updated);
+    return updated;
+  }
+
+  private static async clearConflictingAssignments(supabase: Supabase, reading: ReadingDTO): Promise<void> {
+    await this.clearMonthAssignment(supabase, reading.propertyId, "base_for_month", reading.baseForMonth, reading.id);
+    await this.clearMonthAssignment(supabase, reading.propertyId, "final_for_month", reading.finalForMonth, reading.id);
+  }
+
+  private static async clearMonthAssignment(
+    supabase: Supabase,
+    propertyId: string,
+    column: "base_for_month" | "final_for_month",
+    value: string | null | undefined,
+    excludeId?: string
+  ): Promise<void> {
+    if (!value) {
+      return;
+    }
+
+    let query = supabase
+      .from("readings")
+      .update({ [column]: null })
+      .eq("property_id", propertyId)
+      .eq(column, value)
+      .is("deleted_at", null);
+
+    if (excludeId) {
+      query = query.neq("id", excludeId);
+    }
+
+    const { error } = await query;
+
+    if (error) {
+      throw new ReadingsServiceError("DATABASE_ERROR", error.message);
+    }
   }
 
   static async softDelete(supabase: Supabase, readingId: string): Promise<void> {
@@ -267,7 +336,7 @@ export class ReadingsService {
       reading_at: cmd.readingAt,
       effective_month: cmd.effectiveMonth,
       origin: "admin_replacement" as ReadingOrigin,
-      reading_type: defaultReadingType(),
+      reading_type: normalizeReadingType("overwrite"),
       cold_m3: cmd.coldM3,
       hot_m3: cmd.hotM3,
       heating_gj: cmd.heatingGj,
@@ -302,19 +371,24 @@ export class ReadingsService {
    * Update month assignments (baseForMonth, finalForMonth) for a reading.
    * Only admins can call this.
    */
-  static async updateMonths(
-    supabase: Supabase,
-    readingId: string,
-    cmd: UpdateReadingMonthsCmd
-  ): Promise<ReadingDTO> {
+  static async updateMonths(supabase: Supabase, readingId: string, cmd: UpdateReadingMonthsCmd): Promise<ReadingDTO> {
+    const existing = await this.getById(supabase, readingId);
     const updatePayload: Database["public"]["Tables"]["readings"]["Update"] = {};
 
     if (cmd.baseForMonth !== undefined) {
-      updatePayload.base_for_month = cmd.baseForMonth ? yearMonthToISODate(cmd.baseForMonth) : null;
+      const nextBaseIso = cmd.baseForMonth ? yearMonthToISODate(cmd.baseForMonth) : null;
+      updatePayload.base_for_month = nextBaseIso;
+      if (nextBaseIso && nextBaseIso !== existing.baseForMonth) {
+        await this.clearMonthAssignment(supabase, existing.propertyId, "base_for_month", nextBaseIso, readingId);
+      }
     }
 
     if (cmd.finalForMonth !== undefined) {
-      updatePayload.final_for_month = cmd.finalForMonth ? yearMonthToISODate(cmd.finalForMonth) : null;
+      const nextFinalIso = cmd.finalForMonth ? yearMonthToISODate(cmd.finalForMonth) : null;
+      updatePayload.final_for_month = nextFinalIso;
+      if (nextFinalIso && nextFinalIso !== existing.finalForMonth) {
+        await this.clearMonthAssignment(supabase, existing.propertyId, "final_for_month", nextFinalIso, readingId);
+      }
     }
 
     if (Object.keys(updatePayload).length === 0) {
@@ -425,8 +499,6 @@ export class ReadingsService {
 
 const deriveOriginForCreate = (): ReadingOrigin => "tenant";
 
-const defaultReadingType = (): ReadingType => "regular";
-
 const mapReadingRowToDto = (row: Database["public"]["Tables"]["readings"]["Row"]): ReadingDTO => ({
   id: row.id,
   propertyId: row.property_id,
@@ -435,7 +507,7 @@ const mapReadingRowToDto = (row: Database["public"]["Tables"]["readings"]["Row"]
   baseForMonth: row.base_for_month,
   finalForMonth: row.final_for_month,
   origin: row.origin as ReadingOrigin,
-  readingType: row.reading_type as ReadingType,
+  readingType: normalizeReadingType(row.reading_type) as ReadingType,
   coldM3: toNumber(row.cold_m3),
   hotM3: toNumber(row.hot_m3),
   heatingGj: toNumber(row.heating_gj),
@@ -455,4 +527,20 @@ const toNumber = (value: number | string): number => {
   }
 
   return parseFloat(value);
+};
+
+const toIsoMonthOrNull = (month: YearMonth | null | undefined): string | null => {
+  if (!month) {
+    return null;
+  }
+
+  return yearMonthToISODate(month);
+};
+
+const normalizeReadingType = (readingType: string | null | undefined): ReadingType => {
+  if (readingType === "overwrite" || readingType === "baseline") {
+    return "overwrite" as ReadingType;
+  }
+
+  return "regular";
 };

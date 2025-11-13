@@ -4,6 +4,7 @@ import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
 import { Button } from "@/components/ui/button";
 import { apiGet, apiPatch, apiPost, type ApiError } from "@/lib/client/http";
+import { formatYearMonthLabel, isoDateToYearMonth, isValidYearMonth } from "@/lib/date/month";
 import type { ReportDTO, ReportEmailAttemptDTO, UpdateReportStatusCmd } from "@/types";
 
 interface AdminReportPermissions {
@@ -41,11 +42,6 @@ const currencyFormatter = new Intl.NumberFormat("pl-PL", {
   style: "currency",
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
-});
-
-const monthFormatter = new Intl.DateTimeFormat("pl-PL", {
-  month: "long",
-  year: "numeric",
 });
 
 const dateTimeFormatter = new Intl.DateTimeFormat("pl-PL", {
@@ -213,8 +209,6 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
             <h3 className="text-base font-semibold text-foreground">Metadane</h3>
             <dl className="mt-4 grid gap-4 sm:grid-cols-2">
               <MetadataItem label="Identyfikator raportu" value={report.id} />
-              <MetadataItem label="Kotwica początkowa" value={report.anchorReadingId ?? "—"} />
-              <MetadataItem label="Kotwica końcowa" value={report.anchorReadingNextId ?? "—"} />
               <MetadataItem label="Utworzono" value={formatDateTime(report.createdAt)} />
               <MetadataItem label="Ostatnia aktualizacja" value={formatDateTime(report.updatedAt)} />
               <MetadataItem
@@ -523,13 +517,15 @@ function formatMonth(month: string): string {
     return "—";
   }
 
-  const normalized = month.length === 7 ? `${month}-01` : month;
-  const date = new Date(normalized);
-  if (Number.isNaN(date.getTime())) {
+  try {
+    const normalized = month.length === 7 ? month : isoDateToYearMonth(month);
+    if (!isValidYearMonth(normalized)) {
+      return month;
+    }
+    return formatYearMonthLabel(normalized);
+  } catch {
     return month;
   }
-
-  return monthFormatter.format(date);
 }
 
 function formatStatus(status: string): string {

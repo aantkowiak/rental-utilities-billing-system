@@ -5,9 +5,9 @@ import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
 import { Button } from "@/components/ui/button";
 import { apiGet, apiPost, type ApiError } from "@/lib/client/http";
-import type { GenerateReportCmd, ReportDTO, ReportEmailAttemptDTO } from "@/types";
+import type { GenerateReportCmd, PropertyDTO, ReportDTO, ReportEmailAttemptDTO } from "@/types";
 
-const MONTH_STORAGE_KEY = "tenant-reports:month";
+const PROPERTY_STORAGE_KEY = "tenant-reports:propertyId";
 
 interface TenantReportPermissions {
   canGenerate?: boolean;
@@ -41,15 +41,17 @@ interface TenantReportRowProps {
 
 export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): JSX.Element {
   const { pushToast } = useToast();
-  const [month, setMonth] = useState<string>(() => resolveInitialMonth(initialMonth));
+  const [propertyId, setPropertyId] = useState<string | null>(() => resolveInitialPropertyId(initialMonth));
+  const [properties, setProperties] = useState<PropertyDTO[]>([]);
   const [items, setItems] = useState<TenantReportListItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [propertiesLoading, setPropertiesLoading] = useState<boolean>(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [pendingGenerateId, setPendingGenerateId] = useState<string | null>(null);
   const [pendingResendId, setPendingResendId] = useState<string | null>(null);
 
-  const listQuery = useMemo(() => buildListQuery(month), [month]);
+  const listQuery = useMemo(() => buildListQuery(propertyId), [propertyId]);
 
   const loadReports = useCallback(async () => {
     setLoading(true);
@@ -83,6 +85,24 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
     }
   }, [listQuery, pushToast]);
 
+  const loadProperties = useCallback(async () => {
+    setPropertiesLoading(true);
+    try {
+      const response = await apiGet<{ items: PropertyDTO[] }>("/api/v1/properties");
+      setProperties(response.items || []);
+    } catch (error) {
+      console.error("Failed to load properties:", error);
+    } finally {
+      setPropertiesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadProperties().catch(() => {
+      // error handled in loadProperties
+    });
+  }, [loadProperties]);
+
   useEffect(() => {
     loadReports().catch(() => {
       // błąd obsłużony w loadReports
@@ -94,14 +114,17 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
       return;
     }
 
-    const sanitized = sanitizeMonth(month) ?? getCurrentMonth();
-    window.localStorage.setItem(MONTH_STORAGE_KEY, sanitized);
-    replaceMonthParam(sanitized);
-  }, [month]);
+    if (propertyId) {
+      window.localStorage.setItem(PROPERTY_STORAGE_KEY, propertyId);
+    } else {
+      window.localStorage.removeItem(PROPERTY_STORAGE_KEY);
+    }
+    replacePropertyParam(propertyId);
+  }, [propertyId]);
 
-  const onMonthChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
-    const nextMonth = sanitizeMonth(event.target.value);
-    setMonth(nextMonth ?? getCurrentMonth());
+  const onPropertyChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    const nextPropertyId = normalizePropertyId(event.target.value);
+    setPropertyId(nextPropertyId);
   }, []);
 
   const handleActionError = useCallback(
@@ -134,7 +157,7 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
 
       const payload: GenerateReportCmd = {
         contractId: item.report.contractId,
-        month,
+        month: item.report.month,
       };
 
       try {
@@ -156,7 +179,7 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
         setPendingGenerateId(null);
       }
     },
-    [handleActionError, loadReports, month, pendingGenerateId, pendingResendId, pushToast]
+    [handleActionError, loadReports, pendingGenerateId, pendingResendId, pushToast]
   );
 
   const handleResend = useCallback(
@@ -189,26 +212,32 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
     [handleActionError, loadReports, pendingGenerateId, pendingResendId, pushToast]
   );
 
-  const monthInputId = useMemo(() => `reports-month-${Math.random().toString(36).slice(2)}`, []);
+  const propertySelectId = useMemo(() => `reports-property-${Math.random().toString(36).slice(2)}`, []);
 
   return (
     <section className="space-y-6">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-foreground" htmlFor={monthInputId}>
-            Miesiąc
+          <label className="text-sm font-medium text-foreground" htmlFor={propertySelectId}>
+            Nieruchomość
           </label>
-          <input
-            id={monthInputId}
-            type="month"
-            className="w-48 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-            value={month}
-            onChange={onMonthChange}
-            disabled={loading || Boolean(pendingGenerateId) || Boolean(pendingResendId)}
-            aria-describedby={`${monthInputId}-help`}
-          />
-          <p className="text-xs text-muted-foreground" id={`${monthInputId}-help`}>
-            Zmiana miesiąca odświeży listę raportów
+          <select
+            id={propertySelectId}
+            className="w-64 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+            value={propertyId ?? ""}
+            onChange={onPropertyChange}
+            disabled={loading || propertiesLoading || Boolean(pendingGenerateId) || Boolean(pendingResendId)}
+            aria-describedby={`${propertySelectId}-help`}
+          >
+            <option value="">Wszystkie nieruchomości</option>
+            {properties.map((property) => (
+              <option key={property.id} value={property.id}>
+                {property.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground" id={`${propertySelectId}-help`}>
+            Zmiana nieruchomości odświeży listę raportów
           </p>
         </div>
       </header>
@@ -315,60 +344,49 @@ export function TenantReportsView(props: TenantReportsTableProps): JSX.Element {
   );
 }
 
-function getCurrentMonth(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = `${now.getMonth() + 1}`.padStart(2, "0");
-  return `${year}-${month}`;
-}
-function resolveInitialMonth(initialMonth?: string): string {
-  const candidates: (string | null)[] = [
-    initialMonth ?? null,
-    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("month") : null,
-    typeof window !== "undefined" ? window.localStorage.getItem(MONTH_STORAGE_KEY) : null,
-  ];
-
-  for (const candidate of candidates) {
-    const sanitized = sanitizeMonth(candidate);
-    if (sanitized) {
-      return sanitized;
-    }
-  }
-
-  return getCurrentMonth();
-}
-
-function sanitizeMonth(value: string | null | undefined): string | null {
-  if (!value) {
+function normalizePropertyId(value: string | null | undefined): string | null {
+  if (typeof value !== "string" || value === "") {
     return null;
   }
-
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) {
-    return null;
-  }
-
   return value;
 }
 
-function buildListQuery(month: string): string {
+function resolveInitialPropertyId(initialPropertyId?: string): string | null {
+  const candidates: (string | null)[] = [
+    initialPropertyId ?? null,
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("propertyId") : null,
+    typeof window !== "undefined" ? window.localStorage.getItem(PROPERTY_STORAGE_KEY) : null,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizePropertyId(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
+function buildListQuery(propertyId: string | null): string {
   const search = new URLSearchParams();
-  if (month) {
-    search.set("month", month);
+  if (propertyId) {
+    search.set("propertyId", propertyId);
   }
   const query = search.toString();
   return query ? `?${query}` : "";
 }
 
-function replaceMonthParam(value: string): void {
+function replacePropertyParam(value: string | null): void {
   if (typeof window === "undefined") {
     return;
   }
 
   const url = new URL(window.location.href);
   if (value) {
-    url.searchParams.set("month", value);
+    url.searchParams.set("propertyId", value);
   } else {
-    url.searchParams.delete("month");
+    url.searchParams.delete("propertyId");
   }
   window.history.replaceState(null, "", url.toString());
 }
@@ -402,16 +420,15 @@ function formatMonth(month: string): string {
     return "—";
   }
 
-  const normalized = month.length === 7 ? `${month}-01` : month;
-  const date = new Date(normalized);
-  if (Number.isNaN(date.getTime())) {
+  try {
+    const normalized = month.length === 7 ? month : isoDateToYearMonth(month);
+    if (!isValidYearMonth(normalized)) {
+      return month;
+    }
+    return formatYearMonthLabel(normalized);
+  } catch {
     return month;
   }
-
-  return new Intl.DateTimeFormat("pl-PL", {
-    month: "long",
-    year: "numeric",
-  }).format(date);
 }
 
 function formatStatus(status: string): string {

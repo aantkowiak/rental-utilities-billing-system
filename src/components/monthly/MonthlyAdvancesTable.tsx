@@ -737,7 +737,7 @@ function MonthlyAdvancesContent(): JSX.Element {
                 <th className="px-3 py-2 text-left font-semibold">Miesiąc</th>
                 <th className="px-3 py-2 text-left font-semibold">Opłata adm. (PLN)</th>
                 <th className="px-3 py-2 text-left font-semibold">Cena zimnej wody (PLN)</th>
-                <th className="px-3 py-2 text-left font-semibold">Cena ciepłej wody (PLN)</th>
+                <th className="px-3 py-2 text-left font-semibold">Cena podgrzania wody (PLN)</th>
                 <th className="px-3 py-2 text-left font-semibold">Cena ogrzewania (PLN)</th>
                 <th className="px-3 py-2 text-left font-semibold">Prognoza zimnej wody (m³)</th>
                 <th className="px-3 py-2 text-left font-semibold">Prognoza ciepłej wody (m³)</th>

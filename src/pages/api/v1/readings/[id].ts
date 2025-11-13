@@ -83,7 +83,7 @@ export const PATCH: APIRoute = async ({ request, locals, params }) => {
     });
 
     // Trigger report recomputation in background
-    Promise.resolve(ReportService.recomputeForReading(locals.supabase, readingId)).catch((recomputeError) => {
+    Promise.resolve(ReportService.recomputeAll(locals.supabase)).catch((recomputeError) => {
       // eslint-disable-next-line no-console
       console.error("[PATCH /v1/readings/:id] Failed to recompute reports", recomputeError);
     });
@@ -124,7 +124,7 @@ export const DELETE: APIRoute = async ({ request, locals, params }) => {
     await ReadingsService.softDelete(locals.supabase, readingId);
 
     // Trigger report recomputation in background
-    Promise.resolve(ReportService.recomputeForReading(locals.supabase, readingId)).catch((recomputeError) => {
+    Promise.resolve(ReportService.recomputeAll(locals.supabase)).catch((recomputeError) => {
       // eslint-disable-next-line no-console
       console.error("[DELETE /v1/readings/:id] Failed to recompute reports", recomputeError);
     });

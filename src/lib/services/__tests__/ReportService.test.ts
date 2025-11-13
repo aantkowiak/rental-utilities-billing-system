@@ -7,7 +7,7 @@ import type { ReadingDTO, ReportDTO } from "@/types";
 type ReportRow = Database["public"]["Tables"]["reports"]["Row"];
 type ReportItemRow = Database["public"]["Tables"]["report_items"]["Row"];
 type ContractRow = Database["public"]["Tables"]["contracts"]["Row"];
-type MonthlyConditionsRow = Database["public"]["Tables"]["monthly_conditions"]["Row"];
+type MonthlyAdvancesRow = Database["public"]["Tables"]["monthly_advances"]["Row"];
 
 const BASE_CONTRACT: ContractRow = {
   id: "contract-1",
@@ -20,14 +20,18 @@ const BASE_CONTRACT: ContractRow = {
   updated_at: "2024-01-01T00:00:00Z",
 };
 
-const BASE_MONTHLY_CONDITIONS: MonthlyConditionsRow = {
+const BASE_MONTHLY_ADVANCES: MonthlyAdvancesRow = {
   id: "mc-1",
   property_id: "property-1",
-  effective_month: "2024-05-01",
-  cold_water_m3_raw: "500",
-  hot_water_m3_raw: "1000",
-  heating_gj_raw: "15000",
-  fixed_cost_raw: "50000",
+  month: "2024-05-01",
+  manager_fee: 150.0,
+  price_cold: 6.5,
+  price_hot_heating: 30.0,
+  price_heating: 200.0,
+  forecast_cold: 10.0,
+  forecast_hot: 5.0,
+  forecast_heating: 3.0,
+  advance_payment: 1000.0,
   created_at: "2024-01-01T00:00:00Z",
   updated_at: "2024-01-01T00:00:00Z",
 };

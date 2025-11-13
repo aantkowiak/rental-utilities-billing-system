@@ -51,7 +51,7 @@ export type ContractDTO = Omit<Camelize<ContractRow>, "period"> & {
 export type MonthlyAdvanceDTO = Camelize<MonthlyAdvanceRow>;
 export type ReadingDTO = Camelize<ReadingRow>;
 export type ReadingOrigin = "tenant" | "admin_replacement";
-export type ReadingType = "regular" | "baseline";
+export type ReadingType = "regular" | "overwrite";
 export type ReportDTO = Camelize<ReportRow>;
 export type ReportItemDTO = Camelize<ReportItemRow>;
 export type ReportEmailDTO = Camelize<ReportEmailRow>;
@@ -97,8 +97,18 @@ export type CreateMonthlyAdvanceCmd = Pick<
 export type UpdateMonthlyAdvanceCmd = Partial<CreateMonthlyAdvanceCmd>;
 
 /* 2.6 Readings */
-export type CreateReadingCmd = Pick<ReadingDTO, "propertyId" | "readingAt" | "coldM3" | "hotM3" | "heatingGj"> &
-  Partial<Pick<ReadingDTO, "commentText" | "commentVisibleToTenant" | "baseForMonth" | "finalForMonth">>;
+export interface CreateReadingCmd {
+  propertyId: string;
+  readingAt: string;
+  coldM3: number;
+  hotM3: number;
+  heatingGj: number;
+  commentText?: string | null;
+  commentVisibleToTenant?: boolean;
+  baseForMonth?: YearMonth | null;
+  finalForMonth?: YearMonth | null;
+  readingType?: ReadingType;
+}
 
 export type UpdateReadingCmd = Partial<CreateReadingCmd>;
 

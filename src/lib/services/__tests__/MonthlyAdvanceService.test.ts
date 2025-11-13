@@ -6,7 +6,7 @@ import type { Database } from "@/db/database.types";
 import type { MonthlyAdvanceDTO } from "@/types";
 import { MonthlyAdvanceService, MonthlyAdvanceServiceError } from "@/lib/services/MonthlyAdvanceService";
 
-const BASE_ROW: Database["public"]["Tables"]["monthly_conditions"]["Row"] = {
+const BASE_ROW: Database["public"]["Tables"]["monthly_advances"]["Row"] = {
   id: "mc-1",
   property_id: "property-1",
   month: "2025-01-01",
@@ -139,7 +139,7 @@ function createSupabaseStub(): SupabaseClient<Database> {
 }
 
 function createSupabaseForList(rangeResult: {
-  data: Database["public"]["Tables"]["monthly_conditions"]["Row"][] | null;
+  data: Database["public"]["Tables"]["monthly_advances"]["Row"][] | null;
   error: { message?: string } | null;
 }): {
   supabase: SupabaseClient<Database>;
@@ -154,7 +154,7 @@ function createSupabaseForList(rangeResult: {
 }
 
 function createListBuilder(rangeResult: {
-  data: Database["public"]["Tables"]["monthly_conditions"]["Row"][] | null;
+  data: Database["public"]["Tables"]["monthly_advances"]["Row"][] | null;
   error: { message?: string } | null;
 }) {
   const executePromise = Promise.resolve(rangeResult);
@@ -169,7 +169,7 @@ function createListBuilder(rangeResult: {
   };
 }
 
-function createSupabaseForSingle(row: Database["public"]["Tables"]["monthly_conditions"]["Row"]): {
+function createSupabaseForSingle(row: Database["public"]["Tables"]["monthly_advances"]["Row"]): {
   supabase: SupabaseClient<Database>;
 } {
   const single = vi.fn().mockResolvedValue({ data: row, error: null });
@@ -187,7 +187,7 @@ function createSupabaseForSingle(row: Database["public"]["Tables"]["monthly_cond
 }
 
 function createSupabaseForInsert(result: {
-  data: Database["public"]["Tables"]["monthly_conditions"]["Row"] | null;
+  data: Database["public"]["Tables"]["monthly_advances"]["Row"] | null;
   error: { code?: string; message?: string } | null;
 }): {
   supabase: SupabaseClient<Database>;
@@ -209,7 +209,7 @@ function createSupabaseForInsert(result: {
 function createSupabaseForUpdate(options: {
   reportsResult: { data: { id: string } | null; error: { message?: string } | null };
   updateResult: {
-    data: Database["public"]["Tables"]["monthly_conditions"]["Row"] | null;
+    data: Database["public"]["Tables"]["monthly_advances"]["Row"] | null;
     error: { code?: string; message?: string } | null;
   };
 }): {
@@ -245,7 +245,7 @@ function createSupabaseForUpdate(options: {
         return reportsBuilder;
       }
 
-      if (table === "monthly_conditions") {
+      if (table === "monthly_advances") {
         return monthlyConditionsBuilder;
       }
 

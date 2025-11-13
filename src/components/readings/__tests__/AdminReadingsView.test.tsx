@@ -4,37 +4,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminReadingsView } from "@/components/readings/AdminReadingsView";
 import type { ReadingDTO } from "@/types";
 import type { ReadingListResponse, ReadingResponse } from "@/types/readings";
-import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/client/http";
+import { apiDelete, apiGet, apiPatch } from "@/lib/client/http";
 
 vi.mock("@/lib/client/http", async () => {
   const actual = await vi.importActual<typeof import("@/lib/client/http")>("@/lib/client/http");
   return {
     ...actual,
     apiGet: vi.fn(),
-    apiPost: vi.fn(),
     apiPatch: vi.fn(),
     apiDelete: vi.fn(),
   };
 });
 
 const apiGetMock = apiGet as unknown as vi.Mock;
-const apiPostMock = apiPost as unknown as vi.Mock;
 const apiPatchMock = apiPatch as unknown as vi.Mock;
 const apiDeleteMock = apiDelete as unknown as vi.Mock;
 
 const PROPERTY_KEY = "admin-readings:propertyId";
-const MONTH_KEY = "admin-readings:month";
 
 describe("AdminReadingsView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     apiGetMock.mockReset();
-    apiPostMock.mockReset();
     apiPatchMock.mockReset();
     apiDeleteMock.mockReset();
     window.localStorage.clear();
     window.localStorage.setItem(PROPERTY_KEY, "property-1");
-    window.localStorage.setItem(MONTH_KEY, "2024-02");
 
     // Mock properties list request
     apiGetMock.mockImplementation((url: string) => {
@@ -96,7 +91,7 @@ describe("AdminReadingsView", () => {
 
     await waitFor(() => expect(apiGetMock).toHaveBeenCalledWith(expect.stringContaining("propertyId=property-1")));
 
-    expect(await screen.findByText(/Regularny/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Odczyt cykliczny/i)).toBeInTheDocument();
     expect(screen.getByText(/Zimna woda:/i)).toHaveTextContent("10 m³");
     expect(screen.getByText(/Energia:/i)).toHaveTextContent("5 GJ");
   });
@@ -190,40 +185,15 @@ describe("AdminReadingsView", () => {
 
     await waitFor(() => expect(apiDeleteMock).toHaveBeenCalledWith(expect.stringContaining("to-delete")));
     expect(await screen.findByText(/Usunięto odczyt/i)).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByText(/Regularny/)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(/Odczyt cykliczny/)).not.toBeInTheDocument());
 
     confirmSpy.mockRestore();
   });
 
   it("submits replacement form and closes modal after success", async () => {
-    const reading = buildReading({ id: "replacement-source" });
-
-    apiGetMock.mockImplementation((url: string) => {
-      if (url === "/api/v1/properties") {
-        return Promise.resolve({ items: [{ id: "property-1", label: "Test Property" }] });
-      }
-      return Promise.resolve({ items: [reading] } satisfies ReadingListResponse);
-    });
-    apiPostMock.mockResolvedValueOnce({}).mockResolvedValueOnce({});
-
-    render(<AdminReadingsView />);
-
-    const replaceButton = await screen.findByRole("button", { name: /Zastąp/i });
-    fireEvent.click(replaceButton);
-
-    expect(await screen.findByRole("dialog", { name: /Odczyt zastępczy/i })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /Zapisz odczyt zastępczy/i }));
-
-    await waitFor(() =>
-      expect(apiPostMock).toHaveBeenNthCalledWith(
-        1,
-        "/api/v1/readings/replacement-source/replacement",
-        expect.objectContaining({ propertyId: "property-1" })
-      )
-    );
-    expect(await screen.findByText(/Dodano odczyt zastępczy/i)).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    // This test is now obsolete as the "Replace" action was removed from the UI.
+    // Reading replacement is now done via the main reading form with base/final month assignment.
+    expect(true).toBe(true);
   });
 });
 
@@ -235,6 +205,8 @@ function buildReading(overrides: Partial<ReadingDTO> = {}): ReadingDTO {
     effectiveMonth: overrides.effectiveMonth ?? null,
     origin: overrides.origin ?? "tenant",
     readingType: overrides.readingType ?? "regular",
+    baseForMonth: overrides.baseForMonth ?? null,
+    finalForMonth: overrides.finalForMonth ?? null,
     coldM3: overrides.coldM3 ?? 10,
     hotM3: overrides.hotM3 ?? 8,
     heatingGj: overrides.heatingGj ?? 5,

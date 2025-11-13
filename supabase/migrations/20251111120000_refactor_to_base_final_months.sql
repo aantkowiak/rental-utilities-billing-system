@@ -58,9 +58,21 @@ COMMENT ON COLUMN readings.final_for_month IS 'Month for which this reading serv
 -- Step 2: Modify reports table
 -- =====================================================================
 
--- Add new columns (we'll make month NOT NULL after backfilling if needed)
+-- Add new columns (sent flag + property reference used for uniqueness)
 ALTER TABLE reports
-  ADD COLUMN sent boolean NOT NULL DEFAULT false;
+  ADD COLUMN sent boolean NOT NULL DEFAULT false,
+  ADD COLUMN property_id uuid REFERENCES properties(id);
+
+-- Backfill property_id using existing contract → property relationship
+UPDATE reports
+SET property_id = contracts.property_id
+FROM contracts
+WHERE reports.contract_id = contracts.id
+  AND reports.property_id IS NULL;
+
+-- Enforce NOT NULL
+ALTER TABLE reports
+  ALTER COLUMN property_id SET NOT NULL;
 
 -- For now, we keep contract_id as the lease identifier
 -- In the future, if we have a separate leases table, we can add lease_id
@@ -85,9 +97,17 @@ ALTER TABLE reports
   DROP COLUMN IF EXISTS balance_raw;
 
 -- Note: month column already exists in reports table, so we don't need to add it
--- Update unique constraint to use (contract_id, month) - already exists as uq_reports_contract_month
+-- Replace unique constraint so that only one report per property per month exists
+ALTER TABLE reports
+  DROP CONSTRAINT IF EXISTS uq_reports_contract_month;
+
+ALTER TABLE reports
+  ADD CONSTRAINT uq_reports_property_month UNIQUE (property_id, month);
+
+CREATE INDEX IF NOT EXISTS idx_reports_property_month ON reports(property_id, month);
 
 COMMENT ON COLUMN reports.sent IS 'Whether the report has been sent via email';
+COMMENT ON COLUMN reports.property_id IS 'Property for which the report is generated';
 
 -- =====================================================================
 -- Step 3: Create report_items table

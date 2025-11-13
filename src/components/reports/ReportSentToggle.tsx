@@ -73,4 +73,3 @@ export function ReportSentToggle({ report, onSuccess }: ReportSentToggleProps): 
     </section>
   );
 }
-

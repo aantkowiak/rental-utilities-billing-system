@@ -4,6 +4,7 @@ import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
 import { Button } from "@/components/ui/button";
 import { apiGet, apiPost, type ApiError } from "@/lib/client/http";
+import { formatYearMonthLabel, isoDateToYearMonth, isValidYearMonth } from "@/lib/date/month";
 import type { ReportDTO, ReportEmailAttemptDTO } from "@/types";
 
 interface TenantReportPermissions {
@@ -37,11 +38,6 @@ const currencyFormatter = new Intl.NumberFormat("pl-PL", {
   style: "currency",
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
-});
-
-const monthFormatter = new Intl.DateTimeFormat("pl-PL", {
-  month: "long",
-  year: "numeric",
 });
 
 const dateTimeFormatter = new Intl.DateTimeFormat("pl-PL", {
@@ -395,13 +391,15 @@ function formatMonth(month: string): string {
     return "—";
   }
 
-  const normalized = month.length === 7 ? `${month}-01` : month;
-  const date = new Date(normalized);
-  if (Number.isNaN(date.getTime())) {
+  try {
+    const normalized = month.length === 7 ? month : isoDateToYearMonth(month);
+    if (!isValidYearMonth(normalized)) {
+      return month;
+    }
+    return formatYearMonthLabel(normalized);
+  } catch {
     return month;
   }
-
-  return monthFormatter.format(date);
 }
 
 function formatStatus(status: string): string {

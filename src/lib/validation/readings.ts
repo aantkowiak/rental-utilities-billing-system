@@ -1,7 +1,12 @@
 import { z } from "zod";
 
+import { isValidYearMonth, yearMonthToDate } from "@/lib/date/month";
+import type { YearMonth } from "@/types";
+
 const MAX_DECIMAL_VALUE = 9_999_999.999;
 const DECIMAL_PRECISION = 3;
+const YEAR_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+const MONTHS_BACK_LIMIT = 6;
 
 export const TENANT_WINDOW_PAST_DAYS = 3;
 export const TENANT_WINDOW_FUTURE_DAYS = 5;
@@ -28,6 +33,54 @@ export const monthDateSchema = z
     message: "effectiveMonth must be the first day of a month (YYYY-MM-01)",
   });
 
+const yearMonthSchema = z
+  .string({ required_error: "Month is required" })
+  .regex(YEAR_MONTH_PATTERN, { message: "Month must be in YYYY-MM format" })
+  .superRefine((value, ctx) => {
+    if (!isValidYearMonth(value)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Month must be a valid calendar month",
+      });
+      return;
+    }
+
+    const now = new Date();
+    const current = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const target = yearMonthToDate(value as YearMonth);
+
+    if (target.getTime() > current.getTime()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Month cannot be in the future",
+      });
+      return;
+    }
+
+    const monthsDiff =
+      (current.getUTCFullYear() - target.getUTCFullYear()) * 12 + (current.getUTCMonth() - target.getUTCMonth());
+
+    if (monthsDiff > MONTHS_BACK_LIMIT) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Month cannot be older than ${MONTHS_BACK_LIMIT} months`,
+      });
+    }
+  })
+  .transform((value) => value as YearMonth);
+
+const nullableYearMonthSchema = yearMonthSchema.or(z.null()).optional();
+
+const readingTypeSchema = z
+  .union([z.literal("regular"), z.literal("overwrite"), z.literal("baseline")])
+  .optional()
+  .transform((value) => {
+    if (value === "baseline") {
+      return "overwrite" as const;
+    }
+    return value;
+  });
+
 export const createReadingSchema = z.object({
   propertyId: z.string().uuid({ message: "propertyId must be a valid UUID" }),
   readingAt: readingTimestampSchema,
@@ -36,6 +89,9 @@ export const createReadingSchema = z.object({
   heatingGj: readingValueSchema,
   commentText: z.string().max(2000).optional().nullable(),
   commentVisibleToTenant: z.boolean().optional(),
+  baseForMonth: nullableYearMonthSchema,
+  finalForMonth: nullableYearMonthSchema,
+  readingType: readingTypeSchema,
 });
 
 export const updateReadingSchema = createReadingSchema.partial();

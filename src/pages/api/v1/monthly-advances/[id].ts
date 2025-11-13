@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/api/auth";
 import { mapMonthlyAdvanceServiceError } from "@/lib/api/monthlyAdvances";
 import { errorResponse } from "@/lib/errors";
 import { MonthlyAdvanceService } from "@/lib/services/MonthlyAdvanceService";
+import { ReportService } from "@/lib/services/ReportService";
 import { buildMonthlyAdvanceResponse } from "@/types/monthlyAdvances";
 import { UpdateMonthlyAdvanceSchema } from "@/lib/validators/monthlyAdvances";
 
@@ -69,6 +70,12 @@ export const PATCH: APIRoute = async ({ request, locals, params }) => {
       validation.data
     );
 
+    // Trigger report recomputation in background
+    Promise.resolve(ReportService.recomputeAll(locals.supabase)).catch((recomputeError) => {
+      // eslint-disable-next-line no-console
+      console.error("[PATCH /v1/monthly-advances/:id] Failed to recompute reports", recomputeError);
+    });
+
     return new Response(JSON.stringify(buildMonthlyAdvanceResponse(updated)), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -95,6 +102,12 @@ export const DELETE: APIRoute = async ({ request, locals, params }) => {
       { role: auth.role, tenantPropertyId: auth.propertyId },
       monthlyAdvanceId
     );
+
+    // Trigger report recomputation in background
+    Promise.resolve(ReportService.recomputeAll(locals.supabase)).catch((recomputeError) => {
+      // eslint-disable-next-line no-console
+      console.error("[DELETE /v1/monthly-advances/:id] Failed to recompute reports", recomputeError);
+    });
 
     return new Response(null, { status: 204 });
   } catch (error) {

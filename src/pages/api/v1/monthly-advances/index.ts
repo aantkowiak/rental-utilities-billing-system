@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/api/auth";
 import { mapMonthlyAdvanceServiceError } from "@/lib/api/monthlyAdvances";
 import { errorResponse } from "@/lib/errors";
 import { MonthlyAdvanceService } from "@/lib/services/MonthlyAdvanceService";
+import { ReportService } from "@/lib/services/ReportService";
 import { buildMonthlyAdvanceResponse, buildMonthlyAdvancesListResponse } from "@/types/monthlyAdvances";
 import { CreateMonthlyAdvanceSchema, MonthlyAdvancesListQuerySchema } from "@/lib/validators/monthlyAdvances";
 
@@ -75,6 +76,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
       { role: auth.role, tenantPropertyId: auth.propertyId },
       validation.data
     );
+
+    // Trigger report recomputation in background
+    Promise.resolve(ReportService.recomputeAll(locals.supabase)).catch((recomputeError) => {
+      // eslint-disable-next-line no-console
+      console.error("[POST /v1/monthly-advances] Failed to recompute reports", recomputeError);
+    });
 
     return new Response(JSON.stringify(buildMonthlyAdvanceResponse(created)), {
       status: 201,

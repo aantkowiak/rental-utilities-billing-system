@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const updateMonthsMock = vi.fn();
-const recomputeForReadingMock = vi.fn().mockImplementation(() => Promise.resolve());
+const getByIdMock = vi.fn();
+const recomputeAllMock = vi.fn().mockImplementation(() => Promise.resolve());
+const requireAuthMock = vi.fn();
 
 vi.mock("@/lib/services/ReadingsService", async () => {
   const actual = await vi.importActual<typeof import("@/lib/services/ReadingsService")>(
@@ -10,6 +12,7 @@ vi.mock("@/lib/services/ReadingsService", async () => {
   return {
     ReadingsService: {
       updateMonths: updateMonthsMock,
+      getById: getByIdMock,
     },
     ReadingsServiceError: actual.ReadingsServiceError,
   };
@@ -17,19 +20,35 @@ vi.mock("@/lib/services/ReadingsService", async () => {
 
 vi.mock("@/lib/services/ReportService", () => ({
   ReportService: {
-    recomputeForReading: recomputeForReadingMock,
+    recomputeAll: recomputeAllMock,
   },
+}));
+
+vi.mock("@/lib/api/auth", () => ({
+  requireAuth: requireAuthMock,
 }));
 
 describe("PATCH /v1/readings/:id/months", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    process.env.TEST_AUTH_USER_ID = "user-1";
-    process.env.TEST_AUTH_ROLE = "admin";
+    requireAuthMock.mockResolvedValue({
+      success: true,
+      user: { id: "admin-1" },
+      role: "admin",
+      propertyId: null,
+    });
+    getByIdMock.mockResolvedValue({
+      id: "reading-1",
+      baseForMonth: null,
+      finalForMonth: null,
+    });
   });
 
   it("requires admin role", async () => {
-    process.env.TEST_AUTH_ROLE = "tenant";
+    requireAuthMock.mockResolvedValue({
+      success: false,
+      response: new Response(null, { status: 403 }),
+    });
 
     const { PATCH } = await import("../[id]/months");
 
@@ -48,6 +67,11 @@ describe("PATCH /v1/readings/:id/months", () => {
   });
 
   it("updates base and final months", async () => {
+    getByIdMock.mockResolvedValueOnce({
+      id: "reading-1",
+      baseForMonth: "2024-04-01",
+      finalForMonth: "2024-05-01",
+    });
     updateMonthsMock.mockResolvedValue({
       id: "reading-1",
       baseForMonth: "2024-05-01",
@@ -74,7 +98,7 @@ describe("PATCH /v1/readings/:id/months", () => {
       baseForMonth: "2024-05",
       finalForMonth: "2024-06",
     });
-    expect(recomputeForReadingMock).toHaveBeenCalledWith(expect.anything(), "reading-1");
+    expect(recomputeAllMock).toHaveBeenCalledWith(expect.anything());
 
     const payload = await response.json();
     expect(payload.reading.baseForMonth).toBe("2024-05-01");
@@ -98,6 +122,11 @@ describe("PATCH /v1/readings/:id/months", () => {
   });
 
   it("allows null values to clear months", async () => {
+    getByIdMock.mockResolvedValueOnce({
+      id: "reading-1",
+      baseForMonth: "2024-04-01",
+      finalForMonth: null,
+    });
     updateMonthsMock.mockResolvedValue({
       id: "reading-1",
       baseForMonth: null,

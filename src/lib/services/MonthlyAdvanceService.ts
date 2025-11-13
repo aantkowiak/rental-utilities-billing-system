@@ -7,7 +7,7 @@ import type { MonthlyAdvanceListFilters, MonthlyAdvanceListResponse } from "@/ty
 /* eslint-disable @typescript-eslint/no-extraneous-class */
 
 type Supabase = SupabaseClient<Database>;
-type MonthlyAdvancesTable = Database["public"]["Tables"]["monthly_conditions"];
+type MonthlyAdvancesTable = Database["public"]["Tables"]["monthly_advances"];
 type MonthlyAdvanceRow = MonthlyAdvancesTable["Row"];
 
 export type MonthlyAdvanceServiceErrorCode =
@@ -40,7 +40,7 @@ export class MonthlyAdvanceService {
     const normalized = normalizeListFilters(filters, context);
 
     try {
-      let query = supabase.from("monthly_conditions").select("*").order("month", { ascending: false });
+      let query = supabase.from("monthly_advances").select("*").order("month", { ascending: false });
 
       if (normalized.propertyId) {
         query = query.eq("property_id", normalized.propertyId);
@@ -75,7 +75,7 @@ export class MonthlyAdvanceService {
     context: MonthlyAdvanceAccessContext,
     monthlyAdvanceId: string
   ): Promise<MonthlyAdvanceDTO> {
-    const { data, error } = await supabase.from("monthly_conditions").select("*").eq("id", monthlyAdvanceId).single();
+    const { data, error } = await supabase.from("monthly_advances").select("*").eq("id", monthlyAdvanceId).single();
 
     if (error) {
       if (error.code === "PGRST116") {
@@ -124,7 +124,7 @@ export class MonthlyAdvanceService {
       advance_payment: cmd.advancePayment,
     };
 
-    const { data, error } = await supabase.from("monthly_conditions").insert(insertPayload).select("*").single();
+    const { data, error } = await supabase.from("monthly_advances").insert(insertPayload).select("*").single();
 
     if (error) {
       if (error.code === "23505") {
@@ -202,10 +202,16 @@ export class MonthlyAdvanceService {
       return existing;
     }
 
+    // Note: The old column 'monthly_conditions_id' was removed in the refactor migration
+    // Reports now link to monthly_advances via property_id + month, not by direct FK
+    // So we check if any non-draft reports exist for this property and month
+    const existingAdvance = await this.getById(supabase, context, monthlyAdvanceId);
+
     const { data: blockingReport, error: reportsError } = await supabase
       .from("reports")
       .select("id")
-      .eq("monthly_conditions_id", monthlyAdvanceId)
+      .eq("property_id", existingAdvance.propertyId)
+      .eq("month", existingAdvance.month)
       .neq("status", "draft")
       .limit(1)
       .maybeSingle();
@@ -222,7 +228,7 @@ export class MonthlyAdvanceService {
     }
 
     const { data, error } = await supabase
-      .from("monthly_conditions")
+      .from("monthly_advances")
       .update(updatePayload)
       .eq("id", monthlyAdvanceId)
       .select("*")
@@ -259,7 +265,7 @@ export class MonthlyAdvanceService {
       throw new MonthlyAdvanceServiceError("MONTHLY_ADVANCE_FORBIDDEN", "Only admins can delete monthly advances");
     }
 
-    const { error } = await supabase.from("monthly_conditions").delete().eq("id", monthlyAdvanceId);
+    const { error } = await supabase.from("monthly_advances").delete().eq("id", monthlyAdvanceId);
 
     if (error) {
       if (error.code === "PGRST116") {

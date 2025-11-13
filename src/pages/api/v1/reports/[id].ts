@@ -1,7 +1,6 @@
 import type { APIRoute } from "astro";
-import { requireAuth } from "@/lib/api/auth";
-import { errorResponse } from "@/lib/errors";
 import { z } from "zod";
+import type { ReportDTO, ReportEmailAttemptDTO } from "@/types";
 
 export const prerender = false;
 
@@ -64,7 +63,8 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
     }
 
     // Check permissions
-    if (profile.role !== "admin") {
+    const isAdmin = profile.role === "admin";
+    if (!isAdmin) {
       const contracts = report.contracts as any;
       if (contracts.tenant_user_id !== user.id) {
         return new Response(JSON.stringify({ code: "forbidden", message: "Brak dostępu do tego raportu." }), {
@@ -74,8 +74,26 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
       }
     }
 
-    // Fetch latest email attempt
-    const { data: emailAttempt } = await supabase
+    const monthISO = report.month;
+    const propertyId = report.property_id;
+
+    // Fetch report items (line items)
+    const { data: itemRows } = await supabase
+      .from("report_items")
+      .select("*")
+      .eq("report_id", id)
+      .order("created_at", { ascending: true });
+
+    const lineItems = (itemRows ?? []).map((item) => ({
+      id: item.id,
+      label: item.label,
+      amountRaw: item.amount_raw,
+      description: item.description,
+      category: item.category,
+    }));
+
+    // Fetch latest email attempt (most recent one, regardless of status)
+    const { data: emailAttemptRows } = await supabase
       .from("report_email_attempts")
       .select(
         `
@@ -89,22 +107,11 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
       )
       .eq("report_emails.report_id", id)
       .order("attempted_at", { ascending: false })
-      .limit(1)
-      .single();
+      .limit(1);
 
-    // Format response
-    const reportDTO = {
-      id: report.id,
-      contractId: report.contract_id,
-      month: report.month.substring(0, 7),
-      status: report.status,
-      sent: report.sent,
-      realizedAt: report.realized_at,
-      createdAt: report.created_at,
-      updatedAt: report.updated_at,
-    };
+    const emailAttempt = emailAttemptRows && emailAttemptRows.length > 0 ? emailAttemptRows[0] : null;
 
-    const emailAttemptDTO = emailAttempt
+    const lastEmailAttempt: ReportEmailAttemptDTO | null = emailAttempt
       ? {
           id: emailAttempt.id,
           reportEmailId: emailAttempt.report_email_id,
@@ -114,10 +121,38 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
         }
       : null;
 
+    // Format report DTO
+    const reportDTO: ReportDTO = {
+      id: report.id,
+      contractId: report.contract_id,
+      propertyId,
+      month: report.month.substring(0, 7),
+      status: report.status,
+      sent: report.sent,
+      realizedAt: report.realized_at,
+      createdAt: report.created_at,
+      updatedAt: report.updated_at,
+    };
+
+    // Build permissions (admin only)
+    const permissions = isAdmin
+      ? {
+          canRegenerate: report.status !== "realized",
+          regenerateDisabledReason:
+            report.status === "realized" ? "Nie można przeliczyć zaksięgowanego raportu." : null,
+          canSendEmail: true,
+          sendEmailDisabledReason: null,
+          canToggleRealized: true,
+          toggleRealizedDisabledReason: null,
+        }
+      : null;
+
     return new Response(
       JSON.stringify({
         report: reportDTO,
-        lastEmailAttempt: emailAttemptDTO,
+        lineItems,
+        lastEmailAttempt,
+        permissions,
       }),
       {
         status: 200,
@@ -126,13 +161,6 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
     );
   } catch (error) {
     console.error("Unexpected error in GET /api/v1/reports/[id]:", error);
-
-    if (error instanceof AppError) {
-      return new Response(JSON.stringify({ code: error.code, message: error.message }), {
-        status: error.statusCode,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
 
     return new Response(JSON.stringify({ code: "internal_error", message: "Wystąpił nieoczekiwany błąd." }), {
       status: 500,
@@ -230,13 +258,6 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
     });
   } catch (error) {
     console.error("Unexpected error in PATCH /api/v1/reports/[id]:", error);
-
-    if (error instanceof AppError) {
-      return new Response(JSON.stringify({ code: error.code, message: error.message }), {
-        status: error.statusCode,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
 
     return new Response(JSON.stringify({ code: "internal_error", message: "Wystąpił nieoczekiwany błąd." }), {
       status: 500,

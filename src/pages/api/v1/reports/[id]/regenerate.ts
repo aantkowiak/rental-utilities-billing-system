@@ -21,11 +21,7 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   }
 
   try {
-    const report = await ReportService.regenerate(
-      locals.supabase,
-      { role: auth.role, userId: auth.userId },
-      reportId
-    );
+    const report = await ReportService.regenerate(locals.supabase, { role: auth.role, userId: auth.userId }, reportId);
 
     return new Response(JSON.stringify({ report }), {
       status: 200,

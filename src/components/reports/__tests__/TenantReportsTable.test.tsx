@@ -41,6 +41,7 @@ describe("TenantReportsTable", () => {
 
   it("refetches and renders items when month changes", async () => {
     apiGetMock
+      .mockResolvedValueOnce({ items: [] }) // properties endpoint
       .mockResolvedValueOnce({
         items: [buildTenantReportListItem({ report: buildReport({ id: "r-1", month: "2024-02" }) })],
       })
@@ -62,6 +63,7 @@ describe("TenantReportsTable", () => {
 
   it("handles generate and resend actions with pending state and success toasts", async () => {
     apiGetMock
+      .mockResolvedValueOnce({ items: [] }) // properties endpoint
       .mockResolvedValueOnce({
         items: [
           buildTenantReportListItem({
@@ -125,19 +127,21 @@ describe("TenantReportsTable", () => {
   });
 
   it("displays disabled reasons on action buttons", async () => {
-    apiGetMock.mockResolvedValueOnce({
-      items: [
-        buildTenantReportListItem({
-          report: buildReport({ id: "report-1" }),
-          permissions: {
-            canGenerate: false,
-            generateDisabledReason: "Brak danych wejściowych",
-            canSendEmail: false,
-            sendEmailDisabledReason: "Raport nie został wygenerowany",
-          },
-        }),
-      ],
-    });
+    apiGetMock
+      .mockResolvedValueOnce({ items: [] }) // properties endpoint
+      .mockResolvedValueOnce({
+        items: [
+          buildTenantReportListItem({
+            report: buildReport({ id: "report-1" }),
+            permissions: {
+              canGenerate: false,
+              generateDisabledReason: "Brak danych wejściowych",
+              canSendEmail: false,
+              sendEmailDisabledReason: "Raport nie został wygenerowany",
+            },
+          }),
+        ],
+      });
 
     render(<TenantReportsView initialMonth="2024-02" />);
 
@@ -151,10 +155,12 @@ describe("TenantReportsTable", () => {
   });
 
   it("renders access error for forbidden response", async () => {
-    apiGetMock.mockRejectedValueOnce({
-      code: "forbidden",
-      message: "Brak dostępu do raportów",
-    });
+    apiGetMock
+      .mockResolvedValueOnce({ items: [] }) // properties endpoint
+      .mockRejectedValueOnce({
+        code: "forbidden",
+        message: "Brak dostępu do raportów",
+      });
 
     render(<TenantReportsView initialMonth="2024-02" />);
 

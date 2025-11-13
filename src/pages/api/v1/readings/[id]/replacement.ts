@@ -35,8 +35,8 @@ export const POST: APIRoute = async ({ request, locals, params }) => {
   try {
     const reading = await ReadingsService.createReplacement(locals.supabase, readingId, validation.data);
 
-    // Trigger report recomputation in background if reading has month assignments
-    Promise.resolve(ReportService.recomputeForReading(locals.supabase, reading.id)).catch((recomputeError) => {
+    // Trigger report recomputation in background
+    Promise.resolve(ReportService.recomputeAll(locals.supabase)).catch((recomputeError) => {
       // eslint-disable-next-line no-console
       console.error("[POST /v1/readings/:id/replacement] Failed to recompute reports", recomputeError);
     });

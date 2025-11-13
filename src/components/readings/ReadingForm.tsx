@@ -1,13 +1,29 @@
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import type { JSX } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type JSX,
+} from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
 import { Button } from "@/components/ui/button";
 import type { ApiError } from "@/lib/client/http";
 import { apiGet, apiPatch, apiPost } from "@/lib/client/http";
-import type { CreateReadingCmd, ReadingDTO, UpdateReadingCmd } from "@/types";
+import type { CreateReadingCmd, ReadingDTO, ReadingType, UpdateReadingCmd, YearMonth } from "@/types";
 import type { ReadingListResponse, ReadingResponse } from "@/types/readings";
+import {
+  formatYearMonthLabel,
+  getAllowedMonths,
+  isoDateToYearMonth,
+  isValidYearMonth,
+  yearMonthToDate,
+} from "@/lib/date/month";
 
 const TIME_ZONE = "Europe/Warsaw";
 const DECIMAL_PRECISION = 3;
@@ -25,7 +41,7 @@ const readingDateFormatter = new Intl.DateTimeFormat("pl-PL", {
 });
 
 type DecimalField = "coldM3" | "hotM3" | "heatingGj";
-type FieldName = DecimalField | "readingAt" | "commentText";
+type FieldName = DecimalField | "readingAt" | "commentText" | "baseForMonth" | "finalForMonth" | "readingType";
 
 interface FormState {
   readingAt: string;
@@ -33,6 +49,9 @@ interface FormState {
   hotM3: string;
   heatingGj: string;
   commentText: string;
+  baseForMonth: string;
+  finalForMonth: string;
+  readingType: ReadingType;
 }
 
 interface WindowStatus {
@@ -71,17 +90,71 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
 
   const nowDate = useMemo(() => new Date(nowTick), [nowTick]);
   const windowStatus = useMemo(() => computeWindowStatus(formState.readingAt, nowDate), [formState.readingAt, nowDate]);
+  const allowedMonths = useMemo(() => {
+    const months = [...getAllowedMonths(6, nowDate)];
+    const seen = new Set(months.map((month) => month.token));
 
-  const fieldRefs = useRef({
-    coldM3: null as HTMLInputElement | null,
-    hotM3: null as HTMLInputElement | null,
-    heatingGj: null as HTMLInputElement | null,
-    readingAt: null as HTMLInputElement | null,
-    commentText: null as HTMLTextAreaElement | null,
+    const include = (iso: string | null | undefined): void => {
+      if (!iso) {
+        return;
+      }
+
+      let token: YearMonth;
+      try {
+        token = isoDateToYearMonth(iso);
+      } catch (error) {
+        console.error("[ReadingForm] Failed to normalize month token:", error);
+        return;
+      }
+
+      if (seen.has(token)) {
+        return;
+      }
+
+      months.push({
+        token,
+        label: formatYearMonthLabel(token),
+        date: yearMonthToDate(token),
+      });
+      seen.add(token);
+    };
+
+    include(currentReading?.baseForMonth ?? null);
+    include(currentReading?.finalForMonth ?? null);
+
+    months.sort((a, b) => b.token.localeCompare(a.token));
+    return months;
+  }, [currentReading?.baseForMonth, currentReading?.finalForMonth, nowDate]);
+  const readingTypeOptions = useMemo(
+    () => [
+      { value: "regular" as ReadingType, label: "Regularny" },
+      { value: "overwrite" as ReadingType, label: "Nadpisujący (np. zmiana licznika)" },
+    ],
+    []
+  );
+
+  const fieldRefs = useRef<Record<FieldName, HTMLElement | null>>({
+    coldM3: null,
+    hotM3: null,
+    heatingGj: null,
+    readingAt: null,
+    commentText: null,
+    baseForMonth: null,
+    finalForMonth: null,
+    readingType: null,
   });
 
   const refocusOnErrors = useCallback((errors: FieldErrors) => {
-    const order: FieldName[] = ["coldM3", "hotM3", "heatingGj", "readingAt", "commentText"];
+    const order: FieldName[] = [
+      "coldM3",
+      "hotM3",
+      "heatingGj",
+      "readingAt",
+      "baseForMonth",
+      "finalForMonth",
+      "readingType",
+      "commentText",
+    ];
     const firstInvalid = order.find((field) => Boolean(errors[field]));
     if (!firstInvalid) {
       return;
@@ -128,6 +201,9 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
             hotM3: formatDecimal(latest.hotM3),
             heatingGj: formatDecimal(latest.heatingGj),
             commentText: latest.commentText ?? "",
+            baseForMonth: latest.baseForMonth ? isoDateToYearMonth(latest.baseForMonth) : "",
+            finalForMonth: latest.finalForMonth ? isoDateToYearMonth(latest.finalForMonth) : "",
+            readingType: toFormReadingType(latest.readingType),
           });
         } else {
           setFormState(createEmptyForm(referenceDate));
@@ -210,7 +286,7 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
     };
   }, []);
 
-  const updateField = useCallback((field: keyof FormState, value: string) => {
+  const updateField = useCallback(<K extends keyof FormState>(field: K, value: FormState[K]) => {
     setFormState((prev) => {
       if (prev[field] === value) {
         return prev;
@@ -311,7 +387,38 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
         payload.commentText = trimmedComment;
       }
 
-      const command: UpdateReadingCmd = payload;
+      const baseForMonthValue = formState.baseForMonth ? (formState.baseForMonth as YearMonth) : null;
+      const finalForMonthValue = formState.finalForMonth ? (formState.finalForMonth as YearMonth) : null;
+
+      payload.baseForMonth = baseForMonthValue;
+      payload.finalForMonth = finalForMonthValue;
+      (payload as CreateReadingCmd & { readingType?: ReadingType }).readingType = formState.readingType;
+
+      const command: UpdateReadingCmd = { ...payload };
+
+      if (currentReading) {
+        const originalBase = currentReading.baseForMonth ? isoDateToYearMonth(currentReading.baseForMonth) : "";
+        const originalFinal = currentReading.finalForMonth ? isoDateToYearMonth(currentReading.finalForMonth) : "";
+        const originalType = toFormReadingType(currentReading.readingType);
+
+        if (formState.baseForMonth === originalBase) {
+          delete (command as { baseForMonth?: YearMonth | null }).baseForMonth;
+        } else {
+          command.baseForMonth = baseForMonthValue;
+        }
+
+        if (formState.finalForMonth === originalFinal) {
+          delete (command as { finalForMonth?: YearMonth | null }).finalForMonth;
+        } else {
+          command.finalForMonth = finalForMonthValue;
+        }
+
+        if (originalType === formState.readingType) {
+          delete (command as { readingType?: ReadingType }).readingType;
+        } else {
+          (command as { readingType?: ReadingType }).readingType = formState.readingType;
+        }
+      }
 
       setPending(true);
       try {
@@ -347,6 +454,9 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
           hotM3: formatDecimal(saved.hotM3),
           heatingGj: formatDecimal(saved.heatingGj),
           commentText: saved.commentText ?? "",
+          baseForMonth: saved.baseForMonth ? isoDateToYearMonth(saved.baseForMonth) : "",
+          finalForMonth: saved.finalForMonth ? isoDateToYearMonth(saved.finalForMonth) : "",
+          readingType: toFormReadingType(saved.readingType),
         });
         setNowTick(Date.now());
       } catch (error) {
@@ -388,9 +498,36 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
     [currentReading, formState, loadLatest, pushToast, resolvedPropertyId, windowStatus]
   );
 
+  const handleMonthSelectChange = useCallback(
+    (field: "baseForMonth" | "finalForMonth") => (event: ChangeEvent<HTMLSelectElement>) => {
+      const { value } = event.target;
+      if (value === "") {
+        updateField(field, "");
+        return;
+      }
+
+      if (isValidYearMonth(value)) {
+        updateField(field, value);
+      }
+    },
+    [updateField]
+  );
+
+  const handleReadingTypeChange = useCallback(
+    (event: ChangeEvent<HTMLSelectElement>) => {
+      const { value } = event.target;
+      if (value === "regular" || value === "overwrite") {
+        updateField("readingType", value as ReadingType);
+      }
+    },
+    [updateField]
+  );
+
   const numericDisabled = pending || Boolean(accessError) || !resolvedPropertyId || !windowStatus.withinWindow;
   const readingAtDisabled = pending || Boolean(accessError) || !resolvedPropertyId;
   const submitDisabled = pending || !windowStatus.withinWindow || Boolean(accessError) || !resolvedPropertyId;
+  const monthSelectDisabled = pending || Boolean(accessError) || !resolvedPropertyId;
+  const readingTypeDisabled = pending || Boolean(accessError) || !resolvedPropertyId;
 
   return (
     <form className="space-y-6" noValidate onSubmit={handleSubmit}>
@@ -546,6 +683,97 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
               value={formState.heatingGj}
             />
 
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground" htmlFor="baseForMonth">
+                Bazowy dla miesiąca (opcjonalnie)
+              </label>
+              <select
+                ref={(node) => {
+                  fieldRefs.current.baseForMonth = node;
+                }}
+                aria-invalid={Boolean(fieldErrors.baseForMonth)}
+                className={buildInputClasses(fieldErrors.baseForMonth)}
+                disabled={monthSelectDisabled}
+                id="baseForMonth"
+                name="baseForMonth"
+                onChange={handleMonthSelectChange("baseForMonth")}
+                value={formState.baseForMonth}
+              >
+                <option value="">Brak przypisania</option>
+                {allowedMonths.map((month) => (
+                  <option key={month.token} value={month.token}>
+                    {month.label}
+                  </option>
+                ))}
+              </select>
+              {fieldErrors.baseForMonth ? (
+                <p className="text-sm text-destructive">{fieldErrors.baseForMonth}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">Określa początek okresu rozliczeniowego.</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground" htmlFor="finalForMonth">
+                Finalny dla miesiąca (opcjonalnie)
+              </label>
+              <select
+                ref={(node) => {
+                  fieldRefs.current.finalForMonth = node;
+                }}
+                aria-invalid={Boolean(fieldErrors.finalForMonth)}
+                className={buildInputClasses(fieldErrors.finalForMonth)}
+                disabled={monthSelectDisabled}
+                id="finalForMonth"
+                name="finalForMonth"
+                onChange={handleMonthSelectChange("finalForMonth")}
+                value={formState.finalForMonth}
+              >
+                <option value="">Brak przypisania</option>
+                {allowedMonths.map((month) => (
+                  <option key={month.token} value={month.token}>
+                    {month.label}
+                  </option>
+                ))}
+              </select>
+              {fieldErrors.finalForMonth ? (
+                <p className="text-sm text-destructive">{fieldErrors.finalForMonth}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">Określa koniec okresu rozliczeniowego.</p>
+              )}
+            </div>
+
+            <div className="space-y-2 sm:col-span-2">
+              <label className="text-sm font-medium text-foreground" htmlFor="readingType">
+                Typ odczytu
+              </label>
+              <select
+                ref={(node) => {
+                  fieldRefs.current.readingType = node;
+                }}
+                aria-invalid={Boolean(fieldErrors.readingType)}
+                className={buildInputClasses(fieldErrors.readingType)}
+                disabled={readingTypeDisabled}
+                id="readingType"
+                name="readingType"
+                onChange={handleReadingTypeChange}
+                value={formState.readingType}
+              >
+                {readingTypeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {fieldErrors.readingType ? (
+                <p className="text-sm text-destructive">{fieldErrors.readingType}</p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Wybierz „Nadpisujący”, gdy odczyt zastępuje wcześniejsze wartości (np. wymiana licznika).
+                </p>
+              )}
+            </div>
+
             <div className="space-y-2 sm:col-span-2">
               <label className="text-sm font-medium text-foreground" htmlFor="commentText">
                 Notatka (opcjonalnie)
@@ -653,6 +881,9 @@ function createEmptyForm(now: Date): FormState {
     hotM3: "",
     heatingGj: "",
     commentText: "",
+    baseForMonth: "",
+    finalForMonth: "",
+    readingType: "regular" as ReadingType,
   };
 }
 
@@ -817,4 +1048,20 @@ function getPropertyIdFromLocation(): string | null {
 
 function isAnchoredReading(reading: ReadingDTO): boolean {
   return Boolean(reading.effectiveMonth);
+}
+
+function toFormReadingType(readingType: ReadingDTO["readingType"] | null | undefined): ReadingType {
+  if (!readingType) {
+    return "regular";
+  }
+
+  if (readingType === "baseline") {
+    return "overwrite";
+  }
+
+  if (readingType === "overwrite") {
+    return "overwrite";
+  }
+
+  return "regular";
 }

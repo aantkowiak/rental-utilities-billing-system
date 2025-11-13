@@ -75,11 +75,11 @@ export class ReportService {
     const monthDate = yearMonthToISODate(month);
 
     // Step 3: Check if report already exists
-    const existingReport = await this.findExistingReport(supabase, contractId, monthDate);
+    const existingReport = await this.findExistingReportForProperty(supabase, contract.property_id, monthDate);
     if (existingReport) {
       throw new ReportServiceError(
         "REPORT_DUPLICATE",
-        `Raport dla kontraktu ${contractId} i miesiąca ${month} już istnieje.`
+        `Raport dla nieruchomości ${contract.property_id} i miesiąca ${month} już istnieje.`
       );
     }
 
@@ -103,6 +103,7 @@ export class ReportService {
       .from("reports")
       .insert({
         contract_id: contractId,
+        property_id: contract.property_id,
         month: monthDate,
         status: "draft",
         sent: false,
@@ -207,10 +208,60 @@ export class ReportService {
       throw new ReportServiceError("DATABASE_ERROR", "Nie udało się odtworzyć pozycji raportu.");
     }
 
-    // Return updated report
-    const { data: updatedReport } = await supabase.from("reports").select("*").eq("id", reportId).single();
+    // Update timestamp to reflect recomputation
+    const { data: updatedReport, error: updateError } = await supabase
+      .from("reports")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", reportId)
+      .select("*")
+      .single();
 
-    return mapReportRowToDto(updatedReport!);
+    if (updateError || !updatedReport) {
+      throw new ReportServiceError("DATABASE_ERROR", "Nie udało się zaktualizować raportu po przeliczeniu.");
+    }
+
+    return mapReportRowToDto(updatedReport);
+  }
+
+  /**
+   * Recompute ALL reports in the system.
+   * This is called after any CRUD operation on readings or monthly advances.
+   */
+  static async recomputeAll(supabase: Supabase): Promise<void> {
+    // Get all reports
+    const { data: allReports, error: reportsError } = await supabase.from("reports").select("id, property_id, month");
+
+    if (reportsError) {
+      console.error("[ReportService.recomputeAll] Failed to fetch reports:", reportsError);
+      return;
+    }
+
+    if (!allReports || allReports.length === 0) {
+      console.info("[ReportService.recomputeAll] No reports to recompute");
+      return;
+    }
+
+    // Regenerate each report
+    for (const report of allReports) {
+      try {
+        const month = isoDateToYearMonth(report.month);
+        const pair = await ReadingsService.findPairForPropertyAndMonth(supabase, report.property_id, month);
+
+        if (!pair) {
+          // No pair available - delete report
+          await supabase.from("reports").delete().eq("id", report.id);
+          console.info(
+            `[ReportService.recomputeAll] Deleted report ${report.id} for property ${report.property_id} and month ${month} (missing pair)`
+          );
+          continue;
+        }
+
+        await this.regenerate(supabase, { role: "admin", userId: "system" }, report.id);
+        console.info(`[ReportService.recomputeAll] Regenerated report ${report.id}`);
+      } catch (error) {
+        console.error(`[ReportService.recomputeAll] Error processing report ${report.id}:`, error);
+      }
+    }
   }
 
   /**
@@ -229,36 +280,60 @@ export class ReportService {
     for (const month of months) {
       const monthISO = yearMonthToISODate(month);
 
-      // Find all reports for this property and month
-      const { data: reports } = await supabase
+      const { data: existingReports, error: reportsError } = await supabase
         .from("reports")
-        .select("id, contract_id, contracts!inner(property_id)")
-        .eq("month", monthISO)
-        .eq("contracts.property_id", propertyId);
+        .select("id")
+        .eq("property_id", propertyId)
+        .eq("month", monthISO);
 
-      if (!reports || reports.length === 0) {
+      if (reportsError) {
+        console.error("[ReportService.recomputeForReading] Failed to fetch reports:", reportsError);
         continue;
       }
 
-      // Regenerate each report
-      for (const report of reports) {
-        try {
-          // Check if pair still exists
-          const pair = await ReadingsService.findPairForPropertyAndMonth(supabase, propertyId, month);
+      const pair = await ReadingsService.findPairForPropertyAndMonth(supabase, propertyId, month);
 
-          if (!pair) {
-            // No pair - delete report
-            await supabase.from("reports").delete().eq("id", report.id);
-            console.info(`[ReportService.recomputeForReading] Deleted report ${report.id} (no pair for ${month})`);
-            continue;
-          }
-
-          // Regenerate with admin context (bypass access checks)
-          await this.regenerate(supabase, { role: "admin", userId: "system" }, report.id);
-          console.info(`[ReportService.recomputeForReading] Regenerated report ${report.id}`);
-        } catch (error) {
-          console.error(`[ReportService.recomputeForReading] Error regenerating report ${report.id}:`, error);
+      if (!pair) {
+        if (existingReports && existingReports.length > 0) {
+          const ids = existingReports.map((report) => report.id);
+          await supabase.from("reports").delete().in("id", ids);
+          console.info(
+            `[ReportService.recomputeForReading] Deleted ${ids.length} report(s) for property ${propertyId} and month ${month} (missing pair)`
+          );
         }
+        continue;
+      }
+
+      if (existingReports && existingReports.length > 0) {
+        for (const report of existingReports) {
+          try {
+            await this.regenerate(supabase, { role: "admin", userId: "system" }, report.id);
+            console.info(`[ReportService.recomputeForReading] Regenerated report ${report.id}`);
+          } catch (error) {
+            console.error(`[ReportService.recomputeForReading] Error regenerating report ${report.id}:`, error);
+          }
+        }
+        continue;
+      }
+
+      try {
+        const contract = await this.getContractForPropertyMonth(supabase, propertyId, monthISO);
+        if (!contract) {
+          console.info(
+            `[ReportService.recomputeForReading] Skipping auto-generation for property ${propertyId} and month ${month} (no contract found)`
+          );
+          continue;
+        }
+
+        await this.generate(supabase, { role: "admin", userId: "system" }, contract.id, month);
+        console.info(
+          `[ReportService.recomputeForReading] Auto-generated report for property ${propertyId}, contract ${contract.id}, month ${month}`
+        );
+      } catch (error) {
+        console.error(
+          `[ReportService.recomputeForReading] Failed to auto-generate report for property ${propertyId} and month ${month}:`,
+          error
+        );
       }
     }
   }
@@ -347,19 +422,54 @@ export class ReportService {
   /**
    * Check if report already exists for this contract and month
    */
-  private static async findExistingReport(
+  private static async findExistingReportForProperty(
     supabase: Supabase,
-    contractId: string,
+    propertyId: string,
     monthDate: string
   ): Promise<ReportRow | null> {
     const { data } = await supabase
       .from("reports")
       .select("*")
-      .eq("contract_id", contractId)
+      .eq("property_id", propertyId)
       .eq("month", monthDate)
       .maybeSingle();
 
     return data;
+  }
+
+  /**
+   * Find contract covering given property and month (inclusive).
+   */
+  private static async getContractForPropertyMonth(
+    supabase: Supabase,
+    propertyId: string,
+    monthDate: string
+  ): Promise<{ id: string; property_id: string; tenant_user_id: string } | null> {
+    const monthStart = new Date(`${monthDate}T00:00:00.000Z`);
+    if (Number.isNaN(monthStart.getTime())) {
+      return null;
+    }
+
+    const monthEnd = new Date(monthStart);
+    monthEnd.setMonth(monthEnd.getMonth() + 1);
+
+    const range = `[${monthStart.toISOString()},${monthEnd.toISOString()}]`;
+
+    const { data, error } = await supabase
+      .from("contracts")
+      .select("id, property_id, tenant_user_id")
+      .eq("property_id", propertyId)
+      .overlaps("period", range);
+
+    if (error) {
+      throw new ReportServiceError("DATABASE_ERROR", error.message);
+    }
+
+    if (!data || data.length === 0) {
+      return null;
+    }
+
+    return data[0];
   }
 
   /**
@@ -454,6 +564,7 @@ function mapReportRowToDto(row: ReportRow): ReportDTO {
   return {
     id: row.id,
     contractId: row.contract_id,
+    propertyId: row.property_id,
     month: row.month.substring(0, 7), // Convert "YYYY-MM-DD" to "YYYY-MM"
     status: row.status as ReportDTO["status"],
     sent: row.sent,
