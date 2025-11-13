@@ -58,15 +58,23 @@ const NUMERIC_FIELDS: FormField[] = [
 
 const FIELD_PROPS: Partial<Record<FormField, InputHTMLAttributes<HTMLInputElement>>> = {
   month: { type: "month" },
-  managerFee: { inputMode: "decimal", placeholder: "0.00" },
-  priceCold: { inputMode: "decimal", placeholder: "0.00" },
-  priceHotHeating: { inputMode: "decimal", placeholder: "0.00" },
-  priceHeating: { inputMode: "decimal", placeholder: "0.00" },
-  forecastCold: { inputMode: "decimal", placeholder: "0.000" },
-  forecastHot: { inputMode: "decimal", placeholder: "0.000" },
-  forecastHeating: { inputMode: "decimal", placeholder: "0.000" },
-  advancePayment: { inputMode: "decimal", placeholder: "0.00" },
+  managerFee: { inputMode: "decimal", placeholder: "0,00" },
+  priceCold: { inputMode: "decimal", placeholder: "0,00" },
+  priceHotHeating: { inputMode: "decimal", placeholder: "0,00" },
+  priceHeating: { inputMode: "decimal", placeholder: "0,00" },
+  forecastCold: { inputMode: "decimal", placeholder: "0,000" },
+  forecastHot: { inputMode: "decimal", placeholder: "0,000" },
+  forecastHeating: { inputMode: "decimal", placeholder: "0,000" },
+  advancePayment: { inputMode: "decimal", placeholder: "0,00" },
 };
+
+function formatNumber(value: number): string {
+  return value.toString().replace(".", ",");
+}
+
+function parsePolishNumber(value: string): number {
+  return Number.parseFloat(value.replace(",", "."));
+}
 
 function resolveInitialMonth(): string {
   const now = new Date();
@@ -94,14 +102,14 @@ function buildFormState(dto: MonthlyAdvanceDTO): FormState {
   return {
     id: dto.id,
     month: dto.month.substring(0, 7),
-    managerFee: dto.managerFee.toString(),
-    priceCold: dto.priceCold.toString(),
-    priceHotHeating: dto.priceHotHeating.toString(),
-    priceHeating: dto.priceHeating.toString(),
-    forecastCold: dto.forecastCold.toString(),
-    forecastHot: dto.forecastHot.toString(),
-    forecastHeating: dto.forecastHeating.toString(),
-    advancePayment: dto.advancePayment.toString(),
+    managerFee: formatNumber(dto.managerFee),
+    priceCold: formatNumber(dto.priceCold),
+    priceHotHeating: formatNumber(dto.priceHotHeating),
+    priceHeating: formatNumber(dto.priceHeating),
+    forecastCold: formatNumber(dto.forecastCold),
+    forecastHot: formatNumber(dto.forecastHot),
+    forecastHeating: formatNumber(dto.forecastHeating),
+    advancePayment: formatNumber(dto.advancePayment),
   };
 }
 
@@ -164,14 +172,14 @@ function mapDraftToPayload(draft: FormState, propertyId: string) {
   return {
     propertyId,
     month: `${draft.month}-01`,
-    managerFee: Number.parseFloat(draft.managerFee),
-    priceCold: Number.parseFloat(draft.priceCold),
-    priceHotHeating: Number.parseFloat(draft.priceHotHeating),
-    priceHeating: Number.parseFloat(draft.priceHeating),
-    forecastCold: Number.parseFloat(draft.forecastCold),
-    forecastHot: Number.parseFloat(draft.forecastHot),
-    forecastHeating: Number.parseFloat(draft.forecastHeating),
-    advancePayment: Number.parseFloat(draft.advancePayment),
+    managerFee: parsePolishNumber(draft.managerFee),
+    priceCold: parsePolishNumber(draft.priceCold),
+    priceHotHeating: parsePolishNumber(draft.priceHotHeating),
+    priceHeating: parsePolishNumber(draft.priceHeating),
+    forecastCold: parsePolishNumber(draft.forecastCold),
+    forecastHot: parsePolishNumber(draft.forecastHot),
+    forecastHeating: parsePolishNumber(draft.forecastHeating),
+    advancePayment: parsePolishNumber(draft.advancePayment),
   };
 }
 
@@ -184,7 +192,7 @@ function validateDraft(draft: FormState, requireMonth = true): Partial<Record<Fo
 
   for (const field of NUMERIC_FIELDS) {
     const raw = draft[field] ?? "";
-    const parsed = Number.parseFloat(raw);
+    const parsed = parsePolishNumber(raw);
     if (raw === "" || raw === undefined) {
       errors[field] = "Pole jest wymagane.";
     } else if (!Number.isFinite(parsed)) {

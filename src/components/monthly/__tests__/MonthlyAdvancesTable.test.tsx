@@ -129,13 +129,13 @@ describe("MonthlyAdvancesTable", () => {
 
     render(<MonthlyAdvancesTable useOwnProvider />);
 
-    const decimalInputs = await screen.findAllByPlaceholderText("0.00");
+    const decimalInputs = await screen.findAllByPlaceholderText("0,00");
     const createRowInputs = decimalInputs.slice(-5);
     createRowInputs.forEach((input, index) => {
       fireEvent.change(input, { target: { value: String(100 + index) } });
     });
 
-    const forecastInputs = screen.getAllByPlaceholderText("0.000");
+    const forecastInputs = screen.getAllByPlaceholderText("0,000");
     const createRowForecastInputs = forecastInputs.slice(-3);
     createRowForecastInputs.forEach((input, index) => {
       fireEvent.change(input, { target: { value: (10 + index).toString() } });

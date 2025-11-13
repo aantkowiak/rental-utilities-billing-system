@@ -40,6 +40,14 @@ const DATE_TIME_FORMATTER = new Intl.DateTimeFormat("pl-PL", {
   timeStyle: "short",
 });
 
+function formatDecimalInput(value: number): string {
+  return value.toString().replace(".", ",");
+}
+
+function parsePolishDecimal(value: string): number {
+  return Number.parseFloat(value.replace(",", "."));
+}
+
 function resolveInitialFilters(): FiltersState {
   if (typeof window === "undefined") {
     return {
@@ -359,9 +367,9 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
     setEditing(reading);
     setFormState({
       readingAt: toLocalDateTimeInput(reading.readingAt),
-      coldM3: reading.coldM3.toString(),
-      hotM3: reading.hotM3.toString(),
-      heatingGj: reading.heatingGj.toString(),
+      coldM3: formatDecimalInput(reading.coldM3),
+      hotM3: formatDecimalInput(reading.hotM3),
+      heatingGj: formatDecimalInput(reading.heatingGj),
       commentText: reading.commentText ?? "",
       baseForMonth: reading.baseForMonth ? isoDateToYearMonth(reading.baseForMonth) : "",
       finalForMonth: reading.finalForMonth ? isoDateToYearMonth(reading.finalForMonth) : "",
@@ -434,9 +442,9 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
 
       const trimmedComment = formState.commentText.trim();
       const readingAtIso = fromLocalDateTimeInput(formState.readingAt);
-      const cold = Number.parseFloat(formState.coldM3);
-      const hot = Number.parseFloat(formState.hotM3);
-      const heating = Number.parseFloat(formState.heatingGj);
+      const cold = parsePolishDecimal(formState.coldM3);
+      const hot = parsePolishDecimal(formState.hotM3);
+      const heating = parsePolishDecimal(formState.heatingGj);
 
       const nextFieldErrors: Partial<Record<FormField, string>> = {};
 
@@ -528,9 +536,9 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
         setEditing(null);
         setFormState({
           ...buildDefaultFormState(),
-          coldM3: response.reading.coldM3.toString(),
-          hotM3: response.reading.hotM3.toString(),
-          heatingGj: response.reading.heatingGj.toString(),
+          coldM3: formatDecimalInput(response.reading.coldM3),
+          hotM3: formatDecimalInput(response.reading.hotM3),
+          heatingGj: formatDecimalInput(response.reading.heatingGj),
           commentText: response.reading.commentText ?? "",
           baseForMonth: response.reading.baseForMonth ? isoDateToYearMonth(response.reading.baseForMonth) : "",
           finalForMonth: response.reading.finalForMonth ? isoDateToYearMonth(response.reading.finalForMonth) : "",

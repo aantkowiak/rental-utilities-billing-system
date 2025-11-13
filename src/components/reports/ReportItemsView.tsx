@@ -140,103 +140,99 @@ export function ReportItemsView({ reportId }: ReportItemsViewProps): ReactElemen
     <section aria-label="Pozycje raportu" className="space-y-6">
       {monthlyAdvance ? (
         <div className="rounded-lg border bg-card p-6 shadow-sm">
-          <h3 className="mb-4 text-lg font-semibold text-foreground">Warunki miesięczne</h3>
+          <h3 className="mb-4 text-lg font-semibold text-foreground">Czynsz administracyjny (Locator)</h3>
 
-          <div className="space-y-4">
-            <div className="rounded-md border bg-muted/20 p-4">
-              <h4 className="mb-3 font-medium text-foreground">Czynsz administracyjny</h4>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Kwota czynszu administracyjnego</span>
+          <div className="rounded-md border bg-muted/20 p-4">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b pb-4">
+                <h4 className="font-medium text-foreground">Kwota czynszu płatna do zarządcy</h4>
                 <span className="text-lg font-bold text-foreground">
                   {currencyFormatter.format(monthlyAdvance.managerFeeRaw)}
                 </span>
               </div>
-            </div>
 
-            <div className="rounded-md border bg-muted/20 p-4">
-              <h4 className="mb-3 font-medium text-foreground">Zaliczki na media w czynszu administracyjnym</h4>
-              <div className="space-y-4">
-                {/* Zimna woda */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-foreground">Zimna woda</span>
-                    <span className="text-sm font-semibold text-foreground">
-                      {currencyFormatter.format(monthlyAdvance.advanceColdRaw)}
+              <div>
+                <h4 className="mb-3 font-medium text-foreground">Zaliczki na media w czynszu administracyjnym</h4>
+                <div className="space-y-4">
+                  {/* Zimna woda */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-foreground">Zimna woda</span>
+                      <span className="text-sm font-semibold text-foreground">
+                        {currencyFormatter.format(monthlyAdvance.advanceColdRaw)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Cena: {currencyFormatter.format(monthlyAdvance.priceColdRaw)}/m³</span>
+                      <span>Prognoza: {decimalFormatter.format(monthlyAdvance.forecastColdM3)} m³</span>
+                    </div>
+                  </div>
+
+                  {/* Ciepła woda */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-foreground">Ciepła woda</span>
+                      <span className="text-sm font-semibold text-foreground">
+                        {currencyFormatter.format(
+                          monthlyAdvance.forecastHotM3 * monthlyAdvance.priceColdRaw +
+                            monthlyAdvance.forecastHotM3 * monthlyAdvance.priceHotHeatingRaw
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span></span>
+                      <span>Prognoza: {decimalFormatter.format(monthlyAdvance.forecastHotM3)} m³</span>
+                    </div>
+                    <div className="ml-4 mt-1 space-y-1 text-xs text-muted-foreground">
+                      <div className="flex items-center justify-between">
+                        <span>• Zimna woda (w c.w.): {currencyFormatter.format(monthlyAdvance.priceColdRaw)}/m³</span>
+                        <span>
+                          {currencyFormatter.format(monthlyAdvance.forecastHotM3 * monthlyAdvance.priceColdRaw)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>• Podgrzanie: {currencyFormatter.format(monthlyAdvance.priceHotHeatingRaw)}/m³</span>
+                        <span>
+                          {currencyFormatter.format(monthlyAdvance.forecastHotM3 * monthlyAdvance.priceHotHeatingRaw)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Ogrzewanie */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-foreground">Ogrzewanie</span>
+                      <span className="text-sm font-semibold text-foreground">
+                        {currencyFormatter.format(monthlyAdvance.advanceHeatingRaw)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Cena: {currencyFormatter.format(monthlyAdvance.priceHeatingRaw)}/GJ</span>
+                      <span>Prognoza: {decimalFormatter.format(monthlyAdvance.forecastHeatingGj)} GJ</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between border-t pt-3">
+                    <span className="text-sm font-medium text-foreground">
+                      Łączna wysokość zaliczek w czynszu administracyjnym
                     </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Cena: {currencyFormatter.format(monthlyAdvance.priceColdRaw)}/m³</span>
-                    <span>Prognoza: {decimalFormatter.format(monthlyAdvance.forecastColdM3)} m³</span>
-                  </div>
-                </div>
-
-                {/* Ciepła woda */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-foreground">Ciepła woda</span>
-                    <span className="text-sm font-semibold text-foreground">
+                    <span className="text-base font-bold text-foreground">
                       {currencyFormatter.format(
-                        monthlyAdvance.forecastHotM3 * monthlyAdvance.priceColdRaw +
-                          monthlyAdvance.forecastHotM3 * monthlyAdvance.priceHotHeatingRaw
+                        monthlyAdvance.advanceColdRaw +
+                          (monthlyAdvance.forecastHotM3 * monthlyAdvance.priceColdRaw +
+                            monthlyAdvance.forecastHotM3 * monthlyAdvance.priceHotHeatingRaw) +
+                          monthlyAdvance.advanceHeatingRaw
                       )}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span></span>
-                    <span>Prognoza: {decimalFormatter.format(monthlyAdvance.forecastHotM3)} m³</span>
-                  </div>
-                  <div className="ml-4 mt-1 space-y-1 text-xs text-muted-foreground">
-                    <div className="flex items-center justify-between">
-                      <span>• Zimna woda (w c.w.): {currencyFormatter.format(monthlyAdvance.priceColdRaw)}/m³</span>
-                      <span>
-                        {currencyFormatter.format(monthlyAdvance.forecastHotM3 * monthlyAdvance.priceColdRaw)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>• Podgrzanie: {currencyFormatter.format(monthlyAdvance.priceHotHeatingRaw)}/m³</span>
-                      <span>
-                        {currencyFormatter.format(monthlyAdvance.forecastHotM3 * monthlyAdvance.priceHotHeatingRaw)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Ogrzewanie */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-foreground">Ogrzewanie</span>
-                    <span className="text-sm font-semibold text-foreground">
-                      {currencyFormatter.format(monthlyAdvance.advanceHeatingRaw)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Cena: {currencyFormatter.format(monthlyAdvance.priceHeatingRaw)}/GJ</span>
-                    <span>Prognoza: {decimalFormatter.format(monthlyAdvance.forecastHeatingGj)} GJ</span>
-                  </div>
-                </div>
-
-                <div className="mt-3 flex items-center justify-between border-t pt-3">
-                  <span className="text-sm font-medium text-foreground">
-                    Łączna wysokość zaliczek w czynszu administracyjnym
-                  </span>
-                  <span className="text-base font-bold text-foreground">
-                    {currencyFormatter.format(
-                      monthlyAdvance.advanceColdRaw +
-                        (monthlyAdvance.forecastHotM3 * monthlyAdvance.priceColdRaw +
-                          monthlyAdvance.forecastHotM3 * monthlyAdvance.priceHotHeatingRaw) +
-                        monthlyAdvance.advanceHeatingRaw
-                    )}
-                  </span>
                 </div>
               </div>
-            </div>
 
-            <div className="rounded-md border bg-muted/20 p-4">
-              <h4 className="mb-3 font-medium text-foreground">Czynsz najemcy</h4>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Wpłata najemcy</span>
-                <span className="text-lg font-bold text-foreground">
-                  {currencyFormatter.format(monthlyAdvance.advancePaymentRaw)}
+              <div className="flex items-center justify-between border-t pt-4">
+                <span className="text-sm font-medium text-foreground">Koszty stałe w czynszu administracyjnym</span>
+                <span className="text-base font-bold text-foreground">
+                  {currencyFormatter.format(totals.fixedCost)}
                 </span>
               </div>
             </div>
@@ -312,7 +308,7 @@ export function ReportItemsView({ reportId }: ReportItemsViewProps): ReactElemen
                 </div>
               )}
 
-              <div className="mt-2 flex items-center justify-between">
+              <div className="mt-2 flex items-center justify-between border-t pt-3">
                 <span className="text-base font-semibold text-foreground">Saldo</span>
                 <span className="text-lg font-bold text-foreground">
                   {currencyFormatter.format(

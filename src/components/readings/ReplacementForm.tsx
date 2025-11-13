@@ -33,6 +33,14 @@ const DECIMAL_FORMATTER = new Intl.NumberFormat("pl-PL", {
   maximumFractionDigits: 3,
 });
 
+function formatDecimalInput(value: number): string {
+  return value.toString().replace(".", ",");
+}
+
+function parsePolishDecimal(value: string): number {
+  return Number.parseFloat(value.replace(",", "."));
+}
+
 function toLocalDateTimeInput(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) {
@@ -63,9 +71,9 @@ function buildInitialState(source: ReadingDTO): ReplacementFormState {
   return {
     readingAt: toLocalDateTimeInput(source.readingAt),
     effectiveMonth,
-    coldM3: source.coldM3.toString(),
-    hotM3: source.hotM3.toString(),
-    heatingGj: source.heatingGj.toString(),
+    coldM3: formatDecimalInput(source.coldM3),
+    hotM3: formatDecimalInput(source.hotM3),
+    heatingGj: formatDecimalInput(source.heatingGj),
     commentText: "",
   };
 }
@@ -128,9 +136,9 @@ export function ReplacementForm({ source, onClose, onSuccess, onPendingChange }:
         nextFieldErrors.effectiveMonth = "Wprowadź prawidłowy dzień obowiązywania (RRRR-MM-DD).";
       }
 
-      const cold = Number.parseFloat(formState.coldM3);
-      const hot = Number.parseFloat(formState.hotM3);
-      const heating = Number.parseFloat(formState.heatingGj);
+      const cold = parsePolishDecimal(formState.coldM3);
+      const hot = parsePolishDecimal(formState.hotM3);
+      const heating = parsePolishDecimal(formState.heatingGj);
 
       if (!Number.isFinite(cold)) {
         nextFieldErrors.coldM3 = "Podaj liczbę dla zużycia zimnej wody.";
