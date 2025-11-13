@@ -144,9 +144,9 @@ export function ReportItemsView({ reportId }: ReportItemsViewProps): ReactElemen
 
           <div className="space-y-4">
             <div className="rounded-md border bg-muted/20 p-4">
-              <h4 className="mb-3 font-medium text-foreground">Opłata administracyjna</h4>
+              <h4 className="mb-3 font-medium text-foreground">Czynsz administracyjny</h4>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Kwota opłaty administracyjnej</span>
+                <span className="text-sm text-muted-foreground">Kwota czynszu administracyjnego</span>
                 <span className="text-lg font-bold text-foreground">
                   {currencyFormatter.format(monthlyAdvance.managerFeeRaw)}
                 </span>
@@ -154,7 +154,7 @@ export function ReportItemsView({ reportId }: ReportItemsViewProps): ReactElemen
             </div>
 
             <div className="rounded-md border bg-muted/20 p-4">
-              <h4 className="mb-3 font-medium text-foreground">Zaliczki na media</h4>
+              <h4 className="mb-3 font-medium text-foreground">Zaliczki na media w czynszu administracyjnym</h4>
               <div className="space-y-4">
                 {/* Zimna woda */}
                 <div className="space-y-1">
@@ -170,38 +170,9 @@ export function ReportItemsView({ reportId }: ReportItemsViewProps): ReactElemen
                   </div>
                 </div>
 
-                {/* Ciepła woda - grupa z komponentami */}
-                <div className="rounded-md border border-muted/40 bg-muted/10 p-3 space-y-3">
-                  {/* Zimna woda w ciepłej wodzie */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-muted-foreground">Zimna woda (w c.w.)</span>
-                      <span className="text-sm font-semibold text-muted-foreground">
-                        {currencyFormatter.format(monthlyAdvance.forecastHotM3 * monthlyAdvance.priceColdRaw)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Cena: {currencyFormatter.format(monthlyAdvance.priceColdRaw)}/m³</span>
-                      <span>Prognoza: {decimalFormatter.format(monthlyAdvance.forecastHotM3)} m³</span>
-                    </div>
-                  </div>
-
-                  {/* Podgrzanie wody */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-muted-foreground">Podgrzanie wody</span>
-                      <span className="text-sm font-semibold text-muted-foreground">
-                        {currencyFormatter.format(monthlyAdvance.forecastHotM3 * monthlyAdvance.priceHotHeatingRaw)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Cena: {currencyFormatter.format(monthlyAdvance.priceHotHeatingRaw)}/m³</span>
-                      <span>Prognoza: {decimalFormatter.format(monthlyAdvance.forecastHotM3)} m³</span>
-                    </div>
-                  </div>
-
-                  {/* Suma: Ciepła woda */}
-                  <div className="flex items-center justify-between border-t border-muted/40 pt-2">
+                {/* Ciepła woda */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-foreground">Ciepła woda</span>
                     <span className="text-sm font-semibold text-foreground">
                       {currencyFormatter.format(
@@ -209,6 +180,24 @@ export function ReportItemsView({ reportId }: ReportItemsViewProps): ReactElemen
                           monthlyAdvance.forecastHotM3 * monthlyAdvance.priceHotHeatingRaw
                       )}
                     </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span></span>
+                    <span>Prognoza: {decimalFormatter.format(monthlyAdvance.forecastHotM3)} m³</span>
+                  </div>
+                  <div className="ml-4 mt-1 space-y-1 text-xs text-muted-foreground">
+                    <div className="flex items-center justify-between">
+                      <span>• Zimna woda (w c.w.): {currencyFormatter.format(monthlyAdvance.priceColdRaw)}/m³</span>
+                      <span>
+                        {currencyFormatter.format(monthlyAdvance.forecastHotM3 * monthlyAdvance.priceColdRaw)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>• Podgrzanie: {currencyFormatter.format(monthlyAdvance.priceHotHeatingRaw)}/m³</span>
+                      <span>
+                        {currencyFormatter.format(monthlyAdvance.forecastHotM3 * monthlyAdvance.priceHotHeatingRaw)}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -227,11 +216,28 @@ export function ReportItemsView({ reportId }: ReportItemsViewProps): ReactElemen
                 </div>
 
                 <div className="mt-3 flex items-center justify-between border-t pt-3">
-                  <span className="text-sm font-medium text-foreground">Łączna zaliczka</span>
+                  <span className="text-sm font-medium text-foreground">
+                    Łączna wysokość zaliczek w czynszu administracyjnym
+                  </span>
                   <span className="text-base font-bold text-foreground">
-                    {currencyFormatter.format(monthlyAdvance.advancePaymentRaw)}
+                    {currencyFormatter.format(
+                      monthlyAdvance.advanceColdRaw +
+                        (monthlyAdvance.forecastHotM3 * monthlyAdvance.priceColdRaw +
+                          monthlyAdvance.forecastHotM3 * monthlyAdvance.priceHotHeatingRaw) +
+                        monthlyAdvance.advanceHeatingRaw
+                    )}
                   </span>
                 </div>
+              </div>
+            </div>
+
+            <div className="rounded-md border bg-muted/20 p-4">
+              <h4 className="mb-3 font-medium text-foreground">Czynsz najemcy</h4>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Wpłata najemcy</span>
+                <span className="text-lg font-bold text-foreground">
+                  {currencyFormatter.format(monthlyAdvance.advancePaymentRaw)}
+                </span>
               </div>
             </div>
           </div>
@@ -245,7 +251,7 @@ export function ReportItemsView({ reportId }: ReportItemsViewProps): ReactElemen
           {items.map((item) => (
             <div key={item.id} className="rounded-md border bg-muted/30 p-4">
               <div className="mb-3 flex items-center justify-between">
-                <h4 className="font-medium text-foreground">Licznik</h4>
+                <h4 className="font-medium text-foreground">Rzeczywiste koszty zużycia mediów</h4>
                 <span className="text-xs text-muted-foreground">ID: {item.propertyId.substring(0, 8)}...</span>
               </div>
 
@@ -260,7 +266,9 @@ export function ReportItemsView({ reportId }: ReportItemsViewProps): ReactElemen
 
                 <div>
                   <p className="text-sm font-medium text-foreground">Ciepła woda</p>
-                  <p className="text-sm text-muted-foreground">Zużycie: {decimalFormatter.format(item.usageHotM3)} m³</p>
+                  <p className="text-sm text-muted-foreground">
+                    Zużycie: {decimalFormatter.format(item.usageHotM3)} m³
+                  </p>
                   <p className="text-sm font-semibold text-foreground">{currencyFormatter.format(item.costHotRaw)}</p>
                 </div>
 
@@ -276,15 +284,41 @@ export function ReportItemsView({ reportId }: ReportItemsViewProps): ReactElemen
               </div>
 
               <div className="mt-3 flex items-center justify-between border-t pt-3">
-                <span className="text-sm font-medium text-muted-foreground">Koszt stały</span>
+                <span className="text-sm font-medium text-muted-foreground">
+                  Łączne rzeczywiste koszty zużycia mediów
+                </span>
+                <span className="text-sm font-semibold text-foreground">
+                  {currencyFormatter.format(item.costColdRaw + item.costHotRaw + item.costHeatingRaw)}
+                </span>
+              </div>
+
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-sm font-medium text-muted-foreground">
+                  Koszty stałe w czynszu administracyjnym
+                </span>
                 <span className="text-sm font-semibold text-foreground">
                   {currencyFormatter.format(item.fixedCostRaw)}
                 </span>
               </div>
 
+              {monthlyAdvance && (
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-sm font-medium text-muted-foreground">
+                    Zaliczka (wpłata) najemcy na poczet czynszu
+                  </span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {currencyFormatter.format(monthlyAdvance.advancePaymentRaw)}
+                  </span>
+                </div>
+              )}
+
               <div className="mt-2 flex items-center justify-between">
-                <span className="text-sm font-medium text-foreground">Suma dla licznika</span>
-                <span className="text-base font-bold text-foreground">{currencyFormatter.format(item.amountRaw)}</span>
+                <span className="text-base font-semibold text-foreground">Saldo</span>
+                <span className="text-lg font-bold text-foreground">
+                  {currencyFormatter.format(
+                    monthlyAdvance ? item.amountRaw - monthlyAdvance.advancePaymentRaw : item.amountRaw
+                  )}
+                </span>
               </div>
             </div>
           ))}
