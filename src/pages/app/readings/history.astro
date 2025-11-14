@@ -1,6 +1,6 @@
 ---
 import Layout from "../../../layouts/Layout.astro";
-import { RoleNav } from "@/components/nav/RoleNav";
+import RoleNav from "@/components/nav/RoleNav.astro";
 import { TenantReadingsHistory } from "@/components/readings/TenantReadingsHistory";
 import { requireAuth } from "@/lib/api/auth";
 
@@ -31,12 +31,12 @@ const propertyId = auth.propertyId ?? null;
         <p class="text-sm text-muted-foreground">Panel najemcy</p>
         <h1 class="text-2xl font-semibold text-foreground">{pageTitle}</h1>
       </div>
-      <RoleNav client:only="react" currentPath="/app/readings/history" role="tenant" />
+      <RoleNav currentPath="/app/readings/history" role="tenant" />
     </div>
   </header>
 
   <main id="main-content" class="mx-auto w-full max-w-7xl px-4 py-8">
-    <TenantReadingsHistory client:load propertyId={propertyId} />
+    <TenantReadingsHistory client:only="react" propertyId={propertyId} />
   </main>
 </Layout>
 

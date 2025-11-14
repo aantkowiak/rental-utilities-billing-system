@@ -1,6 +1,6 @@
 ---
 import Layout from "../../layouts/Layout.astro";
-import { RoleNav } from "@/components/nav/RoleNav";
+import RoleNav from "@/components/nav/RoleNav.astro";
 import { AdminPropertiesList } from "@/components/properties/AdminPropertiesList";
 import { requireAuth } from "@/lib/api/auth";
 
@@ -26,7 +26,7 @@ const pageTitle = "Nieruchomości — administrator";
         <p class="text-sm text-muted-foreground">Panel administratora</p>
         <h1 class="text-2xl font-semibold text-foreground">{pageTitle}</h1>
       </div>
-      <RoleNav client:only="react" currentPath="/admin/properties" role="admin" />
+      <RoleNav currentPath="/admin/properties" role="admin" />
     </div>
   </header>
 

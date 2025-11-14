@@ -1,6 +1,6 @@
 ---
 import { ProfileForm } from "@/components/profile/ProfileForm";
-import { RoleNav } from "@/components/nav/RoleNav";
+import RoleNav from "@/components/nav/RoleNav.astro";
 import { requireAuth } from "@/lib/api/auth";
 import Layout from "../../layouts/Layout.astro";
 
@@ -31,7 +31,7 @@ const pageTitle = "Profil użytkownika";
         <p class="text-sm text-muted-foreground">Panel najemcy</p>
         <h1 class="text-2xl font-semibold text-foreground">{pageTitle}</h1>
       </div>
-      <RoleNav client:only="react" currentPath="/app/profile" role="tenant" />
+      <RoleNav currentPath="/app/profile" role="tenant" />
     </div>
   </header>
 

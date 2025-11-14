@@ -25,13 +25,11 @@ export class ProfileService {
    * @throws Error if profile not found or database operation fails
    */
   static async getWithEmail(supabase: SupabaseClient<Database>, userId: string): Promise<ProfileWithEmail> {
-    // Get user email from auth.users
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    // Get user email using RPC function
+    const { data: email, error: authError } = await supabase
+      .rpc("get_user_email", { user_uuid: userId });
 
-    if (authError || !user) {
+    if (authError || !email) {
       throw new Error("UNAUTHORIZED");
     }
 
@@ -61,7 +59,7 @@ export class ProfileService {
       displayName: profile.display_name,
       createdAt: profile.created_at,
       updatedAt: profile.updated_at,
-      email: user.email ?? "",
+      email: email ?? "",
     };
   }
 
@@ -104,16 +102,19 @@ export class ProfileService {
    * @throws Error if update fails or user not found
    */
   static async updateEmail(supabase: SupabaseClient<Database>, userId: string, email: string): Promise<ProfileWithEmail> {
-    // Update email in auth.users via Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.updateUser({
-      email: email,
-    });
+    // Update email in auth.users table directly
+    const { data: authData, error: authError } = await supabase
+      .from("auth.users" as any)
+      .update({ email: email })
+      .eq("id", userId)
+      .select("id, email")
+      .single();
 
     if (authError) {
       throw new Error(`Auth error: ${authError.message}`);
     }
 
-    if (!authData.user) {
+    if (!authData) {
       throw new Error("UNAUTHORIZED");
     }
 
@@ -143,7 +144,7 @@ export class ProfileService {
       displayName: profile.display_name,
       createdAt: profile.created_at,
       updatedAt: profile.updated_at,
-      email: authData.user.email ?? email,
+      email: authData.email ?? email,
     };
   }
 }

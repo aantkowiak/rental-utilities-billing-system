@@ -1,6 +1,6 @@
 ---
 import Layout from "../../../layouts/Layout.astro";
-import { RoleNav } from "@/components/nav/RoleNav";
+import RoleNav from "@/components/nav/RoleNav.astro";
 import { AdminReportDetail } from "@/components/reports/AdminReportDetail";
 import { ReportItemsView } from "@/components/reports/ReportItemsView";
 import { requireAuth } from "@/lib/api/auth";
@@ -28,7 +28,7 @@ const pageTitle = "Szczegóły raportu — administrator";
         <p class="text-sm text-muted-foreground">Panel administratora</p>
         <h1 class="text-2xl font-semibold text-foreground">{pageTitle}</h1>
       </div>
-      <RoleNav client:only="react" currentPath="/admin/reports" role="admin" />
+      <RoleNav currentPath="/admin/reports" role="admin" />
     </div>
   </header>
 

@@ -27,7 +27,7 @@ const DEFAULT_TEST_PROPERTY_ID = "10000000-0000-0000-0000-000000000001"; // Apar
 const buildHardcodedAuth = (): { user: User; role: UserRole; propertyId: string | null } => {
   const userId = import.meta.env.TEST_AUTH_USER_ID ?? DEFAULT_TEST_USER_ID;
   const rawRole = import.meta.env.TEST_AUTH_ROLE;
-  const role: UserRole = rawRole === "tenant" ? "tenant" : DEFAULT_TEST_ROLE;
+  const role: UserRole = rawRole === "tenant" || rawRole === "admin" ? rawRole : DEFAULT_TEST_ROLE;
   const propertyId = import.meta.env.TEST_AUTH_PROPERTY_ID ?? DEFAULT_TEST_PROPERTY_ID;
 
   const user = {

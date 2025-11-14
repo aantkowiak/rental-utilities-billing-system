@@ -1,6 +1,6 @@
 ---
 import Layout from "../../../layouts/Layout.astro";
-import { RoleNav } from "@/components/nav/RoleNav";
+import RoleNav from "@/components/nav/RoleNav.astro";
 import { TenantReadingsView } from "@/components/readings/ReadingForm";
 import { requireAuth } from "@/lib/api/auth";
 
@@ -31,7 +31,7 @@ const propertyId = auth.propertyId ?? null;
         <p class="text-sm text-muted-foreground">Panel najemcy</p>
         <h1 class="text-2xl font-semibold text-foreground">{pageTitle}</h1>
       </div>
-      <RoleNav client:only="react" currentPath="/app/readings/add" role="tenant" />
+      <RoleNav currentPath="/app/readings/add" role="tenant" />
     </div>
   </header>
 

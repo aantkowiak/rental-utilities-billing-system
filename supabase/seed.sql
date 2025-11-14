@@ -208,7 +208,7 @@ BEGIN
       baseline_date,
       NULL,
       'tenant',
-      'baseline',
+      'regular',
       1000.000 + (random() * 100)::numeric(10,3),    -- Starting cold water meter: 1000-1100 m3
       500.000 + (random() * 50)::numeric(10,3),      -- Starting hot water meter: 500-550 m3
       300.000 + (random() * 30)::numeric(10,3),      -- Starting heating meter: 300-330 GJ
@@ -365,7 +365,7 @@ BEGIN
         now() - interval '3 months',
         replacement_month,
         'admin_replacement',
-        'regular',
+        'overwrite',
         latest_reading.cold_m3 - 50.000,  -- Corrected reading
         latest_reading.hot_m3 - 25.000,   -- Corrected reading
         latest_reading.heating_gj - 10.000, -- Corrected reading

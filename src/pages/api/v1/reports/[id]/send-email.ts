@@ -16,28 +16,14 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
       });
     }
 
-    // Get authenticated user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return new Response(JSON.stringify({ code: "unauthorized", message: "Nie jesteś zalogowany." }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+    // Get authenticated user using requireAuth
+    const auth = await requireAuth(request, locals);
+    if (!auth.success) {
+      return auth.response;
     }
 
-    // Get user profile
-    const { data: profile } = await supabase.from("profiles").select("role").eq("user_id", user.id).single();
-
-    if (!profile) {
-      return new Response(JSON.stringify({ code: "forbidden", message: "Brak uprawnień." }), {
-        status: 403,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
+    const userId = auth.user.id;
+    const userRole = auth.role;
 
     // Check if report exists
     const { data: report, error: reportError } = await supabase
@@ -60,9 +46,9 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     }
 
     // Check permissions - admin can send any report, tenant can only send their own
-    if (profile.role !== "admin") {
+    if (userRole !== "admin") {
       const contracts = report.contracts as any;
-      if (contracts.tenant_user_id !== user.id) {
+      if (contracts.tenant_user_id !== userId) {
         return new Response(JSON.stringify({ code: "forbidden", message: "Brak dostępu do tego raportu." }), {
           status: 403,
           headers: { "Content-Type": "application/json" },

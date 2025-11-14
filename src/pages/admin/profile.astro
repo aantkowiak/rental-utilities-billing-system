@@ -1,6 +1,6 @@
 ---
 import Layout from "../../layouts/Layout.astro";
-import { RoleNav } from "@/components/nav/RoleNav";
+import RoleNav from "@/components/nav/RoleNav.astro";
 import { ProfileForm } from "@/components/profile/ProfileForm";
 import { requireAuth } from "@/lib/api/auth";
 
@@ -26,7 +26,7 @@ const pageTitle = "Profil administratora";
         <p class="text-sm text-muted-foreground">Panel administratora</p>
         <h1 class="text-2xl font-semibold text-foreground">{pageTitle}</h1>
       </div>
-      <RoleNav client:only="react" currentPath="/admin/profile" role="admin" />
+      <RoleNav currentPath="/admin/profile" role="admin" />
     </div>
   </header>
 
