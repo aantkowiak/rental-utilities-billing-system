@@ -1,7 +1,7 @@
 ---
-import Layout from "../../layouts/Layout.astro";
+import Layout from "../../../layouts/Layout.astro";
 import { RoleNav } from "@/components/nav/RoleNav";
-import { TenantReportsView } from "@/components/reports/TenantReportsTable";
+import { TenantReadingsHistory } from "@/components/readings/TenantReadingsHistory";
 import { requireAuth } from "@/lib/api/auth";
 
 const auth = await requireAuth(Astro.request, Astro.locals);
@@ -10,10 +10,10 @@ if (!auth.success) {
 }
 
 if (auth.role !== "tenant") {
-  return Astro.redirect("/admin/reports");
+  return Astro.redirect("/admin/readings");
 }
 
-const pageTitle = "Raporty miesięczne";
+const pageTitle = "Archiwalne odczyty";
 const propertyId = auth.propertyId ?? null;
 ---
 
@@ -26,16 +26,17 @@ const propertyId = auth.propertyId ?? null;
   </a>
 
   <header class="border-b bg-card">
-    <div class="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-6">
+    <div class="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6">
       <div>
         <p class="text-sm text-muted-foreground">Panel najemcy</p>
         <h1 class="text-2xl font-semibold text-foreground">{pageTitle}</h1>
       </div>
-      <RoleNav client:only="react" currentPath="/app/reports" role="tenant" />
+      <RoleNav client:only="react" currentPath="/app/readings/history" role="tenant" />
     </div>
   </header>
 
-  <main id="main-content" class="mx-auto w-full max-w-4xl px-4 py-8">
-    <TenantReportsView client:load propertyId={propertyId} />
+  <main id="main-content" class="mx-auto w-full max-w-7xl px-4 py-8">
+    <TenantReadingsHistory client:load propertyId={propertyId} />
   </main>
 </Layout>
+

@@ -531,66 +531,11 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
 
   return (
     <form className="space-y-6" noValidate onSubmit={handleSubmit}>
-      <section className="rounded-lg border bg-card p-6 shadow-sm">
-        <div className="space-y-4">
-          <header className="space-y-1">
-            <p className="text-sm text-muted-foreground">
-              Nieruchomość: <span className="font-medium text-foreground">{resolvedPropertyId ?? "—"}</span>
-            </p>
-            <h2 className="text-xl font-semibold text-foreground">Ostatni zapis</h2>
-          </header>
-
-          {!resolvedPropertyId ? (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Brak przypisanej nieruchomości. Skontaktuj się z administratorem, aby uzyskać dostęp do formularza.
-            </p>
-          ) : null}
-
-          {loading ? <p className="text-sm text-muted-foreground">Ładuję dane odczytu...</p> : null}
-
-          {!loading && !currentReading ? (
-            <p className="rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-sm text-muted-foreground">
-              Brak odczytu dla bieżącego miesiąca. Wprowadź nowe wartości, aby rozpocząć rozliczenie.
-            </p>
-          ) : null}
-
-          {currentReading ? (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-base font-medium text-foreground">
-                  {readingDateFormatter.format(new Date(currentReading.readingAt))}
-                </p>
-                {isAnchoredReading(currentReading) ? (
-                  <span className="rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-xs font-semibold uppercase text-amber-900">
-                    Kotwica
-                  </span>
-                ) : null}
-              </div>
-
-              <dl className="grid gap-4 text-sm sm:grid-cols-3">
-                <div className="space-y-1">
-                  <dt className="text-muted-foreground">Zimna woda</dt>
-                  <dd className="font-semibold text-foreground">{formatDecimal(currentReading.coldM3)} m³</dd>
-                </div>
-                <div className="space-y-1">
-                  <dt className="text-muted-foreground">Ciepła woda</dt>
-                  <dd className="font-semibold text-foreground">{formatDecimal(currentReading.hotM3)} m³</dd>
-                </div>
-                <div className="space-y-1">
-                  <dt className="text-muted-foreground">Ogrzewanie</dt>
-                  <dd className="font-semibold text-foreground">{formatDecimal(currentReading.heatingGj)} GJ</dd>
-                </div>
-              </dl>
-
-              {currentReading.commentText ? (
-                <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                  {currentReading.commentText}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
+      {!resolvedPropertyId ? (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Brak przypisanej nieruchomości. Skontaktuj się z administratorem, aby uzyskać dostęp do formularza.
         </div>
-      </section>
+      ) : null}
 
       <section className="rounded-lg border bg-card p-6 shadow-sm">
         <div className="space-y-6">

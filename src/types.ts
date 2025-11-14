@@ -65,7 +65,9 @@ export interface RequestMagicLinkCmd {
 }
 
 /* 2.2 Profile */
-export type UpdateMeCmd = Pick<ProfileDTO, "displayName">;
+export interface UpdateMeCmd {
+  email?: string;
+}
 
 /* 2.3 Properties */
 export type CreatePropertyCmd = Pick<PropertyDTO, "label" | "startMonth">;

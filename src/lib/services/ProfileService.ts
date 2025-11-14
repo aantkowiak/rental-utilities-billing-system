@@ -17,6 +17,55 @@ export interface ProfileListResponse {
  */
 export class ProfileService {
   /**
+   * Gets a single user profile with email.
+   *
+   * @param supabase - Supabase client instance
+   * @param userId - User ID whose profile to fetch
+   * @returns Profile with email
+   * @throws Error if profile not found or database operation fails
+   */
+  static async getWithEmail(supabase: SupabaseClient<Database>, userId: string): Promise<ProfileWithEmail> {
+    // Get user email from auth.users
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      throw new Error("UNAUTHORIZED");
+    }
+
+    // Get profile from profiles table
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (profileError) {
+      if (profileError.code === "PGRST116") {
+        throw new Error("PROFILE_NOT_FOUND");
+      }
+      throw new Error(`Database error: ${profileError.message}`);
+    }
+
+    if (!profile) {
+      throw new Error("PROFILE_NOT_FOUND");
+    }
+
+    // Map to DTO with email
+    return {
+      userId: profile.user_id,
+      role: profile.role,
+      propertyId: profile.property_id,
+      displayName: profile.display_name,
+      createdAt: profile.created_at,
+      updatedAt: profile.updated_at,
+      email: user.email ?? "",
+    };
+  }
+
+  /**
    * Lists all user profiles with their emails.
    * Available only for admins.
    *
@@ -46,56 +95,55 @@ export class ProfileService {
     return { items };
   }
   /**
-   * Updates the display name for a user's profile.
+   * Updates the email for a user.
    *
    * @param supabase - Supabase client instance
-   * @param userId - User ID whose profile to update
-   * @param displayName - New display name (optional, undefined means no update)
-   * @returns Updated profile as ProfileDTO
-   * @throws Error if profile not found or database operation fails
+   * @param userId - User ID whose email to update
+   * @param email - New email address
+   * @returns Updated profile with new email
+   * @throws Error if update fails or user not found
    */
-  static async updateDisplayName(
-    supabase: SupabaseClient<Database>,
-    userId: string,
-    displayName?: string
-  ): Promise<ProfileDTO> {
-    // Build update object only if displayName is provided
-    const updateData: { display_name?: string; updated_at?: string } = {};
+  static async updateEmail(supabase: SupabaseClient<Database>, userId: string, email: string): Promise<ProfileWithEmail> {
+    // Update email in auth.users via Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.updateUser({
+      email: email,
+    });
 
-    if (displayName !== undefined) {
-      updateData.display_name = displayName;
+    if (authError) {
+      throw new Error(`Auth error: ${authError.message}`);
     }
 
-    // Perform update and fetch the updated row
-    const { data, error } = await supabase
+    if (!authData.user) {
+      throw new Error("UNAUTHORIZED");
+    }
+
+    // Get profile from profiles table
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .update(updateData)
-      .eq("user_id", userId)
       .select("*")
+      .eq("user_id", userId)
       .single();
 
-    if (error) {
-      // Check if profile doesn't exist
-      if (error.code === "PGRST116") {
+    if (profileError) {
+      if (profileError.code === "PGRST116") {
         throw new Error("PROFILE_NOT_FOUND");
       }
-      throw new Error(`Database error: ${error.message}`);
+      throw new Error(`Database error: ${profileError.message}`);
     }
 
-    if (!data) {
+    if (!profile) {
       throw new Error("PROFILE_NOT_FOUND");
     }
 
-    // Map snake_case DB columns to camelCase DTO
-    const profileDTO: ProfileDTO = {
-      userId: data.user_id,
-      role: data.role,
-      propertyId: data.property_id,
-      displayName: data.display_name,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
+    // Return profile with updated email
+    return {
+      userId: profile.user_id,
+      role: profile.role,
+      propertyId: profile.property_id,
+      displayName: profile.display_name,
+      createdAt: profile.created_at,
+      updatedAt: profile.updated_at,
+      email: authData.user.email ?? email,
     };
-
-    return profileDTO;
   }
 }

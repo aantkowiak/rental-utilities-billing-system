@@ -14,17 +14,16 @@ export const RequestMagicLinkSchema = z.object({
 
 /**
  * Validation schema for updating user profile (PATCH /v1/me).
- * Allows optional display name update with constraints:
- * - Max 60 characters
- * - No control characters (0x00-0x1F, 0x7F)
- * - Trimmed whitespace
+ * Allows optional email update with constraints:
+ * - RFC 5322 compliant email
+ * - Max 254 characters
  */
 export const UpdateMeSchema = z.object({
-  displayName: z
+  email: z
     .string()
-    .trim()
-    .max(60, "Display name must be 60 characters or less")
-    .regex(/^[^\x00-\x1F\x7F]*$/, "Display name contains invalid characters")
+    .email("Wprowadź poprawny adres email")
+    .max(254, "Adres email może mieć maksymalnie 254 znaki")
+    .transform((email) => email.toLowerCase())
     .optional(),
 });
 

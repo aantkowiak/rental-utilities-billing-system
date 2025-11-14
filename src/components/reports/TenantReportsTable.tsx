@@ -1,13 +1,12 @@
-import { memo, useCallback, useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
 import { Button } from "@/components/ui/button";
 import { apiGet, apiPost, type ApiError } from "@/lib/client/http";
-import type { GenerateReportCmd, PropertyDTO, ReportDTO, ReportEmailAttemptDTO } from "@/types";
-
-const PROPERTY_STORAGE_KEY = "tenant-reports:propertyId";
+import { formatYearMonthLabel, isoDateToYearMonth, isValidYearMonth } from "@/lib/date/month";
+import type { GenerateReportCmd, ReportDTO, ReportEmailAttemptDTO } from "@/types";
 
 interface TenantReportPermissions {
   canGenerate?: boolean;
@@ -27,6 +26,8 @@ interface TenantReportsResponse {
 }
 
 interface TenantReportsTableProps {
+  /** Property ID from tenant's profile */
+  propertyId: string | null;
   /** Optional month override for tests */
   initialMonth?: string;
 }
@@ -39,17 +40,16 @@ interface TenantReportRowProps {
   onResend: (item: TenantReportListItem) => void;
 }
 
-export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): JSX.Element {
+export function TenantReportsTable({ propertyId, initialMonth }: TenantReportsTableProps): JSX.Element {
   const { pushToast } = useToast();
-  const [propertyId, setPropertyId] = useState<string | null>(() => resolveInitialPropertyId(initialMonth));
-  const [properties, setProperties] = useState<PropertyDTO[]>([]);
   const [items, setItems] = useState<TenantReportListItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const [propertiesLoading, setPropertiesLoading] = useState<boolean>(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [pendingGenerateId, setPendingGenerateId] = useState<string | null>(null);
   const [pendingResendId, setPendingResendId] = useState<string | null>(null);
+
+  void initialMonth; // Suppress unused var warning
 
   const listQuery = useMemo(() => buildListQuery(propertyId), [propertyId]);
 
@@ -85,47 +85,11 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
     }
   }, [listQuery, pushToast]);
 
-  const loadProperties = useCallback(async () => {
-    setPropertiesLoading(true);
-    try {
-      const response = await apiGet<{ items: PropertyDTO[] }>("/api/v1/properties");
-      setProperties(response.items || []);
-    } catch (error) {
-      console.error("Failed to load properties:", error);
-    } finally {
-      setPropertiesLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadProperties().catch(() => {
-      // error handled in loadProperties
-    });
-  }, [loadProperties]);
-
   useEffect(() => {
     loadReports().catch(() => {
       // błąd obsłużony w loadReports
     });
   }, [loadReports]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    if (propertyId) {
-      window.localStorage.setItem(PROPERTY_STORAGE_KEY, propertyId);
-    } else {
-      window.localStorage.removeItem(PROPERTY_STORAGE_KEY);
-    }
-    replacePropertyParam(propertyId);
-  }, [propertyId]);
-
-  const onPropertyChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
-    const nextPropertyId = normalizePropertyId(event.target.value);
-    setPropertyId(nextPropertyId);
-  }, []);
 
   const handleActionError = useCallback(
     (error: ApiError) => {
@@ -212,35 +176,13 @@ export function TenantReportsTable({ initialMonth }: TenantReportsTableProps): J
     [handleActionError, loadReports, pendingGenerateId, pendingResendId, pushToast]
   );
 
-  const propertySelectId = useMemo(() => `reports-property-${Math.random().toString(36).slice(2)}`, []);
-
   return (
     <section className="space-y-6">
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-foreground" htmlFor={propertySelectId}>
-            Nieruchomość
-          </label>
-          <select
-            id={propertySelectId}
-            className="w-64 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-            value={propertyId ?? ""}
-            onChange={onPropertyChange}
-            disabled={loading || propertiesLoading || Boolean(pendingGenerateId) || Boolean(pendingResendId)}
-            aria-describedby={`${propertySelectId}-help`}
-          >
-            <option value="">Wszystkie nieruchomości</option>
-            {properties.map((property) => (
-              <option key={property.id} value={property.id}>
-                {property.label}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-muted-foreground" id={`${propertySelectId}-help`}>
-            Zmiana nieruchomości odświeży listę raportów
-          </p>
-        </div>
-      </header>
+      {!propertyId ? (
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Brak przypisanej nieruchomości. Skontaktuj się z administratorem, aby uzyskać dostęp do raportów.
+        </p>
+      ) : null}
 
       {accessError ? <ErrorAlert error={accessError} /> : null}
       {fetchError ? <ErrorAlert error={fetchError} /> : null}
@@ -344,30 +286,6 @@ export function TenantReportsView(props: TenantReportsTableProps): JSX.Element {
   );
 }
 
-function normalizePropertyId(value: string | null | undefined): string | null {
-  if (typeof value !== "string" || value === "") {
-    return null;
-  }
-  return value;
-}
-
-function resolveInitialPropertyId(initialPropertyId?: string): string | null {
-  const candidates: (string | null)[] = [
-    initialPropertyId ?? null,
-    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("propertyId") : null,
-    typeof window !== "undefined" ? window.localStorage.getItem(PROPERTY_STORAGE_KEY) : null,
-  ];
-
-  for (const candidate of candidates) {
-    const normalized = normalizePropertyId(candidate);
-    if (normalized) {
-      return normalized;
-    }
-  }
-
-  return null;
-}
-
 function buildListQuery(propertyId: string | null): string {
   const search = new URLSearchParams();
   if (propertyId) {
@@ -375,20 +293,6 @@ function buildListQuery(propertyId: string | null): string {
   }
   const query = search.toString();
   return query ? `?${query}` : "";
-}
-
-function replacePropertyParam(value: string | null): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  const url = new URL(window.location.href);
-  if (value) {
-    url.searchParams.set("propertyId", value);
-  } else {
-    url.searchParams.delete("propertyId");
-  }
-  window.history.replaceState(null, "", url.toString());
 }
 
 function canGenerate(item: TenantReportListItem): boolean {

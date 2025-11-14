@@ -4,10 +4,15 @@ import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
 import { Button } from "@/components/ui/button";
 import { apiGet, apiPatch, type ApiError } from "@/lib/client/http";
-import type { ProfileDTO, UpdateMeCmd } from "@/types";
+import type { ProfileWithEmail } from "@/lib/services/ProfileService";
+import type { UpdateMeCmd } from "@/types";
 
 interface ProfileResponse {
-  profile: ProfileDTO;
+  profile: ProfileWithEmail;
+}
+
+interface PropertiesResponse {
+  items: Array<{ id: string; label: string }>;
 }
 
 function toApiError(error: unknown): ApiError {
@@ -23,18 +28,18 @@ function toApiError(error: unknown): ApiError {
   };
 }
 
-function extractDisplayNameError(details: unknown): string | null {
+function extractFieldError(details: unknown, fieldName: string): string | null {
   if (!details || typeof details !== "object") {
     return null;
   }
 
-  const displayName = (details as Record<string, unknown>).displayName;
-  if (typeof displayName === "string") {
-    return displayName;
+  const field = (details as Record<string, unknown>)[fieldName];
+  if (typeof field === "string") {
+    return field;
   }
 
-  if (Array.isArray(displayName)) {
-    const [first] = displayName;
+  if (Array.isArray(field)) {
+    const [first] = field;
     return typeof first === "string" ? first : null;
   }
 
@@ -44,7 +49,8 @@ function extractDisplayNameError(details: unknown): string | null {
 function ProfileFormContent(): JSX.Element {
   const { pushToast } = useToast();
 
-  const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
+  const [propertyLabel, setPropertyLabel] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [formError, setFormError] = useState<ApiError | string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
@@ -65,13 +71,28 @@ function ProfileFormContent(): JSX.Element {
     const promise = (async () => {
       try {
         const response = await apiGet<ProfileResponse>("/api/v1/me");
-        setDisplayName(response.profile.displayName ?? "");
+        setEmail(response.profile.email);
         setFormError(null);
+
+        // Load property label if propertyId is present
+        if (response.profile.propertyId) {
+          try {
+            const propertiesResponse = await apiGet<PropertiesResponse>("/api/v1/properties");
+            const property = propertiesResponse.items.find((p) => p.id === response.profile.propertyId);
+            setPropertyLabel(property?.label ?? null);
+          } catch (error) {
+            console.error("Failed to load property info:", error);
+            setPropertyLabel(null);
+          }
+        } else {
+          setPropertyLabel(null);
+        }
       } catch (error) {
         const apiError = toApiError(error);
         if (apiError.code === "profile_not_found" || apiError.status === 404) {
           setFormError(apiError.message || "Nie znaleziono profilu użytkownika.");
-          setDisplayName("");
+          setEmail("");
+          setPropertyLabel(null);
           return;
         }
         pushToast({
@@ -95,8 +116,8 @@ function ProfileFormContent(): JSX.Element {
     });
   }, [loadProfile]);
 
-  const handleDisplayNameChange = useCallback((value: string) => {
-    setDisplayName(value);
+  const handleEmailChange = useCallback((value: string) => {
+    setEmail(value);
     setFieldError(null);
   }, []);
 
@@ -108,19 +129,21 @@ function ProfileFormContent(): JSX.Element {
         return;
       }
 
-      const trimmed = displayName.trim();
+      const trimmed = email.trim();
       if (trimmed.length === 0) {
-        setFieldError("Wprowadź nazwę wyświetlaną.");
+        setFieldError("Wprowadź adres email.");
         return;
       }
 
-      if (trimmed.length < 3) {
-        setFieldError("Nazwa powinna mieć co najmniej 3 znaki.");
+      // Basic email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmed)) {
+        setFieldError("Wprowadź poprawny adres email.");
         return;
       }
 
       const payload: UpdateMeCmd = {
-        displayName: trimmed,
+        email: trimmed,
       };
 
       setPending(true);
@@ -129,18 +152,18 @@ function ProfileFormContent(): JSX.Element {
 
       try {
         const response = await apiPatch<ProfileResponse>("/api/v1/me", payload);
-        setDisplayName(response.profile.displayName ?? trimmed);
+        setEmail(response.profile.email);
 
         pushToast({
           variant: "success",
           title: "Zapisano profil",
-          description: "Nazwa wyświetlana została zaktualizowana.",
+          description: "Adres email został zaktualizowany.",
         });
       } catch (error) {
         const apiError = toApiError(error);
 
         if (apiError.code === "validation_error") {
-          const validationMessage = extractDisplayNameError(apiError.details) ?? "Wprowadzone dane są nieprawidłowe.";
+          const validationMessage = extractFieldError(apiError.details, "email") ?? "Wprowadzone dane są nieprawidłowe.";
           setFieldError(validationMessage);
           return;
         }
@@ -161,7 +184,7 @@ function ProfileFormContent(): JSX.Element {
         setPending(false);
       }
     },
-    [displayName, loadProfile, pending, pushToast]
+    [email, pending, pushToast]
   );
 
   return (
@@ -170,41 +193,52 @@ function ProfileFormContent(): JSX.Element {
         <header className="space-y-1">
           <h2 className="text-xl font-semibold text-foreground">Dane profilu</h2>
           <p className="text-sm text-muted-foreground">
-            Zmień nazwę wyświetlaną, która pojawia się w wysyłanych raportach i panelu administratora.
+            Zmień adres email na który będą dostarczane raporty rozliczeń.
           </p>
         </header>
 
         <form className="mt-6 space-y-4" noValidate onSubmit={handleSubmit}>
           <ErrorAlert error={formError} />
 
+          {propertyLabel ? (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Nieruchomość</label>
+              <p className="rounded-md border border-input bg-muted px-3 py-2 text-sm text-foreground">
+                {propertyLabel}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Nieruchomość przypisana do Twojego profilu. W razie pytań skontaktuj się z administratorem.
+              </p>
+            </div>
+          ) : null}
+
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground" htmlFor="admin-profile-display-name">
-              Nazwa wyświetlana
+            <label className="text-sm font-medium text-foreground" htmlFor="profile-email">
+              Adres email
             </label>
             <input
-              id="admin-profile-display-name"
+              id="profile-email"
               ref={inputRef}
               className={[
                 "w-full rounded-md border bg-background px-3 py-2 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
                 fieldError ? "border-destructive focus-visible:ring-destructive/40" : "border-input",
               ].join(" ")}
-              type="text"
-              value={displayName}
-              onChange={(event) => handleDisplayNameChange(event.target.value)}
+              type="email"
+              value={email}
+              onChange={(event) => handleEmailChange(event.target.value)}
               disabled={pending}
-              minLength={3}
               required
               aria-invalid={fieldError ? "true" : undefined}
-              aria-describedby={fieldError ? "admin-profile-display-name-error" : undefined}
-              autoComplete="name"
+              aria-describedby={fieldError ? "profile-email-error profile-email-description" : "profile-email-description"}
+              autoComplete="email"
             />
             {fieldError ? (
-              <p className="text-sm text-destructive" id="admin-profile-display-name-error">
+              <p className="text-sm text-destructive" id="profile-email-error">
                 {fieldError}
               </p>
             ) : null}
-            <p className="text-xs text-muted-foreground">
-              Nazwa będzie widoczna w e-mailach i raportach wysyłanych do najemców.
+            <p className="text-xs text-muted-foreground" id="profile-email-description">
+              Adres email na który będą dostarczane raporty rozliczeń.
             </p>
           </div>
 

@@ -19,14 +19,16 @@ interface AuthFailure {
   response: Response;
 }
 
-const DEFAULT_TEST_USER_ID = "ab67e555-a882-4a6c-85de-edc362ee10e6";
-const DEFAULT_TEST_ROLE: UserRole = "admin";
+// Default to Tenant 1 from seed data (has property with readings)
+const DEFAULT_TEST_USER_ID = "00000000-0000-0000-0000-000000000002";
+const DEFAULT_TEST_ROLE: UserRole = "tenant";
+const DEFAULT_TEST_PROPERTY_ID = "10000000-0000-0000-0000-000000000001"; // Apartment A - Downtown
 
 const buildHardcodedAuth = (): { user: User; role: UserRole; propertyId: string | null } => {
   const userId = import.meta.env.TEST_AUTH_USER_ID ?? DEFAULT_TEST_USER_ID;
   const rawRole = import.meta.env.TEST_AUTH_ROLE;
   const role: UserRole = rawRole === "tenant" ? "tenant" : DEFAULT_TEST_ROLE;
-  const propertyId = import.meta.env.TEST_AUTH_PROPERTY_ID ?? null;
+  const propertyId = import.meta.env.TEST_AUTH_PROPERTY_ID ?? DEFAULT_TEST_PROPERTY_ID;
 
   const user = {
     id: userId,

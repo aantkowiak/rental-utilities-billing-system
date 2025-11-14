@@ -28,7 +28,8 @@ export function RoleNav({ role, currentPath }: RoleNavProps): JSX.Element {
 
     return [
       { href: "/app/my-property", label: "Moja nieruchomość" },
-      { href: "/app/readings", label: "Odczyty" },
+      { href: "/app/readings/add", label: "Dodaj odczyt" },
+      { href: "/app/readings/history", label: "Archiwalne odczyty" },
       { href: "/app/reports", label: "Raporty" },
       { href: "/app/profile", label: "Profil" },
     ];

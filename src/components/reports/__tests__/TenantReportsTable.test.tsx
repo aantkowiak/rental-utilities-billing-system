@@ -39,31 +39,19 @@ describe("TenantReportsTable", () => {
     window.localStorage.clear();
   });
 
-  it("refetches and renders items when month changes", async () => {
-    apiGetMock
-      .mockResolvedValueOnce({ items: [] }) // properties endpoint
-      .mockResolvedValueOnce({
-        items: [buildTenantReportListItem({ report: buildReport({ id: "r-1", month: "2024-02" }) })],
-      })
-      .mockResolvedValueOnce({
-        items: [buildTenantReportListItem({ report: buildReport({ id: "r-2", month: "2024-03" }) })],
-      });
+  it("renders items for tenant with propertyId", async () => {
+    apiGetMock.mockResolvedValueOnce({
+      items: [buildTenantReportListItem({ report: buildReport({ id: "r-1", month: "2024-02" }) })],
+    });
 
-    render(<TenantReportsView initialMonth="2024-02" />);
+    render(<TenantReportsView propertyId="property-1" initialMonth="2024-02" />);
 
-    const monthInput = await screen.findByLabelText(/Miesiąc/i);
-    await waitFor(() => expect(apiGetMock).toHaveBeenCalledWith("/api/v1/reports?month=2024-02"));
+    await waitFor(() => expect(apiGetMock).toHaveBeenCalledWith("/api/v1/reports?propertyId=property-1"));
     expect(await screen.findByRole("link", { name: /luty 2024/i })).toBeInTheDocument();
-
-    fireEvent.change(monthInput, { target: { value: "2024-03" } });
-
-    await waitFor(() => expect(apiGetMock).toHaveBeenCalledWith("/api/v1/reports?month=2024-03"));
-    expect(await screen.findByRole("link", { name: /marzec 2024/i })).toBeInTheDocument();
   });
 
   it("handles generate and resend actions with pending state and success toasts", async () => {
     apiGetMock
-      .mockResolvedValueOnce({ items: [] }) // properties endpoint
       .mockResolvedValueOnce({
         items: [
           buildTenantReportListItem({
@@ -101,7 +89,7 @@ describe("TenantReportsTable", () => {
 
     apiPostMock.mockResolvedValue({ ok: true });
 
-    render(<TenantReportsView initialMonth="2024-02" />);
+    render(<TenantReportsView propertyId="property-1" initialMonth="2024-02" />);
 
     const generateButton = await screen.findByRole("button", { name: /Generuj/i });
     const resendButton = screen.getByRole("button", { name: /Wyślij ponownie/i });
@@ -127,23 +115,21 @@ describe("TenantReportsTable", () => {
   });
 
   it("displays disabled reasons on action buttons", async () => {
-    apiGetMock
-      .mockResolvedValueOnce({ items: [] }) // properties endpoint
-      .mockResolvedValueOnce({
-        items: [
-          buildTenantReportListItem({
-            report: buildReport({ id: "report-1" }),
-            permissions: {
-              canGenerate: false,
-              generateDisabledReason: "Brak danych wejściowych",
-              canSendEmail: false,
-              sendEmailDisabledReason: "Raport nie został wygenerowany",
-            },
-          }),
-        ],
-      });
+    apiGetMock.mockResolvedValueOnce({
+      items: [
+        buildTenantReportListItem({
+          report: buildReport({ id: "report-1" }),
+          permissions: {
+            canGenerate: false,
+            generateDisabledReason: "Brak danych wejściowych",
+            canSendEmail: false,
+            sendEmailDisabledReason: "Raport nie został wygenerowany",
+          },
+        }),
+      ],
+    });
 
-    render(<TenantReportsView initialMonth="2024-02" />);
+    render(<TenantReportsView propertyId="property-1" initialMonth="2024-02" />);
 
     const generateButton = await screen.findByRole("button", { name: /Generuj/i });
     const resendButton = screen.getByRole("button", { name: /Wyślij ponownie/i });
@@ -155,16 +141,22 @@ describe("TenantReportsTable", () => {
   });
 
   it("renders access error for forbidden response", async () => {
-    apiGetMock
-      .mockResolvedValueOnce({ items: [] }) // properties endpoint
-      .mockRejectedValueOnce({
-        code: "forbidden",
-        message: "Brak dostępu do raportów",
-      });
+    apiGetMock.mockRejectedValueOnce({
+      code: "forbidden",
+      message: "Brak dostępu do raportów",
+    });
 
-    render(<TenantReportsView initialMonth="2024-02" />);
+    render(<TenantReportsView propertyId="property-1" initialMonth="2024-02" />);
 
     expect(await screen.findByText(/Brak dostępu do raportów/i)).toBeInTheDocument();
+  });
+
+  it("displays warning when no propertyId is provided", async () => {
+    render(<TenantReportsView propertyId={null} />);
+
+    expect(
+      await screen.findByText(/Brak przypisanej nieruchomości. Skontaktuj się z administratorem/i)
+    ).toBeInTheDocument();
   });
 });
 

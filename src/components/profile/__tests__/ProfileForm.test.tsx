@@ -22,41 +22,41 @@ afterEach(() => {
 });
 
 describe("ProfileForm", () => {
-  it("saves display name successfully", async () => {
+  it("saves email successfully", async () => {
     apiGetMock.mockResolvedValueOnce({
       profile: {
-        displayName: "Jan Kowalski",
+        email: "jan.kowalski@example.com",
       },
     });
 
     apiPatchMock.mockResolvedValueOnce({
       profile: {
-        displayName: "Adam Nowak",
+        email: "adam.nowak@example.com",
       },
     });
 
     render(<ProfileForm />);
 
-    const input = await screen.findByLabelText("Nazwa wyświetlana");
-    expect(input).toHaveValue("Jan Kowalski");
+    const input = await screen.findByLabelText("Adres email");
+    expect(input).toHaveValue("jan.kowalski@example.com");
 
-    fireEvent.change(input, { target: { value: "Adam Nowak" } });
+    fireEvent.change(input, { target: { value: "adam.nowak@example.com" } });
     fireEvent.click(screen.getByRole("button", { name: "Zapisz" }));
 
     await waitFor(() =>
       expect(apiPatchMock).toHaveBeenCalledWith("/api/v1/me", {
-        displayName: "Adam Nowak",
+        email: "adam.nowak@example.com",
       })
     );
 
     expect(await screen.findByText("Zapisano profil")).toBeInTheDocument();
-    await waitFor(() => expect(input).toHaveValue("Adam Nowak"));
+    await waitFor(() => expect(input).toHaveValue("adam.nowak@example.com"));
   });
 
   it("shows field error and focuses input on validation error response", async () => {
     apiGetMock.mockResolvedValueOnce({
       profile: {
-        displayName: "Jan Kowalski",
+        email: "jan.kowalski@example.com",
       },
     });
 
@@ -64,63 +64,51 @@ describe("ProfileForm", () => {
       code: "validation_error",
       message: "Validation failed",
       details: {
-        displayName: "Nazwa jest za krótka.",
+        email: "Wprowadź poprawny adres email.",
       },
     });
 
     render(<ProfileForm />);
 
-    const input = await screen.findByLabelText("Nazwa wyświetlana");
-    fireEvent.change(input, { target: { value: "Adam" } });
+    const input = await screen.findByLabelText("Adres email");
+    fireEvent.change(input, { target: { value: "invalid-email" } });
     fireEvent.click(screen.getByRole("button", { name: "Zapisz" }));
 
-    expect(await screen.findByText(/Nazwa jest za krótka\./i)).toBeInTheDocument();
+    expect(await screen.findByText(/Wprowadź poprawny adres email\./i)).toBeInTheDocument();
     await waitFor(() => expect(input).toHaveFocus());
   });
 
-  it("shows inline banner when profile is missing", async () => {
+  it("validates required email field", async () => {
     apiGetMock.mockResolvedValueOnce({
       profile: {
-        displayName: "Jan Kowalski",
+        email: "jan.kowalski@example.com",
       },
-    });
-
-    apiPatchMock.mockRejectedValueOnce({
-      code: "profile_not_found",
-      status: 404,
-      message: "Profil nie został odnaleziony",
     });
 
     render(<ProfileForm />);
 
-    const input = await screen.findByLabelText("Nazwa wyświetlana");
-    fireEvent.change(input, { target: { value: "Adam Nowak" } });
+    const input = await screen.findByLabelText("Adres email");
+    fireEvent.change(input, { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "Zapisz" }));
 
-    expect(await screen.findByText(/Profil nie został odnaleziony/i)).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Zapisz" })).not.toBeDisabled());
+    expect(await screen.findByText(/Wprowadź adres email\./i)).toBeInTheDocument();
+    expect(apiPatchMock).not.toHaveBeenCalled();
   });
 
-  it("shows toast and re-enables button on network error", async () => {
+  it("validates email format", async () => {
     apiGetMock.mockResolvedValueOnce({
       profile: {
-        displayName: "Jan Kowalski",
+        email: "jan.kowalski@example.com",
       },
-    });
-
-    apiPatchMock.mockRejectedValueOnce({
-      code: "network_error",
-      message: "Problemy z siecią",
     });
 
     render(<ProfileForm />);
 
-    const input = await screen.findByLabelText("Nazwa wyświetlana");
-    fireEvent.change(input, { target: { value: "Adam Nowak" } });
-    const submitButton = screen.getByRole("button", { name: "Zapisz" });
-    fireEvent.click(submitButton);
+    const input = await screen.findByLabelText("Adres email");
+    fireEvent.change(input, { target: { value: "not-an-email" } });
+    fireEvent.click(screen.getByRole("button", { name: "Zapisz" }));
 
-    expect(await screen.findByText(/Nie udało się zapisać profilu/i)).toBeInTheDocument();
-    await waitFor(() => expect(submitButton).not.toBeDisabled());
+    expect(await screen.findByText(/Wprowadź poprawny adres email\./i)).toBeInTheDocument();
+    expect(apiPatchMock).not.toHaveBeenCalled();
   });
 });
