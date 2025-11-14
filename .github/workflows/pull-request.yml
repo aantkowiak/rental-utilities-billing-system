@@ -1,0 +1,210 @@
+name: Pull Request CI
+
+on:
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linter
+        run: npm run lint
+
+  unit-test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: [lint]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test -- --coverage
+        env:
+          NODE_ENV: test
+
+      - name: Upload unit test coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-coverage
+          path: coverage/
+          retention-days: 7
+
+  e2e-test:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [lint]
+    environment: integration
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+        if: hashFiles('playwright.config.ts') != ''
+
+      - name: Run E2E tests
+        run: npm run test:e2e -- --coverage
+        if: hashFiles('playwright.config.ts') != ''
+        env:
+          # Add your environment variables from secrets here
+          # Example based on typical Supabase setup:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+
+      - name: Upload E2E test coverage
+        uses: actions/upload-artifact@v4
+        if: always() && hashFiles('playwright.config.ts') != ''
+        with:
+          name: e2e-test-coverage
+          path: coverage-e2e/
+          retention-days: 7
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always() && hashFiles('playwright.config.ts') != ''
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  status-comment:
+    name: Post Status Comment
+    runs-on: ubuntu-latest
+    needs: [lint, unit-test, e2e-test]
+    if: always()
+    permissions:
+      pull-requests: write
+    
+    steps:
+      - name: Download unit test coverage
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: unit-test-coverage
+          path: coverage/
+
+      - name: Download E2E test coverage
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: e2e-test-coverage
+          path: coverage-e2e/
+
+      - name: Prepare status message
+        id: status
+        run: |
+          LINT_STATUS="${{ needs.lint.result }}"
+          UNIT_STATUS="${{ needs.unit-test.result }}"
+          E2E_STATUS="${{ needs.e2e-test.result }}"
+          
+          if [ "$LINT_STATUS" = "success" ] && [ "$UNIT_STATUS" = "success" ] && [ "$E2E_STATUS" = "success" ]; then
+            OVERALL="✅ All checks passed!"
+            EMOJI="🎉"
+          else
+            OVERALL="❌ Some checks failed"
+            EMOJI="⚠️"
+          fi
+          
+          LINT_ICON="❌"
+          [ "$LINT_STATUS" = "success" ] && LINT_ICON="✅"
+          
+          UNIT_ICON="❌"
+          [ "$UNIT_STATUS" = "success" ] && UNIT_ICON="✅"
+          
+          E2E_ICON="❌"
+          [ "$E2E_STATUS" = "success" ] && E2E_ICON="✅"
+          [ "$E2E_STATUS" = "skipped" ] && E2E_ICON="⏭️"
+          
+          cat << EOF > comment.txt
+          ## $EMOJI Pull Request CI Status
+          
+          $OVERALL
+          
+          ### Check Results
+          
+          | Check | Status | Result |
+          |-------|--------|--------|
+          | Lint | $LINT_ICON | \`$LINT_STATUS\` |
+          | Unit Tests | $UNIT_ICON | \`$UNIT_STATUS\` |
+          | E2E Tests | $E2E_ICON | \`$E2E_STATUS\` |
+          
+          ---
+          *Workflow run: [\`${{ github.run_id }}\`](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*
+          EOF
+
+      - name: Post comment to PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const comment = fs.readFileSync('comment.txt', 'utf8');
+            
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('Pull Request CI Status')
+            );
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: comment
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }
+

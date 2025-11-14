@@ -12,5 +12,18 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["./vitest.setup.ts"],
     environmentMatchGlobs: [["src/components/**/__tests__/**", "jsdom"]],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html", "lcov"],
+      exclude: [
+        "node_modules/",
+        "dist/",
+        "e2e/",
+        "**/*.config.{js,ts}",
+        "**/*.d.ts",
+        "**/__tests__/**",
+        "**/tests/**",
+      ],
+    },
   },
 });
