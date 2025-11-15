@@ -81,6 +81,7 @@ function ProfileFormContent(): JSX.Element {
             const property = propertiesResponse.items.find((p) => p.id === response.profile.propertyId);
             setPropertyLabel(property?.label ?? null);
           } catch (error) {
+            // eslint-disable-next-line no-console
             console.error("Failed to load property info:", error);
             setPropertyLabel(null);
           }

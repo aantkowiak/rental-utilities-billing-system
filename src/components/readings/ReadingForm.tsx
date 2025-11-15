@@ -103,6 +103,7 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
       try {
         token = isoDateToYearMonth(iso);
       } catch (error) {
+        // eslint-disable-next-line no-console
         console.error("[ReadingForm] Failed to normalize month token:", error);
         return;
       }

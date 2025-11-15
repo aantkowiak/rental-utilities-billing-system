@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import type { JSX } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 
