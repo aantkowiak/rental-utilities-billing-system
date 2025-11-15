@@ -545,8 +545,7 @@ function MonthlyAdvancesContent(): JSX.Element {
         }
       } finally {
         setPendingById((prev) => {
-          const next = { ...prev };
-          delete next[id];
+          const { [id]: _, ...next } = prev;
           return next;
         });
       }
@@ -610,8 +609,7 @@ function MonthlyAdvancesContent(): JSX.Element {
         }
       } finally {
         setDeletePendingById((prev) => {
-          const next = { ...prev };
-          delete next[id];
+          const { [id]: _, ...next } = prev;
           return next;
         });
       }

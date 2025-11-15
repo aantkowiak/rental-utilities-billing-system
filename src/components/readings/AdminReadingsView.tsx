@@ -424,8 +424,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
         }
       } finally {
         setDeletePendingById((prev) => {
-          const next = { ...prev };
-          delete next[reading.id];
+          const { [reading.id]: _, ...next } = prev;
           return next;
         });
       }
