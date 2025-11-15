@@ -18,10 +18,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: 'npm'
 
       - name: Configure npm
-        run: npm config set registry https://registry.npmjs.org/
+        run: |
+          rm -f ~/.npmrc
+          npm config delete registry --location=global || true
+          npm config set registry https://registry.npmjs.org/
+          npm cache clean --force
 
       - name: Install dependencies
         run: npm ci
@@ -42,10 +45,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: 'npm'
 
       - name: Configure npm
-        run: npm config set registry https://registry.npmjs.org/
+        run: |
+          rm -f ~/.npmrc
+          npm config delete registry --location=global || true
+          npm config set registry https://registry.npmjs.org/
+          npm cache clean --force
 
       - name: Install dependencies
         run: npm ci
@@ -77,10 +83,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: 'npm'
 
       - name: Configure npm
-        run: npm config set registry https://registry.npmjs.org/
+        run: |
+          rm -f ~/.npmrc
+          npm config delete registry --location=global || true
+          npm config set registry https://registry.npmjs.org/
+          npm cache clean --force
 
       - name: Install dependencies
         run: npm ci
