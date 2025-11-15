@@ -78,6 +78,8 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
   const [serverError, setServerError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [loading, setLoading] = useState(false);
   const [currentReading, setCurrentReading] = useState<ReadingDTO | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
