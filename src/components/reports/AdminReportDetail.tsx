@@ -73,7 +73,6 @@ function shouldRefetchAfterAction(error: ApiError): boolean {
 
 function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Element {
   const [report, setReport] = useState<ReportDTO | null>(null);
-  const [lineItems, setLineItems] = useState<ReportLineItem[]>([]);
   const [lastEmailAttempt, setLastEmailAttempt] = useState<ReportEmailAttemptDTO | null>(null);
   const [permissions, setPermissions] = useState<AdminReportPermissions | null>(null);
   const [loading, setLoading] = useState(false);
@@ -85,7 +84,6 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
     if (!reportId) {
       setFetchError("Brak identyfikatora raportu.");
       setReport(null);
-      setLineItems([]);
       setLastEmailAttempt(null);
       setPermissions(null);
       return;
@@ -99,14 +97,12 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
     try {
       const response = await apiGet<AdminReportDetailResponse>(`/api/v1/reports/${encodeURIComponent(reportId)}`);
       setReport(response.report);
-      setLineItems(Array.isArray(response.lineItems) ? response.lineItems : []);
       setLastEmailAttempt(response.lastEmailAttempt ?? null);
       setPermissions(response.permissions ?? null);
     } catch (error) {
       const apiError = toApiError(error);
 
       setReport(null);
-      setLineItems([]);
       setLastEmailAttempt(null);
       setPermissions(null);
 
