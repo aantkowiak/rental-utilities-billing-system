@@ -1,5 +1,5 @@
 import type { FormEvent } from "react";
-import { useCallback, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { ToastProvider, useToast } from "@/components/common/ToastProvider";
@@ -8,20 +8,43 @@ import type { ApiError } from "@/lib/client/http";
 import { apiPost } from "@/lib/client/http";
 
 type FormStatus = "idle" | "pending" | "success" | "error";
+type AuthMethod = "magic-link" | "password";
 
 export function LoginForm(): JSX.Element {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authMethod, setAuthMethod] = useState<AuthMethod>("magic-link");
   const [status, setStatus] = useState<FormStatus>("idle");
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const emailFieldId = useId();
+  const passwordFieldId = useId();
   const statusMessageId = useId();
   const emailInputRef = useRef<HTMLInputElement>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
   const { pushToast } = useToast();
 
   const isDisabled = status === "pending";
+
+  // Load saved auth method from localStorage on mount
+  useEffect(() => {
+    const savedMethod = localStorage.getItem("auth-method");
+    if (savedMethod === "password" || savedMethod === "magic-link") {
+      setAuthMethod(savedMethod);
+    }
+  }, []);
+
+  // Save auth method to localStorage when it changes
+  const toggleAuthMethod = useCallback(() => {
+    const newMethod = authMethod === "magic-link" ? "password" : "magic-link";
+    setAuthMethod(newMethod);
+    localStorage.setItem("auth-method", newMethod);
+    setFieldError(null);
+    setApiError(null);
+    setSuccessMessage(null);
+  }, [authMethod]);
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -32,6 +55,8 @@ export function LoginForm(): JSX.Element {
 
       const form = event.currentTarget;
       const emailInput = emailInputRef.current;
+      const passwordInput = passwordInputRef.current;
+      
       if (!emailInput) {
         return;
       }
@@ -40,32 +65,78 @@ export function LoginForm(): JSX.Element {
       setSuccessMessage(null);
       setFieldError(null);
 
-      const trimmed = emailInput.value.trim();
-      emailInput.value = trimmed;
-      setEmail(trimmed);
+      const trimmedEmail = emailInput.value.trim();
+      emailInput.value = trimmedEmail;
+      setEmail(trimmedEmail);
 
+      // Validate email
       emailInput.setCustomValidity("");
-      if (!trimmed) {
+      if (!trimmedEmail) {
         emailInput.setCustomValidity("Podaj adres e-mail.");
       }
 
+      // Validate password if using password method
+      if (authMethod === "password" && passwordInput) {
+        passwordInput.setCustomValidity("");
+        if (!passwordInput.value) {
+          passwordInput.setCustomValidity("Podaj hasło.");
+        }
+      }
+
       if (!form.reportValidity()) {
-        const message = emailInput.validationMessage || "Podaj poprawny adres e-mail.";
+        const message = emailInput.validationMessage || passwordInput?.validationMessage || "Popraw błędy w formularzu.";
         setFieldError(message);
         setStatus("error");
-        emailInput.focus();
-        emailInput.select();
+        
+        if (emailInput.validationMessage) {
+          emailInput.focus();
+          emailInput.select();
+        } else if (passwordInput?.validationMessage) {
+          passwordInput.focus();
+          passwordInput.select();
+        }
         return;
       }
 
       setStatus("pending");
 
       try {
-        await apiPost<{ status: string }>("/api/v1/auth/magic-link", { email: trimmed });
-        setStatus("success");
-        setSuccessMessage("Jeśli konto istnieje, wysłaliśmy link logowania na wskazany adres.");
+        if (authMethod === "magic-link") {
+          // Magic link flow
+          await apiPost<{ status: string }>("/api/v1/auth/magic-link", { email: trimmedEmail });
+          setStatus("success");
+          setSuccessMessage("Jeśli konto istnieje, wysłaliśmy link logowania na wskazany adres.");
+        } else {
+          // Password flow
+          const response = await apiPost<{ 
+            user: { id: string; email: string; displayName: string | null };
+            role: string;
+            propertyId: string | null;
+          }>("/api/v1/auth/sign-in", { 
+            email: trimmedEmail,
+            password: passwordInput?.value || ""
+          });
+          
+          // Redirect to role-based landing page
+          const destination = response.role === "admin" ? "/admin/properties" : "/app/readings/add";
+          window.location.href = destination;
+        }
       } catch (error) {
         const normalized = toApiError(error);
+        
+        if (normalized.status === 401) {
+          setFieldError("Nieprawidłowy email lub hasło.");
+          if (passwordInput) {
+            passwordInput.focus();
+            passwordInput.select();
+          } else {
+            emailInput.focus();
+            emailInput.select();
+          }
+          setStatus("error");
+          return;
+        }
+        
         if (normalized.status === 400 || normalized.status === 422) {
           setFieldError(normalized.message);
           emailInput.focus();
@@ -77,7 +148,7 @@ export function LoginForm(): JSX.Element {
         setApiError(normalized.message);
         setStatus("error");
         pushToast({
-          title: "Nie udało się wysłać linku",
+          title: authMethod === "magic-link" ? "Nie udało się wysłać linku" : "Nie udało się zalogować",
           description: normalized.message,
           variant: "error",
         });
@@ -85,7 +156,7 @@ export function LoginForm(): JSX.Element {
         setStatus((previous) => (previous === "pending" ? "idle" : previous));
       }
     },
-    [pushToast, status]
+    [pushToast, status, authMethod]
   );
 
   const describedById = fieldError ? `${emailFieldId}-error` : `${emailFieldId}-hint`;
@@ -139,15 +210,72 @@ export function LoginForm(): JSX.Element {
           </p>
         ) : (
           <p className="text-sm text-muted-foreground" id={`${emailFieldId}-hint`}>
-            Na ten adres wyślemy wiadomość z linkiem logowania.
+            {authMethod === "magic-link" 
+              ? "Na ten adres wyślemy wiadomość z linkiem logowania."
+              : "Adres e-mail użyty do rejestracji konta."}
           </p>
         )}
       </div>
 
+      {authMethod === "password" && (
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-foreground" htmlFor={passwordFieldId}>
+            Hasło
+          </label>
+          <input
+            ref={passwordInputRef}
+            aria-invalid={fieldError ? true : undefined}
+            autoComplete="current-password"
+            className={buildInputClasses(Boolean(fieldError))}
+            disabled={isDisabled}
+            id={passwordFieldId}
+            name="password"
+            onChange={(event) => {
+              setPassword(event.target.value);
+              passwordInputRef.current?.setCustomValidity("");
+              if (fieldError) {
+                setFieldError(null);
+              }
+              if (apiError) {
+                setApiError(null);
+              }
+              if (status !== "idle" && status !== "pending") {
+                setStatus("idle");
+              }
+            }}
+            placeholder="Wprowadź hasło"
+            required
+            type="password"
+            value={password}
+          />
+          <div className="flex items-center justify-end">
+            <a 
+              className="text-sm text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring/60 rounded-sm px-1" 
+              href="/auth/forgot-password"
+            >
+              Zapomniałeś hasła?
+            </a>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-3">
         <Button className="w-full" disabled={isDisabled} type="submit">
-          {isDisabled ? "Wysyłanie..." : "Wyślij link logowania"}
+          {isDisabled 
+            ? (authMethod === "magic-link" ? "Wysyłanie..." : "Logowanie...")
+            : (authMethod === "magic-link" ? "Wyślij link logowania" : "Zaloguj się")}
         </Button>
+
+        <div className="text-center">
+          <button
+            className="text-sm text-muted-foreground hover:text-foreground transition focus:outline-none focus:ring-2 focus:ring-ring/60 rounded-sm px-2 py-1"
+            disabled={isDisabled}
+            onClick={toggleAuthMethod}
+            type="button"
+          >
+            {authMethod === "magic-link" ? "Zaloguj się hasłem" : "Wyślij link logowania"}
+          </button>
+        </div>
 
         <div aria-live="polite" className="min-h-[1.5rem] text-sm text-emerald-700" id={statusMessageId} role="status">
           {successMessage ? (
@@ -155,6 +283,13 @@ export function LoginForm(): JSX.Element {
               {successMessage}
             </div>
           ) : null}
+        </div>
+
+        <div className="pt-2 text-center text-sm text-muted-foreground">
+          Nie masz konta?{" "}
+          <a className="text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring/60 rounded-sm px-1" href="/auth/register">
+            Zarejestruj się
+          </a>
         </div>
       </div>
     </form>
