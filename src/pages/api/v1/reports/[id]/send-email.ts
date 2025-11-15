@@ -46,7 +46,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
 
     // Check permissions - admin can send any report, tenant can only send their own
     if (userRole !== "admin") {
-      const contracts = report.contracts as any;
+      const contracts = report.contracts as { tenant_user_id: string };
       if (contracts.tenant_user_id !== userId) {
         return new Response(JSON.stringify({ code: "forbidden", message: "Brak dostępu do tego raportu." }), {
           status: 403,

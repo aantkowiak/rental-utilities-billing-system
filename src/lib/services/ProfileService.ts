@@ -107,8 +107,8 @@ export class ProfileService {
   ): Promise<ProfileWithEmail> {
     // Update email in auth.users table directly
     const { data: authData, error: authError } = await supabase
-      .from("auth.users" as any)
-      .update({ email: email })
+      .from("auth.users" as unknown as "profiles")
+      .update({ email: email } as Record<string, unknown>)
       .eq("id", userId)
       .select("id, email")
       .single();
