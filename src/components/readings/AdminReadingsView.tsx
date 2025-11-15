@@ -476,9 +476,14 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
         return;
       }
 
+      // TypeScript doesn't recognize the early return above ensures these are defined
+      if (!filters.propertyId || !readingAtIso) {
+        return;
+      }
+
       const basePayload: CreateReadingCmd = {
         propertyId: filters.propertyId,
-        readingAt: readingAtIso!,
+        readingAt: readingAtIso,
         coldM3: cold,
         hotM3: hot,
         heatingGj: heating,
