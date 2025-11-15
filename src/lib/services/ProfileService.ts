@@ -15,6 +15,7 @@ export interface ProfileListResponse {
  * Service for managing user profile operations.
  * Handles business logic and database interactions for profile updates.
  */
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class
 export class ProfileService {
   /**
    * Gets a single user profile with email.

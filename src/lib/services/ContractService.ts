@@ -21,6 +21,7 @@ export interface ContractListParams {
   filters?: ContractFilters;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class
 export class ContractService {
   static async list(
     supabase: SupabaseClient<Database>,
