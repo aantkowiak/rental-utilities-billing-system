@@ -73,6 +73,7 @@ function shouldRefetchAfterAction(error: ApiError): boolean {
 
 function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Element {
   const [report, setReport] = useState<ReportDTO | null>(null);
+  const [lineItems, setLineItems] = useState<ReportLineItem[]>([]);
   const [lastEmailAttempt, setLastEmailAttempt] = useState<ReportEmailAttemptDTO | null>(null);
   const [permissions, setPermissions] = useState<AdminReportPermissions | null>(null);
   const [loading, setLoading] = useState(false);
