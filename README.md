@@ -166,4 +166,3 @@ Please follow the AI guidelines and coding practices defined in the AI configura
 ## License
 
 MIT
-
