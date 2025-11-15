@@ -72,7 +72,6 @@ function shouldRefetchAfterAction(error: ApiError): boolean {
 
 function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Element {
   const [report, setReport] = useState<ReportDTO | null>(null);
-  const [lineItems, setLineItems] = useState<ReportLineItem[]>([]);
   const [lastEmailAttempt, setLastEmailAttempt] = useState<ReportEmailAttemptDTO | null>(null);
   const [permissions, setPermissions] = useState<AdminReportPermissions | null>(null);
   const [loading, setLoading] = useState(false);
@@ -473,22 +472,23 @@ export function AdminReportDetail(props: AdminReportDetailProps): JSX.Element {
   );
 }
 
-interface AmountItemProps {
-  label: string;
-  value: number | null | undefined;
-  emphasize?: boolean;
-}
+// Utility component for displaying amounts (may be used in future)
+// interface AmountItemProps {
+//   label: string;
+//   value: number | null | undefined;
+//   emphasize?: boolean;
+// }
 
-function AmountItem({ label, value, emphasize }: AmountItemProps): JSX.Element {
-  return (
-    <div className="space-y-1">
-      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className={emphasize ? "text-base font-semibold text-foreground" : "text-sm text-foreground"}>
-        {formatMoney(value)}
-      </dd>
-    </div>
-  );
-}
+// function AmountItem({ label, value, emphasize }: AmountItemProps): JSX.Element {
+//   return (
+//     <div className="space-y-1">
+//       <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
+//       <dd className={emphasize ? "text-base font-semibold text-foreground" : "text-sm text-foreground"}>
+//         {formatMoney(value)}
+//       </dd>
+//     </div>
+//   );
+// }
 
 interface MetadataItemProps {
   label: string;

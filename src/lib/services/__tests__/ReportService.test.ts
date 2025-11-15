@@ -1,40 +1,42 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { ReportService, ReportServiceError } from "../ReportService";
+import { ReportService } from "../ReportService";
 import type { Database } from "@/db/database.types";
-import type { ReadingDTO, ReportDTO } from "@/types";
+import type { ReadingDTO } from "@/types";
 
 type ReportRow = Database["public"]["Tables"]["reports"]["Row"];
 type ReportItemRow = Database["public"]["Tables"]["report_items"]["Row"];
-type ContractRow = Database["public"]["Tables"]["contracts"]["Row"];
-type MonthlyAdvancesRow = Database["public"]["Tables"]["monthly_advances"]["Row"];
 
-const BASE_CONTRACT: ContractRow = {
-  id: "contract-1",
-  property_id: "property-1",
-  tenant_id: "tenant-1",
-  start_date: "2024-01-01",
-  end_date: null,
-  rent_amount_raw: "100000",
-  created_at: "2024-01-01T00:00:00Z",
-  updated_at: "2024-01-01T00:00:00Z",
-};
+// Unused test data - may be used in future tests
+// type ContractRow = Database["public"]["Tables"]["contracts"]["Row"];
+// type MonthlyAdvancesRow = Database["public"]["Tables"]["monthly_advances"]["Row"];
 
-const BASE_MONTHLY_ADVANCES: MonthlyAdvancesRow = {
-  id: "mc-1",
-  property_id: "property-1",
-  month: "2024-05-01",
-  manager_fee: 150.0,
-  price_cold: 6.5,
-  price_hot_heating: 30.0,
-  price_heating: 200.0,
-  forecast_cold: 10.0,
-  forecast_hot: 5.0,
-  forecast_heating: 3.0,
-  advance_payment: 1000.0,
-  created_at: "2024-01-01T00:00:00Z",
-  updated_at: "2024-01-01T00:00:00Z",
-};
+// const BASE_CONTRACT: ContractRow = {
+//   id: "contract-1",
+//   property_id: "property-1",
+//   tenant_id: "tenant-1",
+//   start_date: "2024-01-01",
+//   end_date: null,
+//   rent_amount_raw: "100000",
+//   created_at: "2024-01-01T00:00:00Z",
+//   updated_at: "2024-01-01T00:00:00Z",
+// };
+
+// const BASE_MONTHLY_ADVANCES: MonthlyAdvancesRow = {
+//   id: "mc-1",
+//   property_id: "property-1",
+//   month: "2024-05-01",
+//   manager_fee: 150.0,
+//   price_cold: 6.5,
+//   price_hot_heating: 30.0,
+//   price_heating: 200.0,
+//   forecast_cold: 10.0,
+//   forecast_hot: 5.0,
+//   forecast_heating: 3.0,
+//   advance_payment: 1000.0,
+//   created_at: "2024-01-01T00:00:00Z",
+//   updated_at: "2024-01-01T00:00:00Z",
+// };
 
 const BASE_REPORT: ReportRow = {
   id: "report-1",
@@ -169,6 +171,7 @@ describe("ReportService", () => {
   });
 });
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function toReadingRow(dto: ReadingDTO): Database["public"]["Tables"]["readings"]["Row"] {
   return {
     id: dto.id,

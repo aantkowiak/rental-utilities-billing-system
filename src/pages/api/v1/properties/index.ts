@@ -11,7 +11,7 @@ import { CreatePropertySchema } from "@/lib/validators";
  * Admins see all properties, tenants see only their contracted properties.
  * Requires valid JWT in Authorization header.
  */
-export const GET: APIRoute = async ({ request, locals, url }) => {
+export const GET: APIRoute = async ({ request, locals }) => {
   try {
     const auth = await requireAuth(request, locals);
     if (!auth.success) {

@@ -448,6 +448,7 @@ function createSupabaseForSoftDelete(result: { data: unknown; error: { code?: st
   return { supabase };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function createSupabaseForUpdate(result: {
   data: Database["public"]["Tables"]["readings"]["Row"] | null;
   error: { code?: string; message?: string } | null;

@@ -25,7 +25,7 @@ test.describe("Example E2E Tests", () => {
 });
 
 test.describe("Authenticated User Tests", () => {
-  test.skip("user can view readings", async ({ page }) => {
+  test.skip("user can view readings", async () => {
     // This test is skipped as a template
     // Implement authentication setup in beforeEach or use a fixture
     // Example authentication flow:

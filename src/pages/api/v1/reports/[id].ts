@@ -61,7 +61,6 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
       }
     }
 
-    const monthISO = report.month;
     const propertyId = report.property_id;
 
     // Fetch report items (line items)

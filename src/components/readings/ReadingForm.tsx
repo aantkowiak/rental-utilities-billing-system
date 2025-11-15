@@ -34,11 +34,12 @@ const decimalFormatter = new Intl.NumberFormat("pl-PL", {
   maximumFractionDigits: DECIMAL_PRECISION,
 });
 
-const readingDateFormatter = new Intl.DateTimeFormat("pl-PL", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: TIME_ZONE,
-});
+// Formatter for reading dates if needed in future
+// const readingDateFormatter = new Intl.DateTimeFormat("pl-PL", {
+//   dateStyle: "medium",
+//   timeStyle: "short",
+//   timeZone: TIME_ZONE,
+// });
 
 type DecimalField = "coldM3" | "hotM3" | "heatingGj";
 type FieldName = DecimalField | "readingAt" | "commentText" | "baseForMonth" | "finalForMonth" | "readingType";
@@ -77,7 +78,6 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
   const [serverError, setServerError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [currentReading, setCurrentReading] = useState<ReadingDTO | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -991,9 +991,10 @@ function getPropertyIdFromLocation(): string | null {
   return url.searchParams.get("propertyId");
 }
 
-function isAnchoredReading(reading: ReadingDTO): boolean {
-  return Boolean(reading.effectiveMonth);
-}
+// Helper function to check if reading is anchored (may be used in future)
+// function isAnchoredReading(reading: ReadingDTO): boolean {
+//   return Boolean(reading.effectiveMonth);
+// }
 
 function toFormReadingType(readingType: ReadingDTO["readingType"] | null | undefined): ReadingType {
   if (!readingType) {

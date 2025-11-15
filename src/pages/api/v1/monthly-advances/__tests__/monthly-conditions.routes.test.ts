@@ -25,7 +25,7 @@ vi.mock("@/lib/services/MonthlyAdvanceService", async () => {
   };
 });
 
-const { listMock, createMock, getByIdMock, updateMock, deleteMock } = serviceMocks;
+const { listMock, createMock, updateMock, deleteMock } = serviceMocks;
 
 describe("Monthly advances API routes", () => {
   beforeEach(() => {
@@ -69,7 +69,7 @@ describe("Monthly advances API routes", () => {
     } as Parameters<typeof GET>[0]);
 
     expect(response.status).toBe(200);
-    const payload = await response.json();
+    await response.json(); // Validate response format
     expect(listMock).toHaveBeenCalledWith(
       expect.anything(),
       {
