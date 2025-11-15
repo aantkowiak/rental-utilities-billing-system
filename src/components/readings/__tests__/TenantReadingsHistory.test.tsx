@@ -24,9 +24,7 @@ describe("TenantReadingsHistory", () => {
   it("displays warning when no propertyId is provided", () => {
     render(<TenantReadingsHistory propertyId={null} />);
 
-    expect(
-      screen.getByText(/Brak przypisanej nieruchomości. Skontaktuj się z administratorem/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Brak przypisanej nieruchomości. Skontaktuj się z administratorem/i)).toBeInTheDocument();
   });
 
   it("loads and displays readings for tenant", async () => {
@@ -59,7 +57,7 @@ describe("TenantReadingsHistory", () => {
     expect(screen.getByText(/525,25/i)).toBeInTheDocument();
     expect(screen.getByText(/305,75/i)).toBeInTheDocument();
     expect(screen.getByText(/Regularny/i)).toBeInTheDocument();
-    
+
     // Check for baseline reading type badge (not header)
     const badges = screen.getAllByText(/Bazowy/i);
     const baselineBadge = badges.find((el) => el.tagName === "SPAN" && el.className.includes("border-amber"));
@@ -111,4 +109,3 @@ function buildReading(overrides: Partial<ReadingDTO>): ReadingDTO {
     updatedAt: overrides.updatedAt ?? "2024-02-25T10:00:00Z",
   };
 }
-

@@ -15,15 +15,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html", "lcov"],
-      exclude: [
-        "node_modules/",
-        "dist/",
-        "e2e/",
-        "**/*.config.{js,ts}",
-        "**/*.d.ts",
-        "**/__tests__/**",
-        "**/tests/**",
-      ],
+      exclude: ["node_modules/", "dist/", "e2e/", "**/*.config.{js,ts}", "**/*.d.ts", "**/__tests__/**", "**/tests/**"],
     },
   },
 });

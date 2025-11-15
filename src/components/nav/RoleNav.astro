@@ -8,20 +8,21 @@ interface Props {
 
 const { role, currentPath } = Astro.props;
 
-const links = role === "admin"
-  ? [
-      { href: "/admin/properties", label: "Nieruchomości" },
-      { href: "/admin/contracts", label: "Umowy" },
-      { href: "/admin/monthly-advances", label: "Zaliczki miesięczne" },
-      { href: "/admin/readings", label: "Odczyty" },
-      { href: "/admin/reports", label: "Raporty" },
-      { href: "/admin/profile", label: "Profil" },
-    ]
-  : [
-      { href: "/app/readings/add", label: "Dodaj odczyt" },
-      { href: "/app/readings/history", label: "Archiwalne odczyty" },
-      { href: "/app/profile", label: "Profil" },
-    ];
+const links =
+  role === "admin"
+    ? [
+        { href: "/admin/properties", label: "Nieruchomości" },
+        { href: "/admin/contracts", label: "Umowy" },
+        { href: "/admin/monthly-advances", label: "Zaliczki miesięczne" },
+        { href: "/admin/readings", label: "Odczyty" },
+        { href: "/admin/reports", label: "Raporty" },
+        { href: "/admin/profile", label: "Profil" },
+      ]
+    : [
+        { href: "/app/readings/add", label: "Dodaj odczyt" },
+        { href: "/app/readings/history", label: "Archiwalne odczyty" },
+        { href: "/app/profile", label: "Profil" },
+      ];
 ---
 
 <nav aria-label="Nawigacja główna">
@@ -49,4 +50,3 @@ const links = role === "admin"
     }
   </ul>
 </nav>
-

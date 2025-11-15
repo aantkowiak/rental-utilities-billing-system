@@ -206,4 +206,3 @@ function formatMonth(isoDate: string): string {
     return isoDate;
   }
 }
-

@@ -12,7 +12,7 @@ interface ProfileResponse {
 }
 
 interface PropertiesResponse {
-  items: Array<{ id: string; label: string }>;
+  items: { id: string; label: string }[];
 }
 
 function toApiError(error: unknown): ApiError {
@@ -163,7 +163,8 @@ function ProfileFormContent(): JSX.Element {
         const apiError = toApiError(error);
 
         if (apiError.code === "validation_error") {
-          const validationMessage = extractFieldError(apiError.details, "email") ?? "Wprowadzone dane są nieprawidłowe.";
+          const validationMessage =
+            extractFieldError(apiError.details, "email") ?? "Wprowadzone dane są nieprawidłowe.";
           setFieldError(validationMessage);
           return;
         }
@@ -229,7 +230,9 @@ function ProfileFormContent(): JSX.Element {
               disabled={pending}
               required
               aria-invalid={fieldError ? "true" : undefined}
-              aria-describedby={fieldError ? "profile-email-error profile-email-description" : "profile-email-description"}
+              aria-describedby={
+                fieldError ? "profile-email-error profile-email-description" : "profile-email-description"
+              }
               autoComplete="email"
             />
             {fieldError ? (
