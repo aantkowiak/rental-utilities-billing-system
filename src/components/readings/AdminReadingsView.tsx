@@ -424,6 +424,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
         }
       } finally {
         setDeletePendingById((prev) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { [reading.id]: _removed, ...next } = prev;
           return next;
         });

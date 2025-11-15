@@ -566,6 +566,7 @@ function AdminContractsContent(): JSX.Element {
           if (!prev[contract.id]) {
             return prev;
           }
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { [contract.id]: _removed, ...next } = prev;
           return next;
         });
@@ -603,6 +604,7 @@ function AdminContractsContent(): JSX.Element {
           if (!prev[contract.id]) {
             return prev;
           }
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { [contract.id]: _removed, ...next } = prev;
           return next;
         });

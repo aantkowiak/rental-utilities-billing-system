@@ -37,12 +37,13 @@ interface AdminReportDetailProps {
 
 type ActionKind = "regenerate" | "resend" | "toggle";
 
-const currencyFormatter = new Intl.NumberFormat("pl-PL", {
-  currency: "PLN",
-  style: "currency",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+// Unused for now - used by commented formatMoney function
+// const currencyFormatter = new Intl.NumberFormat("pl-PL", {
+//   currency: "PLN",
+//   style: "currency",
+//   minimumFractionDigits: 2,
+//   maximumFractionDigits: 2,
+// });
 
 const dateTimeFormatter = new Intl.DateTimeFormat("pl-PL", {
   dateStyle: "medium",

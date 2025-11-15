@@ -375,6 +375,7 @@ const AdminReportsContent = memo(function AdminReportsContentComponent(): JSX.El
         }
       } finally {
         setSendPendingById((prev) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
           const { [reportId]: _removed, ...next } = prev;
           return next;
         });
