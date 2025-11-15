@@ -28,7 +28,9 @@ const buildHardcodedAuth = (): { user: User; role: UserRole; propertyId: string 
   const userId = import.meta.env.TEST_AUTH_USER_ID ?? DEFAULT_TEST_USER_ID;
   const rawRole = import.meta.env.TEST_AUTH_ROLE;
   const role: UserRole = rawRole === "tenant" || rawRole === "admin" ? rawRole : DEFAULT_TEST_ROLE;
-  const propertyId = import.meta.env.TEST_AUTH_PROPERTY_ID ?? DEFAULT_TEST_PROPERTY_ID;
+
+  // Admins should not be scoped to a specific property
+  const propertyId = role === "admin" ? null : (import.meta.env.TEST_AUTH_PROPERTY_ID ?? DEFAULT_TEST_PROPERTY_ID);
 
   const user = {
     id: userId,

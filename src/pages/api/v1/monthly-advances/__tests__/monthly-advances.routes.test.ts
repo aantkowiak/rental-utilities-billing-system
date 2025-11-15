@@ -6,6 +6,7 @@ const serviceMocks = vi.hoisted(() => ({
   getByIdMock: vi.fn(),
   updateMock: vi.fn(),
   deleteMock: vi.fn(),
+  recomputeAllMock: vi.fn(),
 }));
 
 vi.mock("@/lib/services/MonthlyAdvanceService", async () => {
@@ -25,7 +26,19 @@ vi.mock("@/lib/services/MonthlyAdvanceService", async () => {
   };
 });
 
-const { listMock, createMock, updateMock, deleteMock } = serviceMocks;
+vi.mock("@/lib/services/ReportService", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/services/ReportService")>("@/lib/services/ReportService");
+
+  return {
+    ...actual,
+    ReportService: {
+      ...actual.ReportService,
+      recomputeAll: serviceMocks.recomputeAllMock,
+    },
+  };
+});
+
+const { listMock, createMock, updateMock, deleteMock, recomputeAllMock } = serviceMocks;
 
 describe("Monthly advances API routes", () => {
   beforeEach(() => {
@@ -128,6 +141,7 @@ describe("Monthly advances API routes", () => {
 
   it("deletes monthly advances for admin", async () => {
     deleteMock.mockResolvedValue(undefined);
+    recomputeAllMock.mockResolvedValue(undefined);
 
     const { DELETE } = await import("../[id]");
 
