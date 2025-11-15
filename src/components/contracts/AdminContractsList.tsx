@@ -566,7 +566,7 @@ function AdminContractsContent(): JSX.Element {
           if (!prev[contract.id]) {
             return prev;
           }
-          const { [contract.id]: _, ...next } = prev;
+          const { [contract.id]: _removed, ...next } = prev;
           return next;
         });
         return;
@@ -603,7 +603,7 @@ function AdminContractsContent(): JSX.Element {
           if (!prev[contract.id]) {
             return prev;
           }
-          const { [contract.id]: _, ...next } = prev;
+          const { [contract.id]: _removed, ...next } = prev;
           return next;
         });
       }

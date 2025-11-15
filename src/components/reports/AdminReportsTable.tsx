@@ -375,7 +375,7 @@ const AdminReportsContent = memo(function AdminReportsContentComponent(): JSX.El
         }
       } finally {
         setSendPendingById((prev) => {
-          const { [reportId]: _, ...next } = prev;
+          const { [reportId]: _removed, ...next } = prev;
           return next;
         });
       }

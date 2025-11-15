@@ -315,7 +315,7 @@ const ReportActions = memo(function ReportActions({
     onActionAccessError(null);
 
     try {
-      await apiPost<void>(`/api/v1/reports/${encodeURIComponent(report.id)}/regenerate`);
+      await apiPost<Record<string, never>>(`/api/v1/reports/${encodeURIComponent(report.id)}/regenerate`);
       pushToast({
         variant: "success",
         title: "Przeliczanie zaplanowane",
@@ -347,7 +347,7 @@ const ReportActions = memo(function ReportActions({
     onActionAccessError(null);
 
     try {
-      await apiPost<void>(`/api/v1/reports/${encodeURIComponent(report.id)}/send-email`);
+      await apiPost<Record<string, never>>(`/api/v1/reports/${encodeURIComponent(report.id)}/send-email`);
       pushToast({
         variant: "success",
         title: "E-mail wysłany",
@@ -390,7 +390,7 @@ const ReportActions = memo(function ReportActions({
     onActionAccessError(null);
 
     try {
-      await apiPatch<void>(`/api/v1/reports/${encodeURIComponent(report.id)}`, { status: nextStatus });
+      await apiPatch<Record<string, never>>(`/api/v1/reports/${encodeURIComponent(report.id)}`, { status: nextStatus });
       pushToast({
         variant: "success",
         title: nextStatus === "realized" ? "Raport zaksięgowany" : "Raport odblokowany",
@@ -504,13 +504,13 @@ function MetadataItem({ label, value }: MetadataItemProps): JSX.Element {
   );
 }
 
-function formatMoney(raw: number | null | undefined): string {
-  if (typeof raw !== "number" || Number.isNaN(raw)) {
-    return "—";
-  }
-
-  return currencyFormatter.format(raw / 100);
-}
+// Utility function for formatting money (may be used in future)
+// function formatMoney(raw: number | null | undefined): string {
+//   if (typeof raw !== "number" || Number.isNaN(raw)) {
+//     return "—";
+//   }
+//   return currencyFormatter.format(raw / 100);
+// }
 
 function formatMonth(month: string): string {
   if (!month) {

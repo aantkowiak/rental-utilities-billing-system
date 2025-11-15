@@ -374,7 +374,7 @@ function AdminPropertiesContent(): JSX.Element {
           if (!prev[property.id]) {
             return prev;
           }
-          const { [property.id]: _, ...next } = prev;
+          const { [property.id]: _removed, ...next } = prev;
           return next;
         });
         return;
@@ -415,7 +415,7 @@ function AdminPropertiesContent(): JSX.Element {
           if (!prev[property.id]) {
             return prev;
           }
-          const { [property.id]: _, ...next } = prev;
+          const { [property.id]: _removed, ...next } = prev;
           return next;
         });
       }

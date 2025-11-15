@@ -204,7 +204,7 @@ function ProfileFormContent(): JSX.Element {
 
           {propertyLabel ? (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Nieruchomość</label>
+              <div className="text-sm font-medium text-foreground">Nieruchomość</div>
               <p className="rounded-md border border-input bg-muted px-3 py-2 text-sm text-foreground">
                 {propertyLabel}
               </p>

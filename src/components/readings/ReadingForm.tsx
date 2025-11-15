@@ -25,7 +25,7 @@ import {
   yearMonthToDate,
 } from "@/lib/date/month";
 
-const TIME_ZONE = "Europe/Warsaw";
+// const TIME_ZONE = "Europe/Warsaw"; // Unused for now
 const DECIMAL_PRECISION = 3;
 const MS_IN_DAY = 86_400_000;
 
