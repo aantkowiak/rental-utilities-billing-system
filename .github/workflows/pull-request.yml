@@ -20,6 +20,11 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
+      - name: Configure npm
+        run: |
+          npm config set registry https://registry.npmjs.org/
+          npm config set always-auth false
+
       - name: Install dependencies
         run: npm ci
 
@@ -40,6 +45,11 @@ jobs:
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
+
+      - name: Configure npm
+        run: |
+          npm config set registry https://registry.npmjs.org/
+          npm config set always-auth false
 
       - name: Install dependencies
         run: npm ci
@@ -72,6 +82,11 @@ jobs:
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
+
+      - name: Configure npm
+        run: |
+          npm config set registry https://registry.npmjs.org/
+          npm config set always-auth false
 
       - name: Install dependencies
         run: npm ci
