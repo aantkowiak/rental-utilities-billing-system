@@ -99,7 +99,7 @@ jobs:
         if: hashFiles('playwright.config.ts') != ''
 
       - name: Run E2E tests
-        run: npm run test:e2e -- --coverage
+        run: npm run test:e2e
         if: hashFiles('playwright.config.ts') != ''
         env:
           # Add your environment variables from secrets here
