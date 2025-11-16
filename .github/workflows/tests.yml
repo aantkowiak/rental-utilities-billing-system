@@ -173,13 +173,7 @@ jobs:
           npm run build
           echo ""
           echo "✅ Build completed"
-        env:
-          # Explicitly pass env vars to build step
-          SUPABASE_URL: ${{ env.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ env.SUPABASE_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
-          PUBLIC_SUPABASE_URL: ${{ env.PUBLIC_SUPABASE_URL }}
-          PUBLIC_SUPABASE_ANON_KEY: ${{ env.PUBLIC_SUPABASE_ANON_KEY }}
+        # Note: Job-level env vars are automatically inherited
 
       - name: Inspect built files
         run: |
@@ -227,11 +221,11 @@ jobs:
           
           # Create runtime .env file as backup
           cat > .env.production << EOF
-          SUPABASE_URL=${{ env.SUPABASE_URL }}
-          SUPABASE_KEY=${{ env.SUPABASE_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY=${{ env.SUPABASE_SERVICE_ROLE_KEY }}
-          PUBLIC_SUPABASE_URL=${{ env.PUBLIC_SUPABASE_URL }}
-          PUBLIC_SUPABASE_ANON_KEY=${{ env.PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_URL=${SUPABASE_URL}
+          SUPABASE_KEY=${SUPABASE_KEY}
+          SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+          PUBLIC_SUPABASE_URL=${PUBLIC_SUPABASE_URL}
+          PUBLIC_SUPABASE_ANON_KEY=${PUBLIC_SUPABASE_ANON_KEY}
           EOF
           echo "✅ Created .env.production file"
           
@@ -250,14 +244,7 @@ jobs:
 
       - name: Run E2E tests
         run: npm run test:e2e
-        env:
-          # Ensure env vars are available to the test process and preview server
-          SUPABASE_URL: ${{ env.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ env.SUPABASE_KEY }}
-          SUPABASE_ANON_KEY: ${{ env.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
-          PUBLIC_SUPABASE_URL: ${{ env.PUBLIC_SUPABASE_URL }}
-          PUBLIC_SUPABASE_ANON_KEY: ${{ env.PUBLIC_SUPABASE_ANON_KEY }}
+        # Note: Job-level env vars are automatically inherited by all steps
 
       - name: Stop Supabase
         if: always()
