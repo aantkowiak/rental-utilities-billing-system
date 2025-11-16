@@ -96,6 +96,15 @@ jobs:
       - name: Start Supabase local instance
         run: supabase start
 
+      - name: Seed CI test data
+        run: |
+          echo "================================================"
+          echo "Running CI-specific seed data..."
+          echo "================================================"
+          docker exec -i supabase_db_rental-utilities-billing-system psql -U postgres -d postgres < supabase/seed-ci.sql
+          echo "✅ CI seed data loaded"
+          echo "================================================"
+
       - name: Wait for Supabase to be ready
         run: |
           echo "Waiting for Supabase to be ready..."
