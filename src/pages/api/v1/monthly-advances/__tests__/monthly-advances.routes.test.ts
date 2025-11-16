@@ -179,6 +179,7 @@ function createLocals() {
       user: {
         id: userId,
         email: "test@example.com",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any,
       role,
       propertyId,

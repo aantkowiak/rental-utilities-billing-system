@@ -12,7 +12,7 @@ export const prerender = false;
  * Sign in with email and password.
  * Returns user data, role, and propertyId on success.
  */
-export const POST: APIRoute = async ({ request, locals, cookies }) => {
+export const POST: APIRoute = async ({ request, cookies }) => {
   try {
     // Parse request body
     let body: unknown;
@@ -85,4 +85,3 @@ export const POST: APIRoute = async ({ request, locals, cookies }) => {
     return errorResponse(500, "internal_error", "Wystąpił nieoczekiwany błąd");
   }
 };
-

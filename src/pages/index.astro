@@ -4,7 +4,7 @@ import Layout from "../layouts/Layout.astro";
 // Check authentication and redirect based on role
 if (Astro.locals.auth) {
   const { role } = Astro.locals.auth;
-  
+
   if (role === "admin") {
     return Astro.redirect("/admin/properties");
   } else {

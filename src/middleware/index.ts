@@ -1,6 +1,6 @@
 import { defineMiddleware } from "astro:middleware";
 
-import { createSupabaseAdminClient, createSupabaseServerClient } from "../db/supabase.server.ts";
+import { createSupabaseServerClient } from "../db/supabase.server.ts";
 import { errorResponse } from "../lib/errors.ts";
 
 const TASK_RATE_LIMIT_WINDOW_MS = 60_000;
@@ -82,7 +82,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // Check if route is protected
   if (isProtectedRoute(url.pathname)) {
     // Validate session using the authenticated client
-    const { data: { user }, error } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
 
     if (error || !user) {
       // Not authenticated - redirect to login

@@ -62,10 +62,7 @@ export function RegistrationForm(): JSX.Element {
       }
 
       if (!form.reportValidity()) {
-        const message =
-          emailInput.validationMessage ||
-          passwordInput.validationMessage ||
-          "Popraw błędy w formularzu.";
+        const message = emailInput.validationMessage || passwordInput.validationMessage || "Popraw błędy w formularzu.";
         setFieldError(message);
         setStatus("error");
 
@@ -155,8 +152,8 @@ export function RegistrationForm(): JSX.Element {
             <div className="flex-1">
               <p className="text-sm font-medium text-foreground">Rejestracja zakończona!</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Sprawdź swoją skrzynkę pocztową (<strong>{email}</strong>) i kliknij w link
-                potwierdzający, aby aktywować konto.
+                Sprawdź swoją skrzynkę pocztową (<strong>{email}</strong>) i kliknij w link potwierdzający, aby
+                aktywować konto.
               </p>
               <p className="text-sm text-muted-foreground mt-2">
                 Po potwierdzeniu adresu email będziesz mógł się zalogować do systemu.

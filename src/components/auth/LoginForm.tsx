@@ -34,7 +34,7 @@ export function LoginForm(): JSX.Element {
       const form = event.currentTarget;
       const emailInput = emailInputRef.current;
       const passwordInput = passwordInputRef.current;
-      
+
       if (!emailInput || !passwordInput) {
         return;
       }
@@ -62,7 +62,7 @@ export function LoginForm(): JSX.Element {
         const message = emailInput.validationMessage || passwordInput.validationMessage || "Popraw błędy w formularzu.";
         setFieldError(message);
         setStatus("error");
-        
+
         if (emailInput.validationMessage) {
           emailInput.focus();
           emailInput.select();
@@ -77,21 +77,21 @@ export function LoginForm(): JSX.Element {
 
       try {
         // Password sign-in flow
-        const response = await apiPost<{ 
+        const response = await apiPost<{
           user: { id: string; email: string; displayName: string | null };
           role: string;
           propertyId: string | null;
-        }>("/api/v1/auth/sign-in", { 
+        }>("/api/v1/auth/sign-in", {
           email: trimmedEmail,
-          password: passwordInput.value
+          password: passwordInput.value,
         });
-        
+
         // Redirect to role-based landing page
         const destination = response.role === "admin" ? "/admin/properties" : "/app/readings/add";
         window.location.href = destination;
       } catch (error) {
         const normalized = toApiError(error);
-        
+
         if (normalized.status === 401) {
           setFieldError("Nieprawidłowy email lub hasło.");
           if (passwordInput) {
@@ -104,7 +104,7 @@ export function LoginForm(): JSX.Element {
           setStatus("error");
           return;
         }
-        
+
         if (normalized.status === 400 || normalized.status === 422) {
           setFieldError(normalized.message);
           emailInput.focus();
@@ -211,8 +211,8 @@ export function LoginForm(): JSX.Element {
           value={password}
         />
         <div className="flex items-center justify-end">
-          <a 
-            className="text-sm text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring/60 rounded-sm px-1" 
+          <a
+            className="text-sm text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring/60 rounded-sm px-1"
             href="/auth/forgot-password"
           >
             Zapomniałeś hasła?
@@ -227,7 +227,10 @@ export function LoginForm(): JSX.Element {
 
         <div className="pt-2 text-center text-sm text-muted-foreground">
           Nie masz konta?{" "}
-          <a className="text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring/60 rounded-sm px-1" href="/auth/register">
+          <a
+            className="text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring/60 rounded-sm px-1"
+            href="/auth/register"
+          >
             Zarejestruj się
           </a>
         </div>

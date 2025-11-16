@@ -30,7 +30,7 @@ function validatePassword(password: string): PasswordValidation {
 
 function calculatePasswordStrength(validation: PasswordValidation): PasswordStrength {
   const score = Object.values(validation).filter(Boolean).length;
-  
+
   if (score < 3) return "weak";
   if (score < 5) return "medium";
   return "strong";
@@ -61,7 +61,7 @@ export function ResetPasswordForm(): JSX.Element {
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
     const accessToken = hashParams.get("access_token");
     const type = hashParams.get("type");
-    
+
     if (accessToken && type === "recovery") {
       setToken(accessToken);
     } else {
@@ -73,16 +73,16 @@ export function ResetPasswordForm(): JSX.Element {
   // Countdown and redirect after successful password reset
   useEffect(() => {
     if (redirectCountdown === null) return;
-    
+
     if (redirectCountdown === 0) {
       window.location.href = "/auth/login";
       return;
     }
-    
+
     const timer = setTimeout(() => {
       setRedirectCountdown(redirectCountdown - 1);
     }, 1000);
-    
+
     return () => clearTimeout(timer);
   }, [redirectCountdown]);
 
@@ -96,7 +96,7 @@ export function ResetPasswordForm(): JSX.Element {
       const form = event.currentTarget;
       const passwordInput = passwordInputRef.current;
       const passwordConfirmInput = passwordConfirmInputRef.current;
-      
+
       if (!passwordInput || !passwordConfirmInput) {
         return;
       }
@@ -132,7 +132,7 @@ export function ResetPasswordForm(): JSX.Element {
       if (!form.reportValidity() || Object.keys(newFieldErrors).length > 0) {
         setFieldErrors(newFieldErrors);
         setStatus("error");
-        
+
         if (newFieldErrors.password) {
           passwordInput.focus();
           passwordInput.select();
@@ -146,14 +146,14 @@ export function ResetPasswordForm(): JSX.Element {
       setStatus("pending");
 
       try {
-        await apiPost<{ status: string }>("/api/v1/auth/reset-password", { 
+        await apiPost<{ status: string }>("/api/v1/auth/reset-password", {
           token,
-          password 
+          password,
         });
-        
+
         setStatus("success");
         setRedirectCountdown(3);
-        
+
         pushToast({
           title: "Hasło zostało zmienione",
           description: "Możesz się teraz zalogować nowym hasłem.",
@@ -161,7 +161,7 @@ export function ResetPasswordForm(): JSX.Element {
         });
       } catch (error) {
         const normalized = toApiError(error);
-        
+
         if (normalized.status === 400) {
           setApiError("Link resetowania hasła wygasł lub jest nieprawidłowy. Poproś o nowy link.");
         } else if (normalized.status === 422) {
@@ -171,7 +171,7 @@ export function ResetPasswordForm(): JSX.Element {
         } else {
           setApiError(normalized.message);
         }
-        
+
         setStatus("error");
         pushToast({
           title: "Nie udało się zresetować hasła",
@@ -200,9 +200,7 @@ export function ResetPasswordForm(): JSX.Element {
             className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm"
             role="status"
           >
-            <p className="font-medium text-emerald-800">
-              Hasło zostało zmienione pomyślnie!
-            </p>
+            <p className="font-medium text-emerald-800">Hasło zostało zmienione pomyślnie!</p>
             <p className="mt-2 text-emerald-700">
               Za {redirectCountdown} sekundy zostaniesz przekierowany do strony logowania.
             </p>
@@ -251,9 +249,7 @@ export function ResetPasswordForm(): JSX.Element {
               </p>
             ) : (
               <div className="space-y-2" id={`${passwordFieldId}-hint`}>
-                <p className="text-sm text-muted-foreground">
-                  Hasło musi spełniać następujące wymagania:
-                </p>
+                <p className="text-sm text-muted-foreground">Hasło musi spełniać następujące wymagania:</p>
                 <ul className="space-y-1 text-xs">
                   <li className={validation.hasMinLength ? "text-emerald-600" : "text-muted-foreground"}>
                     {validation.hasMinLength ? "✓" : "○"} Co najmniej 8 znaków
@@ -273,7 +269,7 @@ export function ResetPasswordForm(): JSX.Element {
                 </ul>
               </div>
             )}
-            
+
             {password && (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Siła hasła:</span>
@@ -283,8 +279,8 @@ export function ResetPasswordForm(): JSX.Element {
                       strength === "weak"
                         ? "w-1/3 bg-destructive"
                         : strength === "medium"
-                        ? "w-2/3 bg-amber-500"
-                        : "w-full bg-emerald-500"
+                          ? "w-2/3 bg-amber-500"
+                          : "w-full bg-emerald-500"
                     }`}
                   />
                 </div>
@@ -293,8 +289,8 @@ export function ResetPasswordForm(): JSX.Element {
                     strength === "weak"
                       ? "text-destructive"
                       : strength === "medium"
-                      ? "text-amber-600"
-                      : "text-emerald-600"
+                        ? "text-amber-600"
+                        : "text-emerald-600"
                   }`}
                 >
                   {strength === "weak" ? "Słabe" : strength === "medium" ? "Średnie" : "Silne"}
@@ -388,4 +384,3 @@ function buildInputClasses(hasError: boolean): string {
     hasError ? "border-destructive focus-visible:ring-destructive/40" : "border-input",
   ].join(" ");
 }
-

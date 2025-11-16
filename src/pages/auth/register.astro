@@ -5,7 +5,7 @@ import { RegistrationView } from "@/components/auth/RegistrationForm";
 // If already authenticated, redirect to appropriate landing page
 if (Astro.locals.auth) {
   const { role } = Astro.locals.auth;
-  
+
   if (role === "admin") {
     return Astro.redirect("/admin/properties");
   } else {
@@ -35,9 +35,7 @@ const pageTitle = "Rejestracja";
         <div class="space-y-2">
           <p class="text-sm text-muted-foreground">Rejestracja konta</p>
           <h1 class="text-3xl font-semibold tracking-tight">Zarejestruj się</h1>
-          <p class="text-sm text-muted-foreground">
-            Utwórz konto w systemie rozliczeń mediów.
-          </p>
+          <p class="text-sm text-muted-foreground">Utwórz konto w systemie rozliczeń mediów.</p>
         </div>
       </header>
 
@@ -45,4 +43,3 @@ const pageTitle = "Rejestracja";
     </div>
   </main>
 </Layout>
-

@@ -5,7 +5,7 @@ import { LoginView } from "@/components/auth/LoginForm";
 // If already authenticated, redirect to appropriate landing page
 if (Astro.locals.auth) {
   const { role } = Astro.locals.auth;
-  
+
   if (role === "admin") {
     return Astro.redirect("/admin/properties");
   } else {
@@ -35,9 +35,7 @@ const pageTitle = "Logowanie";
         <div class="space-y-2">
           <p class="text-sm text-muted-foreground">Panel logowania</p>
           <h1 class="text-3xl font-semibold tracking-tight">Zaloguj się</h1>
-          <p class="text-sm text-muted-foreground">
-            Wprowadź swój email i hasło, aby się zalogować.
-          </p>
+          <p class="text-sm text-muted-foreground">Wprowadź swój email i hasło, aby się zalogować.</p>
         </div>
       </header>
 

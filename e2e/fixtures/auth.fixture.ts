@@ -1,9 +1,9 @@
 import { test as base } from "@playwright/test";
 import { LoginPage } from "../pages/LoginPage";
 
-type AuthFixtures = {
+interface AuthFixtures {
   loginPage: LoginPage;
-};
+}
 
 /**
  * Custom fixture for authentication-related tests
@@ -12,9 +12,9 @@ type AuthFixtures = {
 export const test = base.extend<AuthFixtures>({
   loginPage: async ({ page }, use) => {
     const loginPage = new LoginPage(page);
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     await use(loginPage);
   },
 });
 
 export { expect } from "@playwright/test";
-

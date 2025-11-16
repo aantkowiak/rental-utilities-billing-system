@@ -17,7 +17,7 @@ export class LoginPage {
     this.passwordInput = page.locator('input[name="password"]');
     this.submitButton = page.locator('button[type="submit"]');
     // More flexible error message locator - finds by text content
-    this.errorMessage = page.locator('text=/Nieprawidłowy|Invalid|error/i').first();
+    this.errorMessage = page.locator("text=/Nieprawidłowy|Invalid|error/i").first();
   }
 
   async goto() {
@@ -38,4 +38,3 @@ export class LoginPage {
     return await this.errorMessage.textContent();
   }
 }
-

@@ -30,4 +30,3 @@ export const POST: APIRoute = async ({ cookies }) => {
     return errorResponse(500, "internal_error", "Wystąpił nieoczekiwany błąd");
   }
 };
-

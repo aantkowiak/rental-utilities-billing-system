@@ -11,9 +11,7 @@ export const SignInSchema = z.object({
     .email("Wprowadź poprawny adres email")
     .max(254, "Adres email może mieć maksymalnie 254 znaki")
     .transform((email) => email.toLowerCase()),
-  password: z
-    .string()
-    .min(6, "Hasło musi mieć co najmniej 6 znaków"),
+  password: z.string().min(6, "Hasło musi mieć co najmniej 6 znaków"),
 });
 
 /**
@@ -27,9 +25,7 @@ export const SignUpSchema = z.object({
     .email("Wprowadź poprawny adres email")
     .max(254, "Adres email może mieć maksymalnie 254 znaki")
     .transform((email) => email.toLowerCase()),
-  password: z
-    .string()
-    .min(8, "Hasło musi mieć co najmniej 8 znaków"),
+  password: z.string().min(8, "Hasło musi mieć co najmniej 8 znaków"),
 });
 
 /**

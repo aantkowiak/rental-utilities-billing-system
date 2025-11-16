@@ -11,7 +11,6 @@ import {
   formatYearMonthLabel,
   getAllowedMonths,
   type YearMonth,
-  type AllowedMonth,
 } from "../month";
 
 describe("toYearMonth", () => {
@@ -170,7 +169,7 @@ describe("getCurrentYearMonth", () => {
     const result = getCurrentYearMonth();
     const [year, month] = result.split("-").map(Number);
     const currentYear = new Date().getUTCFullYear();
-    
+
     expect(year).toBeGreaterThanOrEqual(currentYear - 1);
     expect(year).toBeLessThanOrEqual(currentYear + 1);
     expect(month).toBeGreaterThanOrEqual(1);
@@ -370,7 +369,7 @@ describe("getAllowedMonths", () => {
   it("should return months in descending order (newest first)", () => {
     const now = new Date(Date.UTC(2024, 5, 15)); // June 15, 2024
     const result = getAllowedMonths(6, now);
-    
+
     expect(result[0].token).toBe("2024-06");
     expect(result[1].token).toBe("2024-05");
     expect(result[6].token).toBe("2023-12");
@@ -379,7 +378,7 @@ describe("getAllowedMonths", () => {
   it("should return only current month when monthsBack is 0", () => {
     const now = new Date(Date.UTC(2024, 5, 15));
     const result = getAllowedMonths(0, now);
-    
+
     expect(result).toHaveLength(1);
     expect(result[0].token).toBe("2024-06");
   });
@@ -387,11 +386,11 @@ describe("getAllowedMonths", () => {
   it("should return correct structure with token, label, and date", () => {
     const now = new Date(Date.UTC(2024, 5, 15));
     const result = getAllowedMonths(1, now);
-    
+
     expect(result[0]).toHaveProperty("token");
     expect(result[0]).toHaveProperty("label");
     expect(result[0]).toHaveProperty("date");
-    
+
     expect(typeof result[0].token).toBe("string");
     expect(typeof result[0].label).toBe("string");
     expect(result[0].date).toBeInstanceOf(Date);
@@ -400,7 +399,7 @@ describe("getAllowedMonths", () => {
   it("should cross year boundary correctly", () => {
     const now = new Date(Date.UTC(2024, 1, 15)); // February 2024
     const result = getAllowedMonths(3, now);
-    
+
     expect(result).toHaveLength(4);
     expect(result[0].token).toBe("2024-02");
     expect(result[1].token).toBe("2024-01");
@@ -411,7 +410,7 @@ describe("getAllowedMonths", () => {
   it("should format labels in Polish locale", () => {
     const now = new Date(Date.UTC(2024, 5, 15));
     const result = getAllowedMonths(1, now);
-    
+
     expect(result[0].label).toBe("czerwiec 2024");
     expect(result[1].label).toBe("maj 2024");
   });
@@ -419,7 +418,7 @@ describe("getAllowedMonths", () => {
   it("should create dates at first day of month in UTC", () => {
     const now = new Date(Date.UTC(2024, 5, 15));
     const result = getAllowedMonths(2, now);
-    
+
     result.forEach((month) => {
       expect(month.date.getUTCDate()).toBe(1);
       expect(month.date.getUTCHours()).toBe(0);
@@ -452,7 +451,7 @@ describe("getAllowedMonths", () => {
     // Business context: System allows reading historical data up to 6 months
     const now = new Date(Date.UTC(2024, 5, 15));
     const result = getAllowedMonths(6, now);
-    
+
     expect(result).toHaveLength(7); // current + 6 back
     expect(result[0].token).toBe("2024-06"); // Current month
     expect(result[6].token).toBe("2023-12"); // 6 months back
@@ -463,10 +462,10 @@ describe("getAllowedMonths", () => {
     // Even if called mid-month, should return months starting from current
     const midMonth = new Date(Date.UTC(2024, 5, 15));
     const endMonth = new Date(Date.UTC(2024, 5, 30));
-    
+
     const resultMid = getAllowedMonths(2, midMonth);
     const resultEnd = getAllowedMonths(2, endMonth);
-    
+
     expect(resultMid[0].token).toBe(resultEnd[0].token);
     expect(resultMid).toHaveLength(resultEnd.length);
   });
@@ -474,7 +473,7 @@ describe("getAllowedMonths", () => {
   it("should handle January with lookback crossing year", () => {
     const now = new Date(Date.UTC(2024, 0, 15)); // January 2024
     const result = getAllowedMonths(2, now);
-    
+
     expect(result[0].token).toBe("2024-01");
     expect(result[1].token).toBe("2023-12");
     expect(result[2].token).toBe("2023-11");
@@ -486,7 +485,7 @@ describe("Integration tests - round-trip conversions", () => {
     const original = new Date(Date.UTC(2024, 5, 1, 0, 0, 0, 0));
     const yearMonth = toYearMonth(original);
     const converted = yearMonthToDate(yearMonth);
-    
+
     expect(converted.getTime()).toBe(original.getTime());
   });
 
@@ -494,7 +493,7 @@ describe("Integration tests - round-trip conversions", () => {
     const original: YearMonth = "2024-06";
     const iso = yearMonthToISODate(original);
     const converted = isoDateToYearMonth(iso);
-    
+
     expect(converted).toBe(original);
   });
 
@@ -502,7 +501,7 @@ describe("Integration tests - round-trip conversions", () => {
     const base = "2024-06";
     const future = addMonths(base, 3);
     const past = addMonths(base, -3);
-    
+
     expect(compareYearMonths(past, base)).toBeLessThan(0);
     expect(compareYearMonths(base, future)).toBeLessThan(0);
     expect(compareYearMonths(past, future)).toBeLessThan(0);
@@ -511,7 +510,7 @@ describe("Integration tests - round-trip conversions", () => {
   it("should validate that getAllowedMonths returns valid YearMonth tokens", () => {
     const now = new Date(Date.UTC(2024, 5, 15));
     const result = getAllowedMonths(6, now);
-    
+
     result.forEach((month) => {
       expect(isValidYearMonth(month.token)).toBe(true);
     });
@@ -520,7 +519,7 @@ describe("Integration tests - round-trip conversions", () => {
   it("should ensure formatYearMonthLabel works with getAllowedMonths", () => {
     const now = new Date(Date.UTC(2024, 5, 15));
     const result = getAllowedMonths(1, now);
-    
+
     result.forEach((month) => {
       // Label should contain the year as a substring
       expect(month.label).toContain("2024");
@@ -534,11 +533,11 @@ describe("Edge cases and business rules", () => {
   it("should handle leap year February correctly", () => {
     const leapYearFeb = "2024-02";
     const date = yearMonthToDate(leapYearFeb);
-    
+
     // Should be Feb 1, 2024
     expect(date.getUTCMonth()).toBe(1);
     expect(date.getUTCDate()).toBe(1);
-    
+
     // Adding 1 month should go to March
     expect(addMonths(leapYearFeb, 1)).toBe("2024-03");
   });
@@ -546,7 +545,7 @@ describe("Edge cases and business rules", () => {
   it("should handle non-leap year February correctly", () => {
     const nonLeapYearFeb = "2023-02";
     const date = yearMonthToDate(nonLeapYearFeb);
-    
+
     expect(date.getUTCMonth()).toBe(1);
     expect(date.getUTCDate()).toBe(1);
   });
@@ -560,7 +559,7 @@ describe("Edge cases and business rules", () => {
   it("should handle millennium boundary (year 1999-2001)", () => {
     const millBefore = "1999-12";
     const millAfter = "2000-01";
-    
+
     expect(addMonths(millBefore, 1)).toBe(millAfter);
     expect(compareYearMonths(millBefore, millAfter)).toBeLessThan(0);
   });
@@ -569,7 +568,7 @@ describe("Edge cases and business rules", () => {
     // Critical business rule: All dates must be UTC to avoid timezone issues
     const ym = "2024-06";
     const date = yearMonthToDate(ym);
-    
+
     expect(date.getTimezoneOffset).toBeDefined();
     // UTC date should be normalized to midnight
     expect(date.getUTCHours()).toBe(0);
@@ -579,18 +578,17 @@ describe("Edge cases and business rules", () => {
     // Business use case: Display billing history in chronological order
     const months = ["2024-03", "2024-01", "2024-06", "2024-02"];
     const sorted = months.sort(compareYearMonths);
-    
+
     expect(sorted).toEqual(["2024-01", "2024-02", "2024-03", "2024-06"]);
   });
 
   it("should ensure first day of month for all billing operations", () => {
     // Business rule: Billing cycles always start on first day of month
     const months = getAllowedMonths(3, new Date(Date.UTC(2024, 5, 15)));
-    
+
     months.forEach((month) => {
       const iso = yearMonthToISODate(month.token);
       expect(iso.endsWith("-01")).toBe(true);
     });
   });
 });
-

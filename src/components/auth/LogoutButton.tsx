@@ -19,6 +19,7 @@ export function LogoutButton({ className }: LogoutButtonProps): JSX.Element {
       });
 
       if (!response.ok) {
+        // eslint-disable-next-line no-console
         console.error("Logout failed:", response.statusText);
       }
 
@@ -26,6 +27,7 @@ export function LogoutButton({ className }: LogoutButtonProps): JSX.Element {
       window.location.href = "/auth/login";
     } catch (error) {
       // Log error but still redirect
+      // eslint-disable-next-line no-console
       console.error("Logout error:", error);
       window.location.href = "/auth/login";
     }
@@ -37,4 +39,3 @@ export function LogoutButton({ className }: LogoutButtonProps): JSX.Element {
     </Button>
   );
 }
-

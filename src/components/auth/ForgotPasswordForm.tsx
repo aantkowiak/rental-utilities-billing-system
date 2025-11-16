@@ -16,7 +16,6 @@ export function ForgotPasswordForm(): JSX.Element {
   const [apiError, setApiError] = useState<string | null>(null);
 
   const emailFieldId = useId();
-  const statusMessageId = useId();
   const emailInputRef = useRef<HTMLInputElement>(null);
   const { pushToast } = useToast();
 
@@ -63,7 +62,7 @@ export function ForgotPasswordForm(): JSX.Element {
         setStatus("success");
       } catch (error) {
         const normalized = toApiError(error);
-        
+
         if (normalized.status === 400 || normalized.status === 422) {
           setFieldError(normalized.message);
           emailInput.focus();
@@ -209,4 +208,3 @@ function buildInputClasses(hasError: boolean): string {
     hasError ? "border-destructive focus-visible:ring-destructive/40" : "border-input",
   ].join(" ");
 }
-
