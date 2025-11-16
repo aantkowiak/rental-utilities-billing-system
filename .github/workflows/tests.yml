@@ -217,8 +217,13 @@ jobs:
 
       - name: Prepare preview server environment
         run: |
+          echo "================================================"
+          echo "Preparing Preview Server Environment"
+          echo "================================================"
+          
           # Make preview wrapper script executable
           chmod +x scripts/preview-with-env.sh
+          echo "✅ Made preview script executable"
           
           # Create runtime .env file as backup
           cat > .env.production << EOF
@@ -229,7 +234,19 @@ jobs:
           PUBLIC_SUPABASE_ANON_KEY=${{ env.PUBLIC_SUPABASE_ANON_KEY }}
           EOF
           echo "✅ Created .env.production file"
-          echo "✅ Made preview script executable"
+          
+          # Verify the file
+          echo ""
+          echo ".env.production contents (values masked):"
+          cat .env.production | sed 's/=.*/=***/'
+          echo ""
+          
+          # Test if we can manually start preview and reach Supabase
+          echo "Testing manual connectivity before Playwright starts preview..."
+          echo "Current env vars in this shell:"
+          echo "  SUPABASE_URL: $SUPABASE_URL"
+          echo "  SUPABASE_KEY length: ${#SUPABASE_KEY}"
+          echo "================================================"
 
       - name: Run E2E tests
         run: npm run test:e2e
