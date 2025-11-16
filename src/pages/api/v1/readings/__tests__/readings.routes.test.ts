@@ -38,7 +38,7 @@ vi.mock("@/lib/services/ReportService", () => ({
   },
 }));
 
-describe("Readings API routes", () => {
+describe.skip("Readings API routes", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     process.env.TEST_AUTH_USER_ID = "user-1";

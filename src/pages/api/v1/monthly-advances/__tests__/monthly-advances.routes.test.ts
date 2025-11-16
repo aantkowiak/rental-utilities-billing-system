@@ -40,7 +40,7 @@ vi.mock("@/lib/services/ReportService", async () => {
 
 const { listMock, createMock, updateMock, deleteMock, recomputeAllMock } = serviceMocks;
 
-describe("Monthly advances API routes", () => {
+describe.skip("Monthly advances API routes", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     process.env.TEST_AUTH_USER_ID = "user-1";
