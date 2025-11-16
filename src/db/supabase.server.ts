@@ -19,13 +19,13 @@ const resolveEnv = (value: string | undefined, fallback: string, name: string): 
 
 // In SSR mode, also check process.env as fallback for runtime env vars
 const supabaseUrl = resolveEnv(
-  import.meta.env.SUPABASE_URL || process.env.SUPABASE_URL, 
-  "http://127.0.0.1:54321", 
+  import.meta.env.SUPABASE_URL || process.env.SUPABASE_URL,
+  "http://127.0.0.1:54321",
   "SUPABASE_URL"
 );
 const supabaseAnonKey = resolveEnv(
-  import.meta.env.SUPABASE_KEY || process.env.SUPABASE_KEY, 
-  "test-anon-key", 
+  import.meta.env.SUPABASE_KEY || process.env.SUPABASE_KEY,
+  "test-anon-key",
   "SUPABASE_KEY"
 );
 const supabaseServiceRoleKey = resolveEnv(
@@ -37,16 +37,16 @@ const supabaseServiceRoleKey = resolveEnv(
 // Log the resolved values for debugging (only in non-production)
 if (import.meta.env.DEV || process.env.CI) {
   // eslint-disable-next-line no-console
-  console.log('[supabase.server] Configuration:', {
+  console.log("[supabase.server] Configuration:", {
     url: supabaseUrl,
     hasAnonKey: !!supabaseAnonKey && supabaseAnonKey.length > 10,
     hasServiceKey: !!supabaseServiceRoleKey && supabaseServiceRoleKey.length > 10,
     env: {
       importMetaUrl: import.meta.env.SUPABASE_URL,
       processEnvUrl: process.env.SUPABASE_URL,
-      importMetaKey: import.meta.env.SUPABASE_KEY ? 'set' : 'unset',
-      processEnvKey: process.env.SUPABASE_KEY ? 'set' : 'unset',
-    }
+      importMetaKey: import.meta.env.SUPABASE_KEY ? "set" : "unset",
+      processEnvKey: process.env.SUPABASE_KEY ? "set" : "unset",
+    },
   });
 }
 

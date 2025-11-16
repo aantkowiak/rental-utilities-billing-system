@@ -147,21 +147,65 @@ jobs:
             echo "⚠️  Auth returned status $HTTP_CODE"
           fi
 
-      - name: Verify environment variables
+      - name: Verify environment variables before build
         run: |
-          echo "SUPABASE_URL=$SUPABASE_URL"
-          echo "SUPABASE_KEY=$SUPABASE_KEY (length: ${#SUPABASE_KEY})"
-          echo "PUBLIC_SUPABASE_URL=$PUBLIC_SUPABASE_URL"
+          echo "================================================"
+          echo "Environment Variables Check (Before Build)"
+          echo "================================================"
+          echo "SUPABASE_URL: $SUPABASE_URL"
+          echo "SUPABASE_KEY length: ${#SUPABASE_KEY}"
+          echo "SUPABASE_KEY (first 20 chars): ${SUPABASE_KEY:0:20}..."
+          echo "SUPABASE_SERVICE_ROLE_KEY length: ${#SUPABASE_SERVICE_ROLE_KEY}"
+          echo "PUBLIC_SUPABASE_URL: $PUBLIC_SUPABASE_URL"
+          echo "PUBLIC_SUPABASE_ANON_KEY length: ${#PUBLIC_SUPABASE_ANON_KEY}"
+          echo "PUBLIC_SUPABASE_ANON_KEY (first 20 chars): ${PUBLIC_SUPABASE_ANON_KEY:0:20}..."
+          echo "================================================"
 
       - name: Build application
-        run: npm run build
+        run: |
+          echo "🏗️  Starting build process..."
+          echo "Build environment:"
+          echo "  SUPABASE_URL: $SUPABASE_URL"
+          echo "  SUPABASE_KEY is set: $([ -n "$SUPABASE_KEY" ] && echo 'YES' || echo 'NO')"
+          echo "  PUBLIC_SUPABASE_URL: $PUBLIC_SUPABASE_URL"
+          echo "  PUBLIC_SUPABASE_ANON_KEY is set: $([ -n "$PUBLIC_SUPABASE_ANON_KEY" ] && echo 'YES' || echo 'NO')"
+          echo ""
+          npm run build
+          echo ""
+          echo "✅ Build completed"
         env:
-          # Explicitly pass env vars to build step (redundant but explicit)
+          # Explicitly pass env vars to build step
           SUPABASE_URL: ${{ env.SUPABASE_URL }}
           SUPABASE_KEY: ${{ env.SUPABASE_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
           PUBLIC_SUPABASE_URL: ${{ env.PUBLIC_SUPABASE_URL }}
           PUBLIC_SUPABASE_ANON_KEY: ${{ env.PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: Inspect built files
+        run: |
+          echo "================================================"
+          echo "Inspecting Built Application"
+          echo "================================================"
+          echo "Directory structure:"
+          ls -la dist/
+          echo ""
+          echo "Server directory:"
+          ls -la dist/server/
+          echo ""
+          echo "Checking if supabase config is in built code:"
+          if grep -r "127.0.0.1:54321" dist/server/ 2>/dev/null; then
+            echo "✅ Found hardcoded Supabase URL in built files"
+          else
+            echo "⚠️  No hardcoded Supabase URL found (might use runtime env vars)"
+          fi
+          echo ""
+          echo "Checking for localhost references:"
+          if grep -r "http://localhost" dist/server/ 2>/dev/null | head -5; then
+            echo "⚠️  Found localhost references"
+          else
+            echo "✅ No localhost references found"
+          fi
+          echo "================================================"
 
       - name: Final connectivity check before tests
         run: |

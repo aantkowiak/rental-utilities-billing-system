@@ -58,7 +58,8 @@ export default defineConfig({
     env: {
       // Pass through Supabase env vars to the preview server
       SUPABASE_URL: process.env.SUPABASE_URL || "http://127.0.0.1:54321",
-      SUPABASE_KEY: process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.PUBLIC_SUPABASE_ANON_KEY || "",
+      SUPABASE_KEY:
+        process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.PUBLIC_SUPABASE_ANON_KEY || "",
       SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
       PUBLIC_SUPABASE_URL: process.env.PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321",
       PUBLIC_SUPABASE_ANON_KEY: process.env.PUBLIC_SUPABASE_ANON_KEY || "",
