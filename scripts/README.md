@@ -32,7 +32,7 @@ Skrypt tworzy:
 
 **Konta testowe:**
 - Admin: `admin@example.com` / `password123`
-- Tenant 1: `tenant1@example.com` / `password123`
+- Tenant 1: `tenant1@example.com` / `password123` (używane w testach E2E)
 - Tenant 2: `tenant2@example.com` / `password123`
 
 **Wymagania:**
@@ -62,6 +62,24 @@ Dla każdej nieruchomości przez ostatnie 13 miesięcy:
 - Cena ciepłej wody z c.o.: 25-35 PLN/m³
 - Cena ogrzewania: 180-220 PLN/GJ
 - Zaliczka: 800-1200 PLN
+
+## Integracja z testami E2E
+
+Testy E2E Playwright korzystają z danych seedowanych przez ten skrypt. Po zakończeniu wszystkich testów, automatyczny global teardown (`e2e/global-teardown.ts`) czyści dane testowe:
+
+**Co czyści teardown:**
+- Wszystkie readings dla użytkownika `tenant1@example.com`
+- Wszystkie reports dla użytkownika `tenant1@example.com`
+
+**Workflow testowy:**
+1. Uruchom `npm run db:seed` aby załadować dane testowe
+2. Uruchom `npm run test:e2e` aby wykonać testy
+3. Global teardown automatycznie czyści dane po testach
+4. Uruchom ponownie `npm run db:seed` przed kolejną sesją testową
+
+**Więcej informacji:**
+- Zobacz `docs/E2E_TEARDOWN.md` dla szczegółów o global teardown
+- Zobacz `README-TESTING.md` dla pełnej dokumentacji testowania
 
 ## Inne przydatne komendy Supabase
 

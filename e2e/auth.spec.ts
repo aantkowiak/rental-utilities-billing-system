@@ -16,8 +16,8 @@ test.describe("Authentication Flow", () => {
   test("should show error on invalid credentials", async ({ loginPage }) => {
     await loginPage.goto();
 
-    // Attempt login with invalid credentials
-    await loginPage.login("invalid@example.com", "wrongpassword");
+    // Attempt login with invalid credentials (no redirect expected)
+    await loginPage.attemptLogin("invalid@example.com", "wrongpassword");
 
     // Wait for and verify error message
     await loginPage.waitForErrorMessage();

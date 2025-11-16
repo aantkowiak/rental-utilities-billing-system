@@ -59,19 +59,22 @@ describe("ReadingForm", () => {
     expect(coldInput).toHaveValue("1,235");
   });
 
-  it("disables numeric inputs outside submission window", async () => {
+  it("shows warning message for readings outside submission window", async () => {
     const outsideWindowReading = buildReading({
       readingAt: "2024-05-01T00:00:00.000Z",
     });
 
     await renderForm({ reading: outsideWindowReading });
 
+    // Form should still be enabled (validation is now informational only)
     const submitButton = screen.getByRole("button", { name: /zapisz/i });
-    expect(submitButton).toBeDisabled();
-    expect(screen.getByText(/maksymalnie 3 dni wstecz/i)).toBeInTheDocument();
+    expect(submitButton).not.toBeDisabled();
+
+    // But a warning message should be shown
+    expect(screen.getByText(/więcej niż 3 dni wstecz/i)).toBeInTheDocument();
 
     const coldInput = screen.getByLabelText(/zimna woda/i);
-    expect(coldInput).toBeDisabled();
+    expect(coldInput).not.toBeDisabled();
   });
 
   it("creates a new reading when no existing record is present", async () => {

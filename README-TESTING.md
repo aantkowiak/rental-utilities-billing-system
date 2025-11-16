@@ -22,6 +22,7 @@
 
 **Pliki zmodyfikowane:**
 - ✅ `playwright.config.ts` - Konfiguracja zgodna z wytycznymi
+- ✅ `e2e/global-teardown.ts` - Automatyczne czyszczenie bazy danych po testach
 
 **Funkcjonalności:**
 - ✅ Tylko Chromium/Desktop Chrome (zgodnie z wytycznymi)
@@ -30,6 +31,7 @@
 - ✅ Screenshots przy błędach
 - ✅ Raportowanie HTML i JSON
 - ✅ Równoległe wykonywanie testów
+- ✅ Global teardown - czyszczenie bazy danych Supabase po testach
 
 ### 3. Struktura Katalogów
 
@@ -41,6 +43,7 @@ e2e/
 │   └── LoginPage.ts              ✅ Page Object Model
 ├── fixtures/
 │   └── auth.fixture.ts           ✅ Custom fixture
+├── global-teardown.ts            ✅ Czyszczenie bazy danych
 ├── auth.spec.ts                  ✅ Nowe testy E2E
 └── example.spec.ts               (istniejący)
 
@@ -79,6 +82,7 @@ src/
 - ✅ `docs/TESTING-SETUP-SUMMARY.md` - Podsumowanie konfiguracji
 - ✅ `docs/TESTING-CHECKLIST.md` - Checklista dla developerów
 - ✅ `docs/TESTING-QUICK-REFERENCE.md` - Szybki reference
+- ✅ `docs/E2E_TEARDOWN.md` - Dokumentacja global teardown
 
 ### 6. GitHub Actions
 
@@ -138,7 +142,7 @@ npm run test:coverage
 
 ### Testy E2E
 ```bash
-# Uruchom testy E2E
+# Uruchom testy E2E (automatycznie uruchomi teardown po zakończeniu)
 npm run test:e2e
 
 # Tryb UI
@@ -154,6 +158,8 @@ npm run test:e2e:codegen
 npm run test:e2e:report
 ```
 
+**Uwaga:** Po zakończeniu wszystkich testów E2E, global teardown automatycznie czyści dane testowe z bazy Supabase (readings i reports dla użytkownika testowego).
+
 ## 📚 Dokumentacja
 
 | Plik | Opis |
@@ -162,6 +168,7 @@ npm run test:e2e:report
 | [TESTING-QUICK-REFERENCE.md](./TESTING-QUICK-REFERENCE.md) | Szybki reference i przykłady |
 | [TESTING-CHECKLIST.md](./TESTING-CHECKLIST.md) | Checklista przed mergem |
 | [TESTING-SETUP-SUMMARY.md](./TESTING-SETUP-SUMMARY.md) | Szczegóły konfiguracji |
+| [E2E_TEARDOWN.md](./E2E_TEARDOWN.md) | Global teardown - czyszczenie bazy danych |
 
 ## 🎯 Zgodność z Wytycznymi
 

@@ -56,25 +56,30 @@ describe("ReadingsService", () => {
     vi.restoreAllMocks();
   });
 
-  it("throws when tenant submits reading outside allowed window", async () => {
-    const supabase = createSupabaseStub();
+  it("allows tenant to submit reading outside window (validation disabled)", async () => {
+    const insertedRow = { ...BASE_ROW, reading_at: "2024-05-01T00:00:00.000Z" };
+    const { supabase } = createSupabaseForInsert({ data: insertedRow, error: null });
 
-    await expect(
-      ReadingsService.create(
-        supabase,
-        {
-          propertyId: "property-1",
-          readingAt: "2024-05-01T00:00:00.000Z",
-          coldM3: 10,
-          hotM3: 5,
-          heatingGj: 3,
-        },
-        {
-          role: "tenant",
-          now: new Date("2024-05-20T00:00:00.000Z"),
-        }
-      )
-    ).rejects.toMatchObject({ code: "READING_WINDOW_VIOLATION" });
+    const reading = await ReadingsService.create(
+      supabase,
+      {
+        propertyId: "property-1",
+        readingAt: "2024-05-01T00:00:00.000Z",
+        coldM3: 10,
+        hotM3: 5,
+        heatingGj: 3,
+      },
+      {
+        role: "tenant",
+        now: new Date("2024-05-20T00:00:00.000Z"),
+      }
+    );
+
+    // Should succeed even though reading is outside the traditional window
+    expect(reading).toMatchObject({
+      propertyId: "property-1",
+      readingAt: "2024-05-01T00:00:00.000Z",
+    });
   });
 
   it("inserts readings with canonical defaults", async () => {

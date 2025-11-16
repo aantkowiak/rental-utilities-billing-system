@@ -24,7 +24,11 @@ export class LoginPage {
     await this.page.goto("/auth/login");
   }
 
-  async login(email: string, password: string) {
+  /**
+   * Fills login form and submits without waiting for navigation
+   * Use this when you want to test error cases or handle navigation separately
+   */
+  async attemptLogin(email: string, password: string) {
     await this.emailInput.waitFor({ state: "visible" });
     await this.emailInput.clear();
     await this.emailInput.fill(email);
@@ -32,7 +36,14 @@ export class LoginPage {
     await this.passwordInput.clear();
     await this.passwordInput.fill(password);
     await this.submitButton.click();
+  }
 
+  /**
+   * Performs a successful login and waits for redirect
+   * Use this for happy path scenarios
+   */
+  async login(email: string, password: string) {
+    await this.attemptLogin(email, password);
     // Wait for successful redirect after login
     await this.page.waitForURL(/\/app\/readings\/add/, { timeout: 20000 });
   }

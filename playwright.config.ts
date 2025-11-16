@@ -37,6 +37,9 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
 
+  /* Global teardown to clean up test data */
+  globalTeardown: "./e2e/global-teardown.ts",
+
   /* Configure projects for major browsers */
   /* Per guidelines: Initialize configuration only with Chromium/Desktop Chrome browser */
   projects: [
