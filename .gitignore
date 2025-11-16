@@ -31,3 +31,11 @@ coverage-e2e/
 # test reports
 playwright-report/
 test-results/
+
+# vitest
+.vitest/
+
+# playwright
+playwright/.cache/
+trace.zip
+*-snapshots/

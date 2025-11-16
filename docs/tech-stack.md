@@ -11,6 +11,13 @@ Backend - Supabase as a comprehensive backend solution:
 - Open-source solution that can be hosted locally or on your own server
 - Built-in user authentication
 
+Testing - Comprehensive testing strategy:
+- Vitest 2.1.4 for unit and integration tests with code coverage
+- Testing Library 16.2.0 for React component testing
+- Playwright 1.49.1 for end-to-end testing across multiple browsers
+- jsdom 25.0.1 for DOM emulation in component tests
+- Target code coverage: ≥80% lines, ≥80% functions, ≥75% branches
+
 AI - Communication with models via the Openrouter.ai service:
 - Access to a wide range of models (OpenAI, Anthropic, Google, and many others), allowing us to find a solution that offers high efficiency and low cost
 - Allows setting spending limits for API keys
