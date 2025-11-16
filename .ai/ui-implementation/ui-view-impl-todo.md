@@ -1,0 +1,36 @@
+## UI View Implementation Checklist
+
+- [x] `ui-view-impl-01-Login.md`
+- [x] `ui-view-impl-02-TenantReadings.md`
+- [x] `ui-view-impl-03-TenantReportsList.md`
+- [x] `ui-view-impl-04-TenantReportDetail.md`
+- [x] `ui-view-impl-05-AdminReadings.md`
+- [x] `ui-view-impl-06-AdminMonthlyAdvances.md`
+- [x] `ui-view-impl-07-AdminReportsList.md`
+- [x] `ui-view-impl-08-AdminReportDetail.md`
+- [x] `ui-view-impl-09-AdminProperties.md`
+- [x] `ui-view-impl-10-AdminContracts.md`
+- [x] `ui-view-impl-11-AdminProfile.md`
+- [x] `ui-view-impl-12-Login.md`
+- [x] `ui-view-impl-13-TenantReadings.md`
+- [x] `ui-view-impl-14-TenantReportsList.md`
+- [x] `ui-view-impl-15-TenantReportDetail.md`
+- [x] `ui-view-impl-16-AdminReadings.md`
+- [x] `ui-view-impl-17-AdminMonthlyAdvances.md`
+- [x] `ui-view-impl-18-AdminReportsList.md`
+- [x] `ui-view-impl-19-AdminReportDetail.md`
+- [x] `ui-view-impl-20-AdminProperties.md`
+- [x] `ui-view-impl-21-AdminContracts.md`
+- [x] `ui-view-impl-22-AdminProfile.md`
+- [x] `ui-view-impl-23-Login.md`
+- [x] `ui-view-impl-24-TenantReadings.md`
+- [x] `ui-view-impl-25-TenantReportsList.md`
+- [x] `ui-view-impl-26-TenantReportDetail.md`
+- [x] `ui-view-impl-27-AdminReadings.md`
+- [x] `ui-view-impl-28-AdminMonthlyAdvances.md`
+- [x] `ui-view-impl-29-AdminReportsList.md`
+- [x] `ui-view-impl-30-AdminReportDetail.md`
+- [x] `ui-view-impl-31-AdminProperties.md`
+- [x] `ui-view-impl-32-AdminContracts.md`
+- [x] `ui-view-impl-33-AdminProfile.md`
+
