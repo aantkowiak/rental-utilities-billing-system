@@ -104,11 +104,38 @@ jobs:
       - name: Verify Supabase is running
         run: supabase status
 
+      - name: Test Supabase connection
+        run: |
+          echo "Testing Supabase connectivity..."
+          curl -f http://127.0.0.1:54321/health || (echo "Supabase health check failed" && exit 1)
+          echo "Supabase is accessible"
+
+      - name: Verify environment variables
+        run: |
+          echo "SUPABASE_URL=$SUPABASE_URL"
+          echo "SUPABASE_KEY=$SUPABASE_KEY (length: ${#SUPABASE_KEY})"
+          echo "PUBLIC_SUPABASE_URL=$PUBLIC_SUPABASE_URL"
+
       - name: Build application
         run: npm run build
+        env:
+          # Explicitly pass env vars to build step (redundant but explicit)
+          SUPABASE_URL: ${{ env.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ env.SUPABASE_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
+          PUBLIC_SUPABASE_URL: ${{ env.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_ANON_KEY: ${{ env.PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: Run E2E tests
         run: npm run test:e2e
+        env:
+          # Ensure env vars are available to the test process and preview server
+          SUPABASE_URL: ${{ env.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ env.SUPABASE_KEY }}
+          SUPABASE_ANON_KEY: ${{ env.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
+          PUBLIC_SUPABASE_URL: ${{ env.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_ANON_KEY: ${{ env.PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: Stop Supabase
         if: always()
