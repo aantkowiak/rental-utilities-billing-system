@@ -24,52 +24,60 @@ The CI workflow was missing the Supabase setup entirely. While tests work locall
 
 ### 1. Updated CI Workflow (`.github/workflows/tests.yml`)
 
-Added the following steps to the `e2e-tests` job:
+Set environment variables at the job level and added Supabase setup steps:
 
 ```yaml
-- name: Setup Supabase CLI
-  uses: supabase/setup-cli@v1
-  with:
-    version: latest
-
-- name: Start Supabase local instance
-  run: supabase start
-
-- name: Wait for Supabase to be ready
-  run: |
-    echo "Waiting for Supabase to be ready..."
-    timeout 60 bash -c 'until curl -f http://127.0.0.1:54321/health > /dev/null 2>&1; do sleep 2; done' || true
-    sleep 5
-
-- name: Verify Supabase is running
-  run: supabase status
-
-- name: Create test users
-  run: node scripts/create-test-users.js
-
-- name: Build application
-  run: npm run build
-
-- name: Run E2E tests
-  run: npm run test:e2e
+e2e-tests:
+  name: E2E Tests
+  runs-on: ubuntu-latest
+  needs: lint
   env:
+    # Environment variables available to ALL steps in this job
     SUPABASE_URL: http://127.0.0.1:54321
     SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
     SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
     PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
     PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+  steps:
+    - name: Setup Supabase CLI
+      uses: supabase/setup-cli@v1
+      with:
+        version: latest
 
-- name: Stop Supabase
-  if: always()
-  run: supabase stop
+    - name: Start Supabase local instance
+      run: supabase start
+
+    - name: Wait for Supabase to be ready
+      run: |
+        echo "Waiting for Supabase to be ready..."
+        timeout 60 bash -c 'until curl -f http://127.0.0.1:54321/health > /dev/null 2>&1; do sleep 2; done' || true
+        sleep 5
+
+    - name: Verify Supabase is running
+      run: supabase status
+
+    - name: Create test users
+      run: node scripts/create-test-users.js
+
+    - name: Build application
+      run: npm run build
+
+    - name: Run E2E tests
+      run: npm run test:e2e
+
+    - name: Stop Supabase
+      if: always()
+      run: supabase stop
 ```
 
 **Key changes:**
+- **Set environment variables at job level** (not step level) - Critical for build step!
 - Install Supabase CLI using the official GitHub Action
 - Start local Supabase instance (automatically applies migrations and seeds)
 - Wait for Supabase to be healthy
 - Create test users via the existing script
-- Set all required environment variables explicitly
+- Build application with Supabase env vars available
+- Run tests
 - Clean up by stopping Supabase after tests
 
 ### 2. Fixed Screenshot Test (`e2e/auth.spec.ts`)
