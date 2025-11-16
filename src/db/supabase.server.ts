@@ -19,13 +19,13 @@ const resolveEnv = (value: string | undefined, fallback: string, name: string): 
 
 // In SSR mode, also check process.env as fallback for runtime env vars
 const supabaseUrl = resolveEnv(
-  import.meta.env.SUPABASE_URL || process.env.SUPABASE_URL, 
-  "http://localhost", 
+  import.meta.env.SUPABASE_URL || process.env.SUPABASE_URL,
+  "http://localhost",
   "SUPABASE_URL"
 );
 const supabaseAnonKey = resolveEnv(
-  import.meta.env.SUPABASE_KEY || process.env.SUPABASE_KEY, 
-  "test-anon-key", 
+  import.meta.env.SUPABASE_KEY || process.env.SUPABASE_KEY,
+  "test-anon-key",
   "SUPABASE_KEY"
 );
 const supabaseServiceRoleKey = resolveEnv(
