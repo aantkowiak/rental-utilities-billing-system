@@ -159,43 +159,57 @@ jobs:
           echo "Verifying test user was created..."
           echo "================================================"
           
-          # Get DB connection string from supabase status
-          DB_URL=$(supabase status | grep "DB URL" | awk '{print $3}')
-          
-          if [ -z "$DB_URL" ]; then
-            echo "⚠️  Could not get DB URL, trying default..."
-            DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
-          fi
-          
-          echo "Using DB URL: ${DB_URL%%:*}://***:***@${DB_URL##*@}"
-          
-          # Check if user exists
+          # Check if user exists with DETAILED info
+          echo "1. Checking auth.users table:"
           docker exec supabase_db_rental-utilities-billing-system psql -U postgres -d postgres -c \
             "SELECT 
               id, 
               email, 
-              email_confirmed_at IS NOT NULL as confirmed,
+              email_confirmed_at IS NOT NULL as email_confirmed,
+              email_confirmed_at,
               encrypted_password IS NOT NULL as has_password,
-              role
+              LENGTH(encrypted_password) as password_length,
+              role,
+              aud,
+              is_super_admin,
+              raw_app_meta_data,
+              banned_until,
+              deleted_at
             FROM auth.users 
-            WHERE id = '0367969f-66af-4c5b-85b0-cc0143d6877f';" || echo "⚠️  Direct query failed"
+            WHERE id = '0367969f-66af-4c5b-85b0-cc0143d6877f';" || echo "⚠️  User query failed"
           
-          # Check if identity exists
+          echo ""
+          echo "2. Checking auth.identities table:"
           docker exec supabase_db_rental-utilities-billing-system psql -U postgres -d postgres -c \
             "SELECT 
+              id,
               user_id, 
-              provider
+              provider,
+              identity_data,
+              last_sign_in_at,
+              created_at
             FROM auth.identities 
             WHERE user_id = '0367969f-66af-4c5b-85b0-cc0143d6877f';" || echo "⚠️  Identity query failed"
           
-          # Check if profile exists
+          echo ""
+          echo "3. Checking profiles table:"
           docker exec supabase_db_rental-utilities-billing-system psql -U postgres -d postgres -c \
             "SELECT 
               user_id, 
               role,
-              display_name
+              display_name,
+              property_id
             FROM profiles 
             WHERE user_id = '0367969f-66af-4c5b-85b0-cc0143d6877f';" || echo "⚠️  Profile query failed"
+          
+          echo ""
+          echo "4. Testing password encryption:"
+          docker exec supabase_db_rental-utilities-billing-system psql -U postgres -d postgres -c \
+            "SELECT 
+              email,
+              encrypted_password = crypt('password123', encrypted_password) as password_matches
+            FROM auth.users 
+            WHERE id = '0367969f-66af-4c5b-85b0-cc0143d6877f';" || echo "⚠️  Password test failed"
           
           echo "================================================"
 

@@ -112,17 +112,66 @@ After this fix, the CI workflow should:
 
 ---
 
+## Diagnostic Checks Added
+
+The workflow now checks for common login failure causes:
+
+### 1. ❌ Email not confirmed
+```sql
+email_confirmed_at IS NOT NULL  -- Must be true
+```
+
+### 2. ❌ Wrong password encryption
+```sql
+encrypted_password = crypt('password123', encrypted_password)  -- Must be true
+```
+
+### 3. ❌ User banned/deleted
+```sql
+banned_until IS NULL AND deleted_at IS NULL  -- Must be true
+```
+
+### 4. ❌ Wrong role/audience
+```sql
+role = 'authenticated' AND aud = 'authenticated'  -- Should match
+```
+
+### 5. ❌ Missing or malformed identity_data
+```json
+{"sub": "user-id", "email": "email@example.com"}  -- Required structure
+```
+
+### 6. ❌ Missing raw_app_meta_data
+```json
+{"provider": "email", "providers": ["email"]}  -- Required for email auth
+```
+
+---
+
 ## How to Verify
 
 Push this commit and check the CI logs for:
 
 ```
-================================================
-Verifying test user was created...
-================================================
-                     id                      |        email         | confirmed | has_password |     role      
----------------------------------------------+----------------------+-----------+--------------+---------------
- 0367969f-66af-4c5b-85b0-cc0143d6877f       | tenant1@example.com  | t         | t            | authenticated
+1. Checking auth.users table:
+ email_confirmed | has_password | role          | aud           | deleted_at | banned_until
+-----------------+--------------+---------------+---------------+------------+-------------
+ t               | t            | authenticated | authenticated |            |
+(1 row)
+
+2. Checking auth.identities table:
+ provider | identity_data                                             
+----------+-----------------------------------------------------------
+ email    | {"sub": "0367969f-...", "email": "tenant1@example.com"}
+(1 row)
+
+3. Checking profiles table:
+(1 row found)
+
+4. Testing password encryption:
+ password_matches
+------------------
+ t                    ← MUST BE TRUE!
 (1 row)
 
 Testing direct auth login...
@@ -130,5 +179,5 @@ HTTP Status: 200
 ✅ Direct auth test successful
 ```
 
-If you see this, the user was created successfully and login should work! 🎉
+**If `password_matches` is `f` (false), the password is wrong!** 🎯
 
