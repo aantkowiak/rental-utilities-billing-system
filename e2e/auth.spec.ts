@@ -27,7 +27,7 @@ test.describe("Authentication Flow", () => {
 
   test("should take screenshot on failure", async ({ page, loginPage }) => {
     test.skip(!!process.env.CI && process.platform === "linux", "Visual snapshot not available for Linux in CI");
-    
+
     await loginPage.goto();
 
     // Visual comparison example
