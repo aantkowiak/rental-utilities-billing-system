@@ -103,9 +103,6 @@ jobs:
       - name: Verify Supabase is running
         run: supabase status
 
-      - name: Create test users
-        run: node scripts/create-test-users.js
-
       - name: Build application
         run: npm run build
 
