@@ -115,15 +115,26 @@ jobs:
       - name: Wait for Supabase to be ready
         run: |
           echo "Waiting for Supabase to be ready..."
+          # Give Supabase time to start all services
+          sleep 10
+          
+          # Check if Supabase is actually running
+          if supabase status | grep -q "supabase local development setup is running"; then
+            echo "✅ Supabase is running"
+          else
+            echo "❌ Supabase failed to start"
+            exit 1
+          fi
+          
+          # Wait for API to be responsive
           for i in {1..30}; do
-            if curl -f http://127.0.0.1:54321/health > /dev/null 2>&1; then
-              echo "✅ Supabase is healthy after $i attempts"
+            if curl -f http://127.0.0.1:54321 > /dev/null 2>&1; then
+              echo "✅ Supabase API is responsive after $i attempts"
               break
             fi
-            echo "Attempt $i: Supabase not ready yet..."
+            echo "Attempt $i: Waiting for API..."
             sleep 2
           done
-          sleep 3
 
       - name: Verify Supabase is running
         run: supabase status
