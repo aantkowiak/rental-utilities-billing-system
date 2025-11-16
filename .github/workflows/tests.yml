@@ -153,6 +153,52 @@ jobs:
           curl -s http://127.0.0.1:54321/health && echo "✅ Accessible via 127.0.0.1" || echo "❌ Not accessible via 127.0.0.1"
           curl -s http://localhost:54321/health && echo "✅ Accessible via localhost" || echo "❌ Not accessible via localhost"
 
+      - name: Verify test user in database
+        run: |
+          echo "================================================"
+          echo "Verifying test user was created..."
+          echo "================================================"
+          
+          # Get DB connection string from supabase status
+          DB_URL=$(supabase status | grep "DB URL" | awk '{print $3}')
+          
+          if [ -z "$DB_URL" ]; then
+            echo "⚠️  Could not get DB URL, trying default..."
+            DB_URL="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          fi
+          
+          echo "Using DB URL: ${DB_URL%%:*}://***:***@${DB_URL##*@}"
+          
+          # Check if user exists
+          docker exec supabase_db_rental-utilities-billing-system psql -U postgres -d postgres -c \
+            "SELECT 
+              id, 
+              email, 
+              email_confirmed_at IS NOT NULL as confirmed,
+              encrypted_password IS NOT NULL as has_password,
+              role
+            FROM auth.users 
+            WHERE id = '0367969f-66af-4c5b-85b0-cc0143d6877f';" || echo "⚠️  Direct query failed"
+          
+          # Check if identity exists
+          docker exec supabase_db_rental-utilities-billing-system psql -U postgres -d postgres -c \
+            "SELECT 
+              user_id, 
+              provider
+            FROM auth.identities 
+            WHERE user_id = '0367969f-66af-4c5b-85b0-cc0143d6877f';" || echo "⚠️  Identity query failed"
+          
+          # Check if profile exists
+          docker exec supabase_db_rental-utilities-billing-system psql -U postgres -d postgres -c \
+            "SELECT 
+              user_id, 
+              role,
+              display_name
+            FROM profiles 
+            WHERE user_id = '0367969f-66af-4c5b-85b0-cc0143d6877f';" || echo "⚠️  Profile query failed"
+          
+          echo "================================================"
+
       - name: Test direct authentication
         run: |
           echo "Testing direct auth login..."
@@ -170,7 +216,8 @@ jobs:
           if [ "$HTTP_CODE" = "200" ]; then
             echo "✅ Direct auth test successful"
           else
-            echo "⚠️  Auth returned status $HTTP_CODE (user may not exist yet, continuing...)"
+            echo "❌ Auth failed with status $HTTP_CODE - THIS WILL CAUSE E2E TESTS TO FAIL!"
+            exit 1
           fi
 
       - name: Verify environment variables before build
