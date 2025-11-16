@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { defineMiddleware } from "astro:middleware";
 
 import { createSupabaseServerClient } from "../db/supabase.server.ts";
@@ -20,12 +21,12 @@ const isProtectedRoute = (pathname: string): boolean => {
   if (pathname.startsWith("/admin/") || pathname.startsWith("/app/")) {
     return true;
   }
-  
+
   // Protect API endpoints except auth endpoints
   if (pathname.startsWith("/api/") && !pathname.startsWith("/api/v1/auth/")) {
     return true;
   }
-  
+
   return false;
 };
 
@@ -92,7 +93,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // Check if route is protected
   if (isProtectedRoute(url.pathname)) {
     const isApiRoute = url.pathname.startsWith("/api/");
-    
+
     // Validate session using the authenticated client
     const {
       data: { user },

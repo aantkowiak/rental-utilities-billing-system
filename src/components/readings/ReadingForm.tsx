@@ -499,7 +499,7 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
         setPending(false);
       }
     },
-    [currentReading, formState, loadLatest, pushToast, resolvedPropertyId, windowStatus]
+    [currentReading, formState, loadLatest, pushToast, resolvedPropertyId]
   );
 
   const handleMonthSelectChange = useCallback(
@@ -858,14 +858,16 @@ function computeWindowStatus(readingAtIso: string, now: Date): WindowStatus {
   if (diffDays < -3) {
     return {
       withinWindow: true,
-      message: "Uwaga: Wybrana data jest więcej niż 3 dni wstecz. Zalecamy zgłaszanie odczytów w oknie ±3-5 dni od dzisiaj.",
+      message:
+        "Uwaga: Wybrana data jest więcej niż 3 dni wstecz. Zalecamy zgłaszanie odczytów w oknie ±3-5 dni od dzisiaj.",
     };
   }
 
   if (diffDays > 5) {
     return {
       withinWindow: true,
-      message: "Uwaga: Wybrana data jest więcej niż 5 dni naprzód. Zalecamy zgłaszanie odczytów w oknie ±3-5 dni od dzisiaj.",
+      message:
+        "Uwaga: Wybrana data jest więcej niż 5 dni naprzód. Zalecamy zgłaszanie odczytów w oknie ±3-5 dni od dzisiaj.",
     };
   }
 

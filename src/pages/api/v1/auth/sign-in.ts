@@ -51,16 +51,24 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     }
 
     // Fetch user profile to get role and property_id
-    const { data: profile, error: profileError } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: profileData, error: profileError } = await (supabase as any)
       .from("profiles")
       .select("role, property_id, display_name")
       .eq("user_id", authData.user.id)
       .single();
 
-    if (profileError || !profile) {
+    if (profileError || !profileData) {
       console.error("[sign-in] Profile fetch failed:", profileError?.message);
       return errorResponse(500, "profile_error", "Nie udało się pobrać profilu użytkownika");
     }
+
+    // Type-safe profile access after null check
+    const profile = profileData as unknown as {
+      role: string;
+      property_id: string | null;
+      display_name: string | null;
+    };
 
     // Validate role
     if (profile.role !== "tenant" && profile.role !== "admin") {

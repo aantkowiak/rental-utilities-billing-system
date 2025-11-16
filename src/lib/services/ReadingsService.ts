@@ -12,7 +12,6 @@ import type {
   YearMonth,
 } from "@/types";
 import { yearMonthToISODate } from "@/lib/date/month";
-import { isWithinTenantWindow } from "@/lib/validation/readings";
 import type { ReadingListFilters, ReadingListResponse } from "@/types/readings";
 import { buildReadingsListResponse } from "@/types/readings";
 
@@ -113,7 +112,12 @@ export class ReadingsService {
     return updated;
   }
 
-  static async create(supabase: Supabase, cmd: CreateReadingCmd, context: OperationContext): Promise<ReadingDTO> {
+  static async create(
+    supabase: Supabase,
+    cmd: CreateReadingCmd,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _context: OperationContext
+  ): Promise<ReadingDTO> {
     // Time window validation is disabled - tenants can submit readings at any time
     // if (context.role === "tenant") {
     //   const readingDate = new Date(cmd.readingAt);

@@ -32,7 +32,7 @@ export class LoginPage {
     await this.passwordInput.clear();
     await this.passwordInput.fill(password);
     await this.submitButton.click();
-    
+
     // Wait for successful redirect after login
     await this.page.waitForURL(/\/app\/readings\/add/, { timeout: 20000 });
   }

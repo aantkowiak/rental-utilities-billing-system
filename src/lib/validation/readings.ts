@@ -170,7 +170,7 @@ export const isStartOfMonth = (date: Date): boolean => {
   );
 };
 
-export const isWithinTenantWindow = (readingAt: Date, now = new Date()): boolean => {
+export const isWithinTenantWindow = (readingAt: Date): boolean => {
   // Time window validation is disabled - tenants can submit readings at any time
   // This function is kept for informational purposes only
   if (Number.isNaN(readingAt.getTime())) {

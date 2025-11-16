@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { LoginPage } from "./pages/LoginPage";
 import { AddReadingPage } from "./pages/AddReadingPage";
 
-test.describe.configure({ mode: 'serial' });
+test.describe.configure({ mode: "serial" });
 
 test.describe("Tenant Reading Flow", () => {
   let loginPage: LoginPage;
@@ -21,7 +21,7 @@ test.describe("Tenant Reading Flow", () => {
     // Step 2: Login with tenant credentials
     const email = process.env.E2E_USER_EMAIL || "tenant1@example.com";
     const password = process.env.E2E_PASSWORD || "password123";
-    
+
     await loginPage.login(email, password);
 
     // Step 3: Verify redirect to reading page after successful login (already handled in login method)
@@ -82,9 +82,8 @@ test.describe("Tenant Reading Flow", () => {
 
     // Verify that form is not submitted (button should still be visible and not in loading state)
     await expect(addReadingPage.submitButton).toBeVisible();
-    
+
     // Verify we're still on the same page (no redirect happened)
     await expect(page).toHaveURL(/\/app\/readings\/add/);
   });
 });
-

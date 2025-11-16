@@ -28,12 +28,7 @@ export class AddReadingPage {
     await this.page.goto("/app/readings/add");
   }
 
-  async fillReadingForm(data: {
-    readingDate: string;
-    coldWater: string;
-    hotWater: string;
-    heating: string;
-  }) {
+  async fillReadingForm(data: { readingDate: string; coldWater: string; hotWater: string; heating: string }) {
     await this.readingDateInput.fill(data.readingDate);
     await this.coldWaterInput.fill(data.coldWater);
     await this.hotWaterInput.fill(data.hotWater);
@@ -56,4 +51,3 @@ export class AddReadingPage {
     return await this.submitButton.isDisabled();
   }
 }
-
