@@ -227,42 +227,215 @@ export class ReportService {
   /**
    * Recompute ALL reports in the system.
    * This is called after any CRUD operation on readings or monthly advances.
+   *
+   * New behavior:
+   * 1. Find all complete reading pairs (property+month with both base and final)
+   * 2. For each pair, check if report exists
+   * 3. If report doesn't exist and all data is available (pair + monthly advances + contract), create it
+   * 4. If report exists, regenerate it
+   * 5. Delete reports where reading pair no longer exists
    */
   static async recomputeAll(supabase: Supabase): Promise<void> {
-    // Get all reports
+    // Step 1: Find all complete reading pairs (property+month combinations)
+    const completePairs = await this.findAllCompletePairs(supabase);
+
+    console.info(`[ReportService.recomputeAll] Found ${completePairs.length} complete reading pairs`);
+
+    // Step 2: Process each complete pair
+    for (const { propertyId, month } of completePairs) {
+      const monthISO = yearMonthToISODate(month);
+
+      try {
+        // Check if report already exists
+        const existingReport = await this.findExistingReportForProperty(supabase, propertyId, monthISO);
+
+        if (existingReport) {
+          // Report exists - regenerate it
+          try {
+            await this.regenerate(supabase, { role: "admin", userId: "system" }, existingReport.id);
+            console.info(
+              `[ReportService.recomputeAll] Regenerated report ${existingReport.id} for property ${propertyId}, month ${month}`
+            );
+          } catch (error) {
+            console.error(`[ReportService.recomputeAll] Failed to regenerate report ${existingReport.id}:`, error);
+          }
+        } else {
+          // Report doesn't exist - try to create it
+          try {
+            // Check if monthly advances exist
+            const hasAdvances = await this.hasMonthlyConditions(supabase, propertyId, monthISO);
+            if (!hasAdvances) {
+              console.info(
+                `[ReportService.recomputeAll] Skipping property ${propertyId}, month ${month} - missing monthly advances`
+              );
+              continue;
+            }
+
+            // Find contract for this property and month
+            const contract = await this.getContractForPropertyMonth(supabase, propertyId, monthISO);
+            if (!contract) {
+              console.info(
+                `[ReportService.recomputeAll] Skipping property ${propertyId}, month ${month} - no active contract`
+              );
+              continue;
+            }
+
+            // All data available - create report
+            const newReport = await this.generate(supabase, { role: "admin", userId: "system" }, contract.id, month);
+            console.info(
+              `[ReportService.recomputeAll] Created new report ${newReport.id} for property ${propertyId}, month ${month}`
+            );
+          } catch (error) {
+            console.error(
+              `[ReportService.recomputeAll] Failed to create report for property ${propertyId}, month ${month}:`,
+              error
+            );
+          }
+        }
+      } catch (error) {
+        console.error(`[ReportService.recomputeAll] Error processing property ${propertyId}, month ${month}:`, error);
+      }
+    }
+
+    // Step 3: Delete orphaned reports (reports where reading pair no longer exists)
+    await this.deleteOrphanedReports(supabase, completePairs);
+  }
+
+  /**
+   * Find all complete reading pairs in the system.
+   * A complete pair is a property+month combination that has both base_for_month and final_for_month set.
+   */
+  private static async findAllCompletePairs(supabase: Supabase): Promise<{ propertyId: string; month: YearMonth }[]> {
+    // Find all readings with base_for_month set
+    const { data: baseReadings, error: baseError } = await supabase
+      .from("readings")
+      .select("property_id, base_for_month")
+      .not("base_for_month", "is", null)
+      .is("deleted_at", null);
+
+    if (baseError) {
+      console.error("[ReportService.findAllCompletePairs] Failed to fetch base readings:", baseError);
+      return [];
+    }
+
+    if (!baseReadings || baseReadings.length === 0) {
+      return [];
+    }
+
+    // Find all readings with final_for_month set
+    const { data: finalReadings, error: finalError } = await supabase
+      .from("readings")
+      .select("property_id, final_for_month")
+      .not("final_for_month", "is", null)
+      .is("deleted_at", null);
+
+    if (finalError) {
+      console.error("[ReportService.findAllCompletePairs] Failed to fetch final readings:", finalError);
+      return [];
+    }
+
+    if (!finalReadings || finalReadings.length === 0) {
+      return [];
+    }
+
+    // Create sets for quick lookup
+    const baseSet = new Set<string>();
+    for (const reading of baseReadings) {
+      const month = reading.base_for_month?.substring(0, 7);
+      if (month) {
+        baseSet.add(`${reading.property_id}:${month}`);
+      }
+    }
+
+    const pairs: { propertyId: string; month: YearMonth }[] = [];
+    const seen = new Set<string>();
+
+    for (const reading of finalReadings) {
+      const month = reading.final_for_month?.substring(0, 7);
+      if (month) {
+        const key = `${reading.property_id}:${month}`;
+        // Check if we have both base and final for this property+month
+        if (baseSet.has(key) && !seen.has(key)) {
+          seen.add(key);
+          pairs.push({
+            propertyId: reading.property_id,
+            month: month as YearMonth,
+          });
+        }
+      }
+    }
+
+    return pairs;
+  }
+
+  /**
+   * Delete reports that no longer have complete reading pairs.
+   */
+  private static async deleteOrphanedReports(
+    supabase: Supabase,
+    validPairs: { propertyId: string; month: YearMonth }[]
+  ): Promise<void> {
+    // Get all existing reports
     const { data: allReports, error: reportsError } = await supabase.from("reports").select("id, property_id, month");
 
     if (reportsError) {
-      console.error("[ReportService.recomputeAll] Failed to fetch reports:", reportsError);
+      console.error("[ReportService.deleteOrphanedReports] Failed to fetch reports:", reportsError);
       return;
     }
 
     if (!allReports || allReports.length === 0) {
-      console.info("[ReportService.recomputeAll] No reports to recompute");
       return;
     }
 
-    // Regenerate each report
+    // Create set of valid pairs for quick lookup
+    const validPairsSet = new Set<string>();
+    for (const pair of validPairs) {
+      validPairsSet.add(`${pair.propertyId}:${pair.month}`);
+    }
+
+    // Find orphaned reports
+    const orphanedReportIds: string[] = [];
     for (const report of allReports) {
-      try {
-        const month = isoDateToYearMonth(report.month);
-        const pair = await ReadingsService.findPairForPropertyAndMonth(supabase, report.property_id, month);
-
-        if (!pair) {
-          // No pair available - delete report
-          await supabase.from("reports").delete().eq("id", report.id);
-          console.info(
-            `[ReportService.recomputeAll] Deleted report ${report.id} for property ${report.property_id} and month ${month} (missing pair)`
-          );
-          continue;
-        }
-
-        await this.regenerate(supabase, { role: "admin", userId: "system" }, report.id);
-        console.info(`[ReportService.recomputeAll] Regenerated report ${report.id}`);
-      } catch (error) {
-        console.error(`[ReportService.recomputeAll] Error processing report ${report.id}:`, error);
+      const month = report.month.substring(0, 7);
+      const key = `${report.property_id}:${month}`;
+      if (!validPairsSet.has(key)) {
+        orphanedReportIds.push(report.id);
       }
     }
+
+    // Delete orphaned reports
+    if (orphanedReportIds.length > 0) {
+      const { error: deleteError } = await supabase.from("reports").delete().in("id", orphanedReportIds);
+
+      if (deleteError) {
+        console.error("[ReportService.deleteOrphanedReports] Failed to delete orphaned reports:", deleteError);
+      } else {
+        console.info(`[ReportService.deleteOrphanedReports] Deleted ${orphanedReportIds.length} orphaned report(s)`);
+      }
+    }
+  }
+
+  /**
+   * Check if monthly advances exist for the given property and month.
+   */
+  private static async hasMonthlyConditions(
+    supabase: Supabase,
+    propertyId: string,
+    monthDate: string
+  ): Promise<boolean> {
+    const { data, error } = await supabase
+      .from("monthly_advances")
+      .select("id")
+      .eq("property_id", propertyId)
+      .eq("month", monthDate)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[ReportService.hasMonthlyConditions] Database error:", error);
+      return false;
+    }
+
+    return !!data;
   }
 
   /**
