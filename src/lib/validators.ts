@@ -17,6 +17,22 @@ export const SignInSchema = z.object({
 });
 
 /**
+ * Validation schema for sign-up with email and password.
+ * - Email: RFC 5322 compliant, max 254 characters
+ * - Password: min 8 characters
+ */
+export const SignUpSchema = z.object({
+  email: z
+    .string()
+    .email("Wprowadź poprawny adres email")
+    .max(254, "Adres email może mieć maksymalnie 254 znaki")
+    .transform((email) => email.toLowerCase()),
+  password: z
+    .string()
+    .min(8, "Hasło musi mieć co najmniej 8 znaków"),
+});
+
+/**
  * Validation schema for updating user profile (PATCH /v1/me).
  * Allows optional email update with constraints:
  * - RFC 5322 compliant email

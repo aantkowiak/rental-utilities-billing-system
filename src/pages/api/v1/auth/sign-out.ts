@@ -1,6 +1,7 @@
 /* eslint-disable no-console */
 import type { APIRoute } from "astro";
 
+import { createSupabaseServerClient } from "@/db/supabase.server";
 import { errorResponse } from "@/lib/errors";
 
 export const prerender = false;
@@ -9,9 +10,11 @@ export const prerender = false;
  * POST /v1/auth/sign-out
  * Sign out the current user and clear session.
  */
-export const POST: APIRoute = async ({ locals }) => {
+export const POST: APIRoute = async ({ cookies }) => {
   try {
-    const { error } = await locals.supabase.auth.signOut();
+    // Create Supabase client with cookies to clear them
+    const supabase = createSupabaseServerClient(cookies);
+    const { error } = await supabase.auth.signOut();
 
     if (error) {
       console.error("[sign-out] Error:", error.message);

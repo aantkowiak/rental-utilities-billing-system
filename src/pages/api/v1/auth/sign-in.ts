@@ -1,6 +1,7 @@
 /* eslint-disable no-console */
 import type { APIRoute } from "astro";
 
+import { createSupabaseServerClient } from "@/db/supabase.server";
 import { errorResponse } from "@/lib/errors";
 import { SignInSchema } from "@/lib/validators";
 
@@ -11,7 +12,7 @@ export const prerender = false;
  * Sign in with email and password.
  * Returns user data, role, and propertyId on success.
  */
-export const POST: APIRoute = async ({ request, locals }) => {
+export const POST: APIRoute = async ({ request, locals, cookies }) => {
   try {
     // Parse request body
     let body: unknown;
@@ -31,8 +32,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     const { email, password } = validation.data;
 
+    // Create a new Supabase client for this request to set cookies
+    const supabase = createSupabaseServerClient(cookies);
+
     // Authenticate with Supabase
-    const { data: authData, error: authError } = await locals.supabase.auth.signInWithPassword({
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -43,7 +47,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     // Fetch user profile to get role and property_id
-    const { data: profile, error: profileError } = await locals.supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("role, property_id, display_name")
       .eq("user_id", authData.user.id)

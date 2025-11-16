@@ -1,6 +1,6 @@
 import { defineMiddleware } from "astro:middleware";
 
-import { supabaseAdmin } from "../db/supabase.client.ts";
+import { createSupabaseAdminClient, createSupabaseServerClient } from "../db/supabase.server.ts";
 import { errorResponse } from "../lib/errors.ts";
 
 const TASK_RATE_LIMIT_WINDOW_MS = 60_000;
@@ -72,16 +72,17 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
-  // Inject supabase client
-  context.locals.supabase = supabaseAdmin;
+  // Create Supabase client with user's session from cookies
+  const supabase = createSupabaseServerClient(context.cookies);
+  context.locals.supabase = supabase;
 
   // Initialize auth as null
   context.locals.auth = null;
 
   // Check if route is protected
   if (isProtectedRoute(url.pathname)) {
-    // Validate session
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser();
+    // Validate session using the authenticated client
+    const { data: { user }, error } = await supabase.auth.getUser();
 
     if (error || !user) {
       // Not authenticated - redirect to login
@@ -89,7 +90,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
 
     // Fetch user profile for role and property_id
-    const { data: profile, error: profileError } = await supabaseAdmin
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("role, property_id")
       .eq("user_id", user.id)

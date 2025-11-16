@@ -1,6 +1,17 @@
 ---
 import Layout from "../../layouts/Layout.astro";
-import { RegistrationForm } from "@/components/auth/RegistrationForm";
+import { RegistrationView } from "@/components/auth/RegistrationForm";
+
+// If already authenticated, redirect to appropriate landing page
+if (Astro.locals.auth) {
+  const { role } = Astro.locals.auth;
+  
+  if (role === "admin") {
+    return Astro.redirect("/admin/properties");
+  } else {
+    return Astro.redirect("/app/readings/add");
+  }
+}
 
 const pageTitle = "Rejestracja";
 ---
@@ -30,7 +41,7 @@ const pageTitle = "Rejestracja";
         </div>
       </header>
 
-      <RegistrationForm client:load />
+      <RegistrationView client:load />
     </div>
   </main>
 </Layout>
