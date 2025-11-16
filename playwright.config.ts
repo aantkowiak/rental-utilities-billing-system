@@ -51,15 +51,14 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: "npm run preview",
+    command: process.env.CI ? "bash scripts/preview-with-env.sh" : "npm run preview",
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
     env: {
       // Pass through Supabase env vars to the preview server
-      // Note: Server code expects SUPABASE_KEY, but CI sets SUPABASE_ANON_KEY
       SUPABASE_URL: process.env.SUPABASE_URL || "http://127.0.0.1:54321",
-      SUPABASE_KEY: process.env.SUPABASE_ANON_KEY || process.env.PUBLIC_SUPABASE_ANON_KEY || "",
+      SUPABASE_KEY: process.env.SUPABASE_KEY || process.env.SUPABASE_ANON_KEY || process.env.PUBLIC_SUPABASE_ANON_KEY || "",
       SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
       PUBLIC_SUPABASE_URL: process.env.PUBLIC_SUPABASE_URL || "http://127.0.0.1:54321",
       PUBLIC_SUPABASE_ANON_KEY: process.env.PUBLIC_SUPABASE_ANON_KEY || "",

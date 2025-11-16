@@ -98,17 +98,54 @@ jobs:
       - name: Wait for Supabase to be ready
         run: |
           echo "Waiting for Supabase to be ready..."
-          timeout 60 bash -c 'until curl -f http://127.0.0.1:54321/health > /dev/null 2>&1; do sleep 2; done' || true
-          sleep 5
+          for i in {1..30}; do
+            if curl -f http://127.0.0.1:54321/health > /dev/null 2>&1; then
+              echo "✅ Supabase is healthy after $i attempts"
+              break
+            fi
+            echo "Attempt $i: Supabase not ready yet..."
+            sleep 2
+          done
+          sleep 3
 
       - name: Verify Supabase is running
-        run: supabase status
+        run: |
+          supabase status
+          echo ""
+          echo "Docker containers:"
+          docker ps | grep supabase
+          echo ""
+          echo "Docker networks:"
+          docker network ls
+          echo ""
+          echo "Checking if Supabase is accessible from host:"
+          curl -s http://127.0.0.1:54321/health && echo "✅ Accessible via 127.0.0.1" || echo "❌ Not accessible via 127.0.0.1"
+          curl -s http://localhost:54321/health && echo "✅ Accessible via localhost" || echo "❌ Not accessible via localhost"
 
       - name: Test Supabase connection
         run: |
           echo "Testing Supabase connectivity..."
           curl -f http://127.0.0.1:54321/health || (echo "Supabase health check failed" && exit 1)
-          echo "Supabase is accessible"
+          echo "✅ Supabase is accessible"
+          
+          echo ""
+          echo "Testing actual auth login..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST http://127.0.0.1:54321/auth/v1/token?grant_type=password \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"email":"tenant1@example.com","password":"password123"}')
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY" | head -5
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Direct auth test successful"
+          else
+            echo "⚠️  Auth returned status $HTTP_CODE"
+          fi
 
       - name: Verify environment variables
         run: |
@@ -125,6 +162,30 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ env.SUPABASE_SERVICE_ROLE_KEY }}
           PUBLIC_SUPABASE_URL: ${{ env.PUBLIC_SUPABASE_URL }}
           PUBLIC_SUPABASE_ANON_KEY: ${{ env.PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: Final connectivity check before tests
+        run: |
+          echo "Verifying Supabase is still accessible..."
+          curl -v http://127.0.0.1:54321/health 2>&1 | head -20
+          echo ""
+          echo "Testing auth endpoint..."
+          curl -v http://127.0.0.1:54321/auth/v1/health 2>&1 | head -20
+
+      - name: Prepare preview server environment
+        run: |
+          # Make preview wrapper script executable
+          chmod +x scripts/preview-with-env.sh
+          
+          # Create runtime .env file as backup
+          cat > .env.production << EOF
+          SUPABASE_URL=${{ env.SUPABASE_URL }}
+          SUPABASE_KEY=${{ env.SUPABASE_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY=${{ env.SUPABASE_SERVICE_ROLE_KEY }}
+          PUBLIC_SUPABASE_URL=${{ env.PUBLIC_SUPABASE_URL }}
+          PUBLIC_SUPABASE_ANON_KEY=${{ env.PUBLIC_SUPABASE_ANON_KEY }}
+          EOF
+          echo "✅ Created .env.production file"
+          echo "✅ Made preview script executable"
 
       - name: Run E2E tests
         run: npm run test:e2e
