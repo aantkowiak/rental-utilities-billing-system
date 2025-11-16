@@ -27,71 +27,53 @@ INSERT INTO properties (id, label, start_month, created_at, updated_at) VALUES
 -- =====================================================================
 -- Auth Users
 -- =====================================================================
--- Create test user for CI/E2E tests
+-- Update password for existing test user (manually created)
 -- Email: tenant1@example.com
 -- Password: password123
+-- User ID: 0367969f-66af-4c5b-85b0-cc0143d6877f
 -- Using crypt function from pgcrypto extension
 
--- First, delete if exists to ensure clean state
-DELETE FROM auth.users WHERE id = '0367969f-66af-4c5b-85b0-cc0143d6877f';
+DO $$
+BEGIN
+  -- Update password for the existing user
+  UPDATE auth.users 
+  SET 
+    encrypted_password = crypt('password123', gen_salt('bf')),
+    email_confirmed_at = COALESCE(email_confirmed_at, now()),
+    updated_at = now()
+  WHERE id = '0367969f-66af-4c5b-85b0-cc0143d6877f';
+  
+  IF FOUND THEN
+    RAISE NOTICE 'Updated password for user 0367969f-66af-4c5b-85b0-cc0143d6877f';
+  ELSE
+    RAISE WARNING 'User 0367969f-66af-4c5b-85b0-cc0143d6877f not found!';
+  END IF;
 
--- Insert the user
-INSERT INTO auth.users (
-  id,
-  instance_id,
-  email,
-  encrypted_password,
-  email_confirmed_at,
-  created_at,
-  updated_at,
-  raw_app_meta_data,
-  raw_user_meta_data,
-  is_super_admin,
-  role,
-  aud,
-  confirmation_token,
-  recovery_token,
-  email_change_token_new,
-  email_change
-) VALUES (
-  '0367969f-66af-4c5b-85b0-cc0143d6877f',
-  '00000000-0000-0000-0000-000000000000',
-  'tenant1@example.com',
-  crypt('password123', gen_salt('bf')),
-  now(),
-  now(),
-  now(),
-  '{"provider":"email","providers":["email"]}',
-  '{}',
-  false,
-  'authenticated',
-  'authenticated',
-  '',
-  '',
-  '',
-  ''
-);
-
--- Insert identity for the user (required for email/password login)
-INSERT INTO auth.identities (
-  id,
-  user_id,
-  identity_data,
-  provider,
-  last_sign_in_at,
-  created_at,
-  updated_at
-) VALUES (
-  '0367969f-66af-4c5b-85b0-cc0143d6877f',
-  '0367969f-66af-4c5b-85b0-cc0143d6877f',
-  jsonb_build_object('sub', '0367969f-66af-4c5b-85b0-cc0143d6877f', 'email', 'tenant1@example.com'),
-  'email',
-  now(),
-  now(),
-  now()
-);
-
-RAISE NOTICE 'Created test user: tenant1@example.com (password: password123)';
+  -- Ensure identity exists (CRITICAL for email/password login!)
+  -- Try to insert, ignore if already exists
+  INSERT INTO auth.identities (
+    id,
+    user_id,
+    identity_data,
+    provider,
+    last_sign_in_at,
+    created_at,
+    updated_at
+  ) VALUES (
+    '0367969f-66af-4c5b-85b0-cc0143d6877f',
+    '0367969f-66af-4c5b-85b0-cc0143d6877f',
+    jsonb_build_object('sub', '0367969f-66af-4c5b-85b0-cc0143d6877f', 'email', 'tenant1@example.com'),
+    'email',
+    now(),
+    now(),
+    now()
+  )
+  ON CONFLICT (provider, user_id) DO UPDATE SET
+    identity_data = jsonb_build_object('sub', '0367969f-66af-4c5b-85b0-cc0143d6877f', 'email', 'tenant1@example.com'),
+    updated_at = now();
+  
+  RAISE NOTICE 'Ensured identity exists for email/password login';
+END $$;
 
 -- =====================================================================
 -- Profiles
