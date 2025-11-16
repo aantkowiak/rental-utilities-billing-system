@@ -116,25 +116,43 @@ jobs:
         run: |
           echo "Waiting for Supabase to be ready..."
           # Give Supabase time to start all services
-          sleep 10
+          sleep 15
           
-          # Check Supabase status (some optional services may be stopped, that's OK)
+          # Check Supabase status
           echo "Checking Supabase status..."
-          supabase status || echo "Status command failed, but continuing..."
+          supabase status
           
-          # Wait for API to be responsive (this is the real test)
-          echo "Waiting for API to respond..."
-          for i in {1..30}; do
-            if curl -f -s http://127.0.0.1:54321 > /dev/null 2>&1; then
-              echo "✅ Supabase API is responsive after $i attempts"
+          # Check Docker containers
+          echo ""
+          echo "Docker containers running:"
+          docker ps --filter "name=supabase" --format "table {{.Names}}\t{{.Status}}"
+          
+          # Try multiple endpoints to verify connectivity
+          echo ""
+          echo "Testing connectivity..."
+          
+          # Test 1: Try root endpoint (might return 404 but connection works)
+          if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:54321 | grep -q "200\|404\|405"; then
+            echo "✅ API Gateway is responding"
+          else
+            echo "⚠️  API Gateway root returned unexpected status"
+          fi
+          
+          # Test 2: Try auth health endpoint
+          for i in {1..20}; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:54321/auth/v1/health 2>/dev/null)
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Auth API is healthy after $i attempts (HTTP $HTTP_CODE)"
               break
             fi
-            if [ $i -eq 30 ]; then
-              echo "❌ Supabase API never became responsive"
+            if [ $i -eq 20 ]; then
+              echo "❌ Auth API never became healthy (last status: HTTP $HTTP_CODE)"
+              echo "Checking what's actually listening on port 54321:"
+              sudo netstat -tlnp | grep 54321 || echo "Nothing listening on 54321"
               exit 1
             fi
-            echo "Attempt $i: Waiting for API..."
-            sleep 2
+            echo "Attempt $i: Auth API status HTTP $HTTP_CODE, waiting..."
+            sleep 3
           done
 
       - name: Verify Supabase is running
