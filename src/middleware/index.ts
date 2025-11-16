@@ -16,7 +16,17 @@ const schedulerBuckets = new Map<string, RateLimitBucket>();
 const isSchedulerTaskRequest = (url: URL): boolean => url.pathname.startsWith("/api/v1/_tasks/run");
 
 const isProtectedRoute = (pathname: string): boolean => {
-  return pathname.startsWith("/admin/") || pathname.startsWith("/app/");
+  // Protect admin and app pages
+  if (pathname.startsWith("/admin/") || pathname.startsWith("/app/")) {
+    return true;
+  }
+  
+  // Protect API endpoints except auth endpoints
+  if (pathname.startsWith("/api/") && !pathname.startsWith("/api/v1/auth/")) {
+    return true;
+  }
+  
+  return false;
 };
 
 const getClientIdentifier = (request: Request, fallbackAddress?: string): string => {
@@ -81,14 +91,26 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   // Check if route is protected
   if (isProtectedRoute(url.pathname)) {
+    const isApiRoute = url.pathname.startsWith("/api/");
+    
     // Validate session using the authenticated client
     const {
       data: { user },
       error,
     } = await supabase.auth.getUser();
 
+    console.log("[middleware] Protected route:", url.pathname);
+    console.log("[middleware] User:", user?.id, user?.email);
+    console.log("[middleware] Error:", error?.message);
+
     if (error || !user) {
-      // Not authenticated - redirect to login
+      // Not authenticated
+      console.log("[middleware] No user or error - auth failed");
+      if (isApiRoute) {
+        // For API routes, return JSON error response
+        return errorResponse(401, "unauthorized", "Authentication required");
+      }
+      // For pages, redirect to login
       return context.redirect("/auth/login");
     }
 
@@ -99,14 +121,25 @@ export const onRequest = defineMiddleware(async (context, next) => {
       .eq("user_id", user.id)
       .single();
 
+    console.log("[middleware] Profile:", profile);
+    console.log("[middleware] Profile error:", profileError?.message);
+
     if (profileError || !profile) {
-      // Profile not found - redirect to login
+      // Profile not found
+      console.log("[middleware] No profile - auth failed");
+      if (isApiRoute) {
+        return errorResponse(401, "unauthorized", "User profile not found");
+      }
       return context.redirect("/auth/login");
     }
 
     // Validate role
     if (profile.role !== "tenant" && profile.role !== "admin") {
-      // Invalid role - redirect to login
+      // Invalid role
+      console.log("[middleware] Invalid role - auth failed");
+      if (isApiRoute) {
+        return errorResponse(403, "forbidden", "Invalid user role");
+      }
       return context.redirect("/auth/login");
     }
 
@@ -116,6 +149,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
       role: profile.role,
       propertyId: profile.property_id,
     };
+    console.log("[middleware] Auth set successfully:", context.locals.auth.role);
   }
 
   return next();

@@ -30,6 +30,7 @@ const links =
     {
       links.map((link) => {
         const isCurrent = currentPath ? currentPath === link.href : false;
+        const testId = link.label === "Dodaj odczyt" ? "nav-add-reading" : undefined;
         return (
           <li>
             <a
@@ -41,6 +42,7 @@ const links =
               ].join(" ")}
               href={link.href}
               aria-current={isCurrent ? "page" : undefined}
+              data-test-id={testId}
             >
               {link.label}
             </a>

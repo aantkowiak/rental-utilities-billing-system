@@ -147,6 +147,7 @@ export function LoginForm(): JSX.Element {
           aria-invalid={fieldError ? true : undefined}
           autoComplete="email"
           className={buildInputClasses(Boolean(fieldError))}
+          data-test-id="email-input"
           disabled={isDisabled}
           id={emailFieldId}
           inputMode="email"
@@ -189,6 +190,7 @@ export function LoginForm(): JSX.Element {
           aria-invalid={fieldError ? true : undefined}
           autoComplete="current-password"
           className={buildInputClasses(Boolean(fieldError))}
+          data-test-id="password-input"
           disabled={isDisabled}
           id={passwordFieldId}
           name="password"
@@ -221,7 +223,7 @@ export function LoginForm(): JSX.Element {
       </div>
 
       <div className="space-y-3">
-        <Button className="w-full" disabled={isDisabled} type="submit">
+        <Button className="w-full" data-test-id="login-submit-button" disabled={isDisabled} type="submit">
           {isDisabled ? "Logowanie..." : "Zaloguj się"}
         </Button>
 

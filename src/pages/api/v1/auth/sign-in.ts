@@ -41,6 +41,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       password,
     });
 
+    console.log("[sign-in] Auth attempt for:", email);
+    console.log("[sign-in] Auth success:", !!authData.user);
+    console.log("[sign-in] Session exists:", !!authData.session);
+
     if (authError || !authData.user) {
       console.error("[sign-in] Authentication failed:", authError?.message);
       return errorResponse(401, "invalid_credentials", "Nieprawidłowy email lub hasło");

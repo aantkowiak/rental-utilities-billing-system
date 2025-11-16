@@ -13,9 +13,9 @@ export class LoginPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.emailInput = page.locator('input[name="email"]');
-    this.passwordInput = page.locator('input[name="password"]');
-    this.submitButton = page.locator('button[type="submit"]');
+    this.emailInput = page.locator('[data-test-id="email-input"]');
+    this.passwordInput = page.locator('[data-test-id="password-input"]');
+    this.submitButton = page.locator('[data-test-id="login-submit-button"]');
     // More flexible error message locator - finds by text content
     this.errorMessage = page.locator("text=/Nieprawidłowy|Invalid|error/i").first();
   }
@@ -25,9 +25,16 @@ export class LoginPage {
   }
 
   async login(email: string, password: string) {
+    await this.emailInput.waitFor({ state: "visible" });
+    await this.emailInput.clear();
     await this.emailInput.fill(email);
+    await this.passwordInput.waitFor({ state: "visible" });
+    await this.passwordInput.clear();
     await this.passwordInput.fill(password);
     await this.submitButton.click();
+    
+    // Wait for successful redirect after login
+    await this.page.waitForURL(/\/app\/readings\/add/, { timeout: 20000 });
   }
 
   async waitForErrorMessage() {

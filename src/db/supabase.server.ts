@@ -33,7 +33,16 @@ const supabaseServiceRoleKey = resolveEnv(
 export const createSupabaseServerClient = (cookies: AstroCookies) => {
   return createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
     cookies: {
-      // Using deprecated interface since Astro doesn't provide getAll()
+      getAll() {
+        // Astro cookies object doesn't provide getAll(), so we return an empty array
+        // The library will fall back to using get() for specific cookie names
+        return [];
+      },
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value, options }) => {
+          cookies.set(name, value, options);
+        });
+      },
       get(name: string) {
         const cookie = cookies.get(name);
         return cookie?.value;
