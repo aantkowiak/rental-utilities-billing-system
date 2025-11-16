@@ -40,7 +40,7 @@ vi.mock("@/lib/services/ReportService", async () => {
 
 const { listMock, createMock, updateMock, deleteMock, recomputeAllMock } = serviceMocks;
 
-describe.skip("Monthly advances API routes", () => {
+describe("Monthly advances API routes", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     process.env.TEST_AUTH_USER_ID = "user-1";
@@ -169,7 +169,19 @@ describe.skip("Monthly advances API routes", () => {
 });
 
 function createLocals() {
+  const userId = process.env.TEST_AUTH_USER_ID || "user-1";
+  const role = (process.env.TEST_AUTH_ROLE || "admin") as "admin" | "tenant";
+  const propertyId = process.env.TEST_AUTH_PROPERTY_ID || null;
+
   return {
     supabase: {},
+    auth: {
+      user: {
+        id: userId,
+        email: "test@example.com",
+      } as any,
+      role,
+      propertyId,
+    },
   } as unknown as App.Locals;
 }
