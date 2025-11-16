@@ -16,8 +16,7 @@ export class LoginPage {
     this.emailInput = page.locator('[data-test-id="email-input"]');
     this.passwordInput = page.locator('[data-test-id="password-input"]');
     this.submitButton = page.locator('[data-test-id="login-submit-button"]');
-    // More flexible error message locator - finds by text content
-    this.errorMessage = page.locator("text=/Nieprawidłowy|Invalid|error/i").first();
+    this.errorMessage = page.locator('[data-test-id="login-error-message"]');
   }
 
   async goto() {

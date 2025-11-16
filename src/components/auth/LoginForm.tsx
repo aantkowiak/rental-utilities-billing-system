@@ -171,7 +171,7 @@ export function LoginForm(): JSX.Element {
           value={email}
         />
         {fieldError ? (
-          <p className="text-sm text-destructive" id={`${emailFieldId}-error`}>
+          <p className="text-sm text-destructive" data-test-id="login-error-message" id={`${emailFieldId}-error`}>
             {fieldError}
           </p>
         ) : (
