@@ -19,36 +19,22 @@ interface AuthFailure {
   response: Response;
 }
 
-// Default to Tenant 1 from seed data (has property with readings)
-const DEFAULT_TEST_USER_ID = "00000000-0000-0000-0000-000000000002";
-const DEFAULT_TEST_ROLE: UserRole = "tenant";
-const DEFAULT_TEST_PROPERTY_ID = "10000000-0000-0000-0000-000000000001"; // Apartment A - Downtown
-
-const buildHardcodedAuth = (): { user: User; role: UserRole; propertyId: string | null } => {
-  // Use process.env directly for tests since import.meta.env is resolved at build time
-  const userId = process.env.TEST_AUTH_USER_ID ?? DEFAULT_TEST_USER_ID;
-  const rawRole = process.env.TEST_AUTH_ROLE;
-  const role: UserRole = rawRole === "tenant" || rawRole === "admin" ? rawRole : DEFAULT_TEST_ROLE;
-
-  // Admins should not be scoped to a specific property
-  const propertyId = role === "admin" ? null : (process.env.TEST_AUTH_PROPERTY_ID ?? DEFAULT_TEST_PROPERTY_ID);
-
-  const user = {
-    id: userId,
-    app_metadata: {},
-    user_metadata: {},
-  } as unknown as User;
-
-  return { user, role, propertyId };
-};
-
 export const requireAuth = async (
   _request: Request,
-  _locals: App.Locals,
+  locals: App.Locals,
   options: AuthOptions = {}
 ): Promise<AuthSuccess | AuthFailure> => {
-  const { user, role, propertyId } = buildHardcodedAuth();
+  // Check if auth was set by middleware
+  if (!locals.auth) {
+    return {
+      success: false,
+      response: errorResponse(401, "unauthorized", "Authentication required"),
+    };
+  }
 
+  const { user, role, propertyId } = locals.auth;
+
+  // Check admin requirement
   if (options.requireAdmin && role !== "admin") {
     return {
       success: false,

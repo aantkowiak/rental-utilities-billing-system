@@ -1,15 +1,19 @@
 import { z } from "zod";
 
 /**
- * Validation schema for magic link request.
- * RFC 5322 compliant email with max 254 characters.
+ * Validation schema for sign-in with email and password.
+ * - Email: RFC 5322 compliant, max 254 characters
+ * - Password: min 6 characters
  */
-export const RequestMagicLinkSchema = z.object({
+export const SignInSchema = z.object({
   email: z
     .string()
-    .email()
-    .max(254)
+    .email("Wprowadź poprawny adres email")
+    .max(254, "Adres email może mieć maksymalnie 254 znaki")
     .transform((email) => email.toLowerCase()),
+  password: z
+    .string()
+    .min(6, "Hasło musi mieć co najmniej 6 znaków"),
 });
 
 /**

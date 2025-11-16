@@ -15,6 +15,10 @@ const schedulerBuckets = new Map<string, RateLimitBucket>();
 
 const isSchedulerTaskRequest = (url: URL): boolean => url.pathname.startsWith("/api/v1/_tasks/run");
 
+const isProtectedRoute = (pathname: string): boolean => {
+  return pathname.startsWith("/admin/") || pathname.startsWith("/app/");
+};
+
 const getClientIdentifier = (request: Request, fallbackAddress?: string): string => {
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) {
@@ -57,7 +61,10 @@ const checkSchedulerRateLimit = (clientId: string): boolean => {
 };
 
 export const onRequest = defineMiddleware(async (context, next) => {
-  if (isSchedulerTaskRequest(new URL(context.request.url))) {
+  const url = new URL(context.request.url);
+
+  // Handle scheduler task rate limiting
+  if (isSchedulerTaskRequest(url)) {
     const clientId = getClientIdentifier(context.request, (context as { clientAddress?: string }).clientAddress);
 
     if (!checkSchedulerRateLimit(clientId)) {
@@ -65,6 +72,47 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
+  // Inject supabase client
   context.locals.supabase = supabaseAdmin;
+
+  // Initialize auth as null
+  context.locals.auth = null;
+
+  // Check if route is protected
+  if (isProtectedRoute(url.pathname)) {
+    // Validate session
+    const { data: { user }, error } = await supabaseAdmin.auth.getUser();
+
+    if (error || !user) {
+      // Not authenticated - redirect to login
+      return context.redirect("/auth/login");
+    }
+
+    // Fetch user profile for role and property_id
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .select("role, property_id")
+      .eq("user_id", user.id)
+      .single();
+
+    if (profileError || !profile) {
+      // Profile not found - redirect to login
+      return context.redirect("/auth/login");
+    }
+
+    // Validate role
+    if (profile.role !== "tenant" && profile.role !== "admin") {
+      // Invalid role - redirect to login
+      return context.redirect("/auth/login");
+    }
+
+    // Set auth in locals
+    context.locals.auth = {
+      user,
+      role: profile.role,
+      propertyId: profile.property_id,
+    };
+  }
+
   return next();
 });

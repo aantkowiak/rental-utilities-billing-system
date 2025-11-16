@@ -24,8 +24,16 @@ const supabaseServiceRoleKey = resolveEnv(
   "SUPABASE_SERVICE_ROLE_KEY"
 );
 
-export const supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey);
+// Client with session persistence for authenticated requests
+export const supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+  },
+});
 
+// Admin client without session (uses service role key)
 export const supabaseAdmin = createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
   auth: {
     autoRefreshToken: false,
