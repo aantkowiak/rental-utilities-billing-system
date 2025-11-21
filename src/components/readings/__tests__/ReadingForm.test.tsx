@@ -70,8 +70,8 @@ describe("ReadingForm", () => {
     const submitButton = screen.getByRole("button", { name: /zapisz/i });
     expect(submitButton).not.toBeDisabled();
 
-    // But a warning message should be shown
-    expect(screen.getByText(/więcej niż 3 dni wstecz/i)).toBeInTheDocument();
+    // But a warning message should be shown (rendered asynchronously)
+    expect(await screen.findByText(/więcej niż 3 dni wstecz/i)).toBeInTheDocument();
 
     const coldInput = screen.getByLabelText(/zimna woda/i);
     expect(coldInput).not.toBeDisabled();
