@@ -54,3 +54,4 @@ Consider reporting this to the maintainers:
 - Package: `@przeprogramowani/10x-mvp-tracker`
 - Issue: Needs to update fastmcp dependency and ensure completions capability is declared
 
+
