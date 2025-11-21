@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const listMock = vi.fn();
@@ -163,7 +164,19 @@ describe("Readings API routes", () => {
 });
 
 function createLocals() {
+  const userId = process.env.TEST_AUTH_USER_ID || "user-1";
+  const role = (process.env.TEST_AUTH_ROLE || "admin") as "admin" | "tenant";
+  const propertyId = process.env.TEST_AUTH_PROPERTY_ID || null;
+
   return {
     supabase: {},
+    auth: {
+      user: {
+        id: userId,
+        email: "test@example.com",
+      } as any,
+      role,
+      propertyId,
+    },
   } as App.Locals;
 }

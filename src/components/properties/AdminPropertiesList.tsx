@@ -374,8 +374,8 @@ function AdminPropertiesContent(): JSX.Element {
           if (!prev[property.id]) {
             return prev;
           }
-          const next = { ...prev };
-          delete next[property.id];
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { [property.id]: _removed, ...next } = prev;
           return next;
         });
         return;
@@ -416,8 +416,8 @@ function AdminPropertiesContent(): JSX.Element {
           if (!prev[property.id]) {
             return prev;
           }
-          const next = { ...prev };
-          delete next[property.id];
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { [property.id]: _removed, ...next } = prev;
           return next;
         });
       }

@@ -12,7 +12,7 @@ interface ProfileResponse {
 }
 
 interface PropertiesResponse {
-  items: Array<{ id: string; label: string }>;
+  items: { id: string; label: string }[];
 }
 
 function toApiError(error: unknown): ApiError {
@@ -81,6 +81,7 @@ function ProfileFormContent(): JSX.Element {
             const property = propertiesResponse.items.find((p) => p.id === response.profile.propertyId);
             setPropertyLabel(property?.label ?? null);
           } catch (error) {
+            // eslint-disable-next-line no-console
             console.error("Failed to load property info:", error);
             setPropertyLabel(null);
           }
@@ -163,7 +164,8 @@ function ProfileFormContent(): JSX.Element {
         const apiError = toApiError(error);
 
         if (apiError.code === "validation_error") {
-          const validationMessage = extractFieldError(apiError.details, "email") ?? "Wprowadzone dane są nieprawidłowe.";
+          const validationMessage =
+            extractFieldError(apiError.details, "email") ?? "Wprowadzone dane są nieprawidłowe.";
           setFieldError(validationMessage);
           return;
         }
@@ -202,7 +204,7 @@ function ProfileFormContent(): JSX.Element {
 
           {propertyLabel ? (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Nieruchomość</label>
+              <div className="text-sm font-medium text-foreground">Nieruchomość</div>
               <p className="rounded-md border border-input bg-muted px-3 py-2 text-sm text-foreground">
                 {propertyLabel}
               </p>
@@ -229,7 +231,9 @@ function ProfileFormContent(): JSX.Element {
               disabled={pending}
               required
               aria-invalid={fieldError ? "true" : undefined}
-              aria-describedby={fieldError ? "profile-email-error profile-email-description" : "profile-email-description"}
+              aria-describedby={
+                fieldError ? "profile-email-error profile-email-description" : "profile-email-description"
+              }
               autoComplete="email"
             />
             {fieldError ? (

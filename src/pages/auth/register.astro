@@ -1,0 +1,45 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import { RegistrationView } from "@/components/auth/RegistrationForm";
+
+// If already authenticated, redirect to appropriate landing page
+if (Astro.locals.auth) {
+  const { role } = Astro.locals.auth;
+
+  if (role === "admin") {
+    return Astro.redirect("/admin/properties");
+  } else {
+    return Astro.redirect("/app/readings/add");
+  }
+}
+
+const pageTitle = "Rejestracja";
+---
+
+<Layout title={pageTitle}>
+  <a
+    class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-primary-foreground"
+    href="#main-content"
+  >
+    Przejdź do treści
+  </a>
+
+  <main id="main-content" class="mx-auto w-full max-w-sm px-4 py-8" role="main">
+    <div class="w-full space-y-8">
+      <header class="space-y-4 text-center">
+        <div
+          class="mx-auto flex size-12 items-center justify-center rounded-full border border-border bg-card shadow-sm"
+        >
+          <img alt="Rental Utilities Billing System" class="size-8" height="32" src="/favicon.png" width="32" />
+        </div>
+        <div class="space-y-2">
+          <p class="text-sm text-muted-foreground">Rejestracja konta</p>
+          <h1 class="text-3xl font-semibold tracking-tight">Zarejestruj się</h1>
+          <p class="text-sm text-muted-foreground">Utwórz konto w systemie rozliczeń mediów.</p>
+        </div>
+      </header>
+
+      <RegistrationView client:load />
+    </div>
+  </main>
+</Layout>

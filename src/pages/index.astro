@@ -1,8 +1,21 @@
 ---
-import Welcome from "../components/Welcome.astro";
 import Layout from "../layouts/Layout.astro";
+
+// Check authentication and redirect based on role
+if (Astro.locals.auth) {
+  const { role } = Astro.locals.auth;
+
+  if (role === "admin") {
+    return Astro.redirect("/admin/properties");
+  } else {
+    return Astro.redirect("/app/readings/add");
+  }
+}
+
+// Not authenticated - redirect to login
+return Astro.redirect("/auth/login");
 ---
 
 <Layout>
-  <Welcome />
+  <!-- This should not be reached due to redirects above -->
 </Layout>

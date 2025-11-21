@@ -12,7 +12,6 @@ import type {
   YearMonth,
 } from "@/types";
 import { yearMonthToISODate } from "@/lib/date/month";
-import { isWithinTenantWindow } from "@/lib/validation/readings";
 import type { ReadingListFilters, ReadingListResponse } from "@/types/readings";
 import { buildReadingsListResponse } from "@/types/readings";
 
@@ -113,15 +112,21 @@ export class ReadingsService {
     return updated;
   }
 
-  static async create(supabase: Supabase, cmd: CreateReadingCmd, context: OperationContext): Promise<ReadingDTO> {
-    if (context.role === "tenant") {
-      const readingDate = new Date(cmd.readingAt);
-      const now = context.now ?? new Date();
-
-      if (!isWithinTenantWindow(readingDate, now)) {
-        throw new ReadingsServiceError("READING_WINDOW_VIOLATION", "Reading submission window exceeded for tenant");
-      }
-    }
+  static async create(
+    supabase: Supabase,
+    cmd: CreateReadingCmd,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _context: OperationContext
+  ): Promise<ReadingDTO> {
+    // Time window validation is disabled - tenants can submit readings at any time
+    // if (context.role === "tenant") {
+    //   const readingDate = new Date(cmd.readingAt);
+    //   const now = context.now ?? new Date();
+    //
+    //   if (!isWithinTenantWindow(readingDate, now)) {
+    //     throw new ReadingsServiceError("READING_WINDOW_VIOLATION", "Reading submission window exceeded for tenant");
+    //   }
+    // }
 
     const baseMonthIso = toIsoMonthOrNull(cmd.baseForMonth);
     const finalMonthIso = toIsoMonthOrNull(cmd.finalForMonth);
@@ -175,14 +180,15 @@ export class ReadingsService {
         throw new ReadingsServiceError("READING_FORBIDDEN", "Tenants cannot modify admin replacement readings");
       }
 
-      if (cmd.readingAt) {
-        const readingDate = new Date(cmd.readingAt);
-        const now = context.now ?? new Date();
-
-        if (!isWithinTenantWindow(readingDate, now)) {
-          throw new ReadingsServiceError("READING_WINDOW_VIOLATION", "Reading submission window exceeded for tenant");
-        }
-      }
+      // Time window validation is disabled - tenants can update readings at any time
+      // if (cmd.readingAt) {
+      //   const readingDate = new Date(cmd.readingAt);
+      //   const now = context.now ?? new Date();
+      //
+      //   if (!isWithinTenantWindow(readingDate, now)) {
+      //     throw new ReadingsServiceError("READING_WINDOW_VIOLATION", "Reading submission window exceeded for tenant");
+      //   }
+      // }
     }
 
     const updatePayload: Database["public"]["Tables"]["readings"]["Update"] = {};

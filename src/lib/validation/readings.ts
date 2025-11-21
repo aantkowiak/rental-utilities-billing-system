@@ -170,13 +170,17 @@ export const isStartOfMonth = (date: Date): boolean => {
   );
 };
 
-export const isWithinTenantWindow = (readingAt: Date, now = new Date()): boolean => {
+export const isWithinTenantWindow = (readingAt: Date, now: Date): boolean => {
+  // Time window validation is disabled - tenants can submit readings at any time
+  // This function is kept for informational purposes and tests
   if (Number.isNaN(readingAt.getTime())) {
     return false;
   }
 
   const diffMs = readingAt.getTime() - now.getTime();
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+  const diffDays = diffMs / (24 * 60 * 60 * 1000);
 
+  // Return true if within window, false if outside
+  // Even though validation is disabled in production, tests still check this logic
   return diffDays >= -TENANT_WINDOW_PAST_DAYS && diffDays <= TENANT_WINDOW_FUTURE_DAYS;
 };

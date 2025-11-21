@@ -108,11 +108,12 @@ describe("MonthlyAdvancesTable", () => {
     const priceColdInput = await screen.findByDisplayValue("50");
     const row = priceColdInput.closest("tr") as HTMLTableRowElement | null;
     expect(row).not.toBeNull();
+    if (!row) throw new Error("Row should not be null");
     fireEvent.change(priceColdInput, { target: { value: "55" } });
-    within(row!).getByRole("button", { name: /Zapisz/i });
-    fireEvent.click(within(row!).getByRole("button", { name: /Zapisz/i }));
+    within(row).getByRole("button", { name: /Zapisz/i });
+    fireEvent.click(within(row).getByRole("button", { name: /Zapisz/i }));
 
-    expect(await within(row!).findByText((content) => content.includes("Niepoprawna wartość"))).toBeInTheDocument();
+    expect(await within(row).findByText((content) => content.includes("Niepoprawna wartość"))).toBeInTheDocument();
     expect(apiPatchMock).toHaveBeenCalled();
   });
 

@@ -9,6 +9,7 @@ export async function apiGet<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
     method: "GET",
+    credentials: "include",
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
   });
   const json = await res.json();
@@ -24,6 +25,7 @@ export async function apiPost<T>(url: string, body?: unknown, init?: RequestInit
   const res = await fetch(url, {
     ...init,
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -40,6 +42,7 @@ export async function apiPatch<T>(url: string, body?: unknown, init?: RequestIni
   const res = await fetch(url, {
     ...init,
     method: "PATCH",
+    credentials: "include",
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -56,6 +59,7 @@ export async function apiDelete<T = void>(url: string, init?: RequestInit): Prom
   const res = await fetch(url, {
     ...init,
     method: "DELETE",
+    credentials: "include",
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
   });
 

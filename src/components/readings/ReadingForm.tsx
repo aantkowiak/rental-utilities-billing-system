@@ -25,7 +25,7 @@ import {
   yearMonthToDate,
 } from "@/lib/date/month";
 
-const TIME_ZONE = "Europe/Warsaw";
+// const TIME_ZONE = "Europe/Warsaw"; // Unused for now
 const DECIMAL_PRECISION = 3;
 const MS_IN_DAY = 86_400_000;
 
@@ -34,11 +34,12 @@ const decimalFormatter = new Intl.NumberFormat("pl-PL", {
   maximumFractionDigits: DECIMAL_PRECISION,
 });
 
-const readingDateFormatter = new Intl.DateTimeFormat("pl-PL", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: TIME_ZONE,
-});
+// Formatter for reading dates if needed in future
+// const readingDateFormatter = new Intl.DateTimeFormat("pl-PL", {
+//   dateStyle: "medium",
+//   timeStyle: "short",
+//   timeZone: TIME_ZONE,
+// });
 
 type DecimalField = "coldM3" | "hotM3" | "heatingGj";
 type FieldName = DecimalField | "readingAt" | "commentText" | "baseForMonth" | "finalForMonth" | "readingType";
@@ -77,6 +78,7 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
   const [serverError, setServerError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [loading, setLoading] = useState(false);
   const [currentReading, setCurrentReading] = useState<ReadingDTO | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -103,6 +105,7 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
       try {
         token = isoDateToYearMonth(iso);
       } catch (error) {
+        // eslint-disable-next-line no-console
         console.error("[ReadingForm] Failed to normalize month token:", error);
         return;
       }
@@ -361,9 +364,10 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
         }
       }
 
-      if (!windowStatus.withinWindow) {
-        validationErrors.readingAt = windowStatus.message ?? "Wybrana data jest poza dozwolonym oknem zgłoszenia.";
-      }
+      // Time window validation removed - no longer blocking
+      // if (!windowStatus.withinWindow) {
+      //   validationErrors.readingAt = windowStatus.message ?? "Wybrana data jest poza dozwolonym oknem zgłoszenia.";
+      // }
 
       if (Object.keys(validationErrors).length > 0) {
         setFieldErrors(validationErrors);
@@ -495,7 +499,7 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
         setPending(false);
       }
     },
-    [currentReading, formState, loadLatest, pushToast, resolvedPropertyId, windowStatus]
+    [currentReading, formState, loadLatest, pushToast, resolvedPropertyId]
   );
 
   const handleMonthSelectChange = useCallback(
@@ -523,9 +527,9 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
     [updateField]
   );
 
-  const numericDisabled = pending || Boolean(accessError) || !resolvedPropertyId || !windowStatus.withinWindow;
+  const numericDisabled = pending || Boolean(accessError) || !resolvedPropertyId;
   const readingAtDisabled = pending || Boolean(accessError) || !resolvedPropertyId;
-  const submitDisabled = pending || !windowStatus.withinWindow || Boolean(accessError) || !resolvedPropertyId;
+  const submitDisabled = pending || Boolean(accessError) || !resolvedPropertyId;
   const monthSelectDisabled = pending || Boolean(accessError) || !resolvedPropertyId;
   const readingTypeDisabled = pending || Boolean(accessError) || !resolvedPropertyId;
 
@@ -551,12 +555,6 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
           {accessError ? <ErrorAlert error={accessError} /> : null}
           {serverError ? <ErrorAlert error={serverError} /> : null}
 
-          {!windowStatus.withinWindow ? (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              {windowStatus.message}
-            </p>
-          ) : null}
-
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
               <label className="text-sm font-medium text-foreground" htmlFor="readingAt">
@@ -568,6 +566,7 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
                 }}
                 aria-invalid={Boolean(fieldErrors.readingAt)}
                 className={buildInputClasses(fieldErrors.readingAt)}
+                data-test-id="reading-date-input"
                 disabled={readingAtDisabled}
                 id="readingAt"
                 name="readingAt"
@@ -583,7 +582,7 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
               />
               {fieldErrors.readingAt ? (
                 <p className="text-sm text-destructive">{fieldErrors.readingAt}</p>
-              ) : windowStatus.withinWindow && windowStatus.message ? (
+              ) : windowStatus.message ? (
                 <p className="text-sm text-muted-foreground">{windowStatus.message}</p>
               ) : null}
             </div>
@@ -592,6 +591,7 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
               ref={(node) => {
                 fieldRefs.current.coldM3 = node;
               }}
+              dataTestId="cold-water-input"
               disabled={numericDisabled}
               error={fieldErrors.coldM3}
               id="coldM3"
@@ -605,6 +605,7 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
               ref={(node) => {
                 fieldRefs.current.hotM3 = node;
               }}
+              dataTestId="hot-water-input"
               disabled={numericDisabled}
               error={fieldErrors.hotM3}
               id="hotM3"
@@ -618,6 +619,7 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
               ref={(node) => {
                 fieldRefs.current.heatingGj = node;
               }}
+              dataTestId="heating-input"
               disabled={numericDisabled}
               error={fieldErrors.heatingGj}
               id="heatingGj"
@@ -744,7 +746,7 @@ export function ReadingForm(props: ReadingFormProps): JSX.Element {
           </div>
 
           <div className="flex justify-end">
-            <Button className="min-w-40" disabled={submitDisabled} type="submit">
+            <Button className="min-w-40" data-test-id="submit-reading-button" disabled={submitDisabled} type="submit">
               {pending ? "Zapisywanie..." : currentReading ? "Zapisz zmiany" : "Zapisz odczyt"}
             </Button>
           </div>
@@ -769,12 +771,13 @@ interface DecimalInputFieldProps {
   value: string;
   disabled: boolean;
   error?: string;
+  dataTestId?: string;
   onChange: (value: string) => void;
   onBlur: () => void;
 }
 
 const DecimalInputField = forwardRef<HTMLInputElement, DecimalInputFieldProps>(
-  ({ id, name, label, value, disabled, error, onChange, onBlur }, ref): JSX.Element => {
+  ({ id, name, label, value, disabled, error, dataTestId, onChange, onBlur }, ref): JSX.Element => {
     return (
       <div className="space-y-2">
         <label className="text-sm font-medium text-foreground" htmlFor={id}>
@@ -785,6 +788,7 @@ const DecimalInputField = forwardRef<HTMLInputElement, DecimalInputFieldProps>(
           aria-invalid={Boolean(error)}
           autoComplete="off"
           className={buildInputClasses(error)}
+          data-test-id={dataTestId}
           disabled={disabled}
           id={id}
           inputMode="decimal"
@@ -833,18 +837,19 @@ function createEmptyForm(now: Date): FormState {
 }
 
 function computeWindowStatus(readingAtIso: string, now: Date): WindowStatus {
+  // Time window is now informational only - not blocking submissions
   if (!readingAtIso) {
     return {
-      withinWindow: false,
-      message: "Podaj datę odczytu, aby sprawdzić dostępność okna zgłoszenia.",
+      withinWindow: true,
+      message: "Zalecane okno zgłoszenia: 3 dni wstecz i 5 dni naprzód od dzisiejszej daty.",
     };
   }
 
   const readingAt = new Date(readingAtIso);
   if (Number.isNaN(readingAt.getTime())) {
     return {
-      withinWindow: false,
-      message: "Nieprawidłowa data odczytu.",
+      withinWindow: true,
+      message: "Zalecane okno zgłoszenia: 3 dni wstecz i 5 dni naprzód od dzisiejszej daty.",
     };
   }
 
@@ -852,21 +857,23 @@ function computeWindowStatus(readingAtIso: string, now: Date): WindowStatus {
 
   if (diffDays < -3) {
     return {
-      withinWindow: false,
-      message: "Odczyt można zgłosić maksymalnie 3 dni wstecz.",
+      withinWindow: true,
+      message:
+        "Uwaga: Wybrana data jest więcej niż 3 dni wstecz. Zalecamy zgłaszanie odczytów w oknie ±3-5 dni od dzisiaj.",
     };
   }
 
   if (diffDays > 5) {
     return {
-      withinWindow: false,
-      message: "Odczyt można zgłosić maksymalnie 5 dni naprzód.",
+      withinWindow: true,
+      message:
+        "Uwaga: Wybrana data jest więcej niż 5 dni naprzód. Zalecamy zgłaszanie odczytów w oknie ±3-5 dni od dzisiaj.",
     };
   }
 
   return {
     withinWindow: true,
-    message: "Okno zgłoszenia jest otwarte: 3 dni wstecz i 5 dni naprzód od wybranej daty.",
+    message: "Wybrana data mieści się w zalecanym oknie zgłoszenia (3 dni wstecz i 5 dni naprzód).",
   };
 }
 
@@ -991,9 +998,10 @@ function getPropertyIdFromLocation(): string | null {
   return url.searchParams.get("propertyId");
 }
 
-function isAnchoredReading(reading: ReadingDTO): boolean {
-  return Boolean(reading.effectiveMonth);
-}
+// Helper function to check if reading is anchored (may be used in future)
+// function isAnchoredReading(reading: ReadingDTO): boolean {
+//   return Boolean(reading.effectiveMonth);
+// }
 
 function toFormReadingType(readingType: ReadingDTO["readingType"] | null | undefined): ReadingType {
   if (!readingType) {

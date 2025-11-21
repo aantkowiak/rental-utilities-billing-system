@@ -111,7 +111,20 @@ describe("Contracts API routes", () => {
 });
 
 function createLocals() {
+  const userId = process.env.TEST_AUTH_USER_ID || "user-1";
+  const role = (process.env.TEST_AUTH_ROLE || "admin") as "admin" | "tenant";
+  const propertyId = process.env.TEST_AUTH_PROPERTY_ID || null;
+
   return {
     supabase: {},
+    auth: {
+      user: {
+        id: userId,
+        email: "test@example.com",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+      role,
+      propertyId,
+    },
   } as unknown as App.Locals;
 }

@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { useCallback, useMemo, useState, type ChangeEvent, type FormEvent, type ReactElement } from "react";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";

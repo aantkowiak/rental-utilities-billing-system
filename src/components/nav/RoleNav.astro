@@ -8,20 +8,21 @@ interface Props {
 
 const { role, currentPath } = Astro.props;
 
-const links = role === "admin"
-  ? [
-      { href: "/admin/properties", label: "Nieruchomości" },
-      { href: "/admin/contracts", label: "Umowy" },
-      { href: "/admin/monthly-advances", label: "Zaliczki miesięczne" },
-      { href: "/admin/readings", label: "Odczyty" },
-      { href: "/admin/reports", label: "Raporty" },
-      { href: "/admin/profile", label: "Profil" },
-    ]
-  : [
-      { href: "/app/readings/add", label: "Dodaj odczyt" },
-      { href: "/app/readings/history", label: "Archiwalne odczyty" },
-      { href: "/app/profile", label: "Profil" },
-    ];
+const links =
+  role === "admin"
+    ? [
+        { href: "/admin/properties", label: "Nieruchomości" },
+        { href: "/admin/contracts", label: "Umowy" },
+        { href: "/admin/monthly-advances", label: "Zaliczki miesięczne" },
+        { href: "/admin/readings", label: "Odczyty" },
+        { href: "/admin/reports", label: "Raporty" },
+        { href: "/admin/profile", label: "Profil" },
+      ]
+    : [
+        { href: "/app/readings/add", label: "Dodaj odczyt" },
+        { href: "/app/readings/history", label: "Archiwalne odczyty" },
+        { href: "/app/profile", label: "Profil" },
+      ];
 ---
 
 <nav aria-label="Nawigacja główna">
@@ -29,6 +30,7 @@ const links = role === "admin"
     {
       links.map((link) => {
         const isCurrent = currentPath ? currentPath === link.href : false;
+        const testId = link.label === "Dodaj odczyt" ? "nav-add-reading" : undefined;
         return (
           <li>
             <a
@@ -40,6 +42,7 @@ const links = role === "admin"
               ].join(" ")}
               href={link.href}
               aria-current={isCurrent ? "page" : undefined}
+              data-test-id={testId}
             >
               {link.label}
             </a>
@@ -49,4 +52,3 @@ const links = role === "admin"
     }
   </ul>
 </nav>
-

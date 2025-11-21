@@ -545,8 +545,8 @@ function MonthlyAdvancesContent(): JSX.Element {
         }
       } finally {
         setPendingById((prev) => {
-          const next = { ...prev };
-          delete next[id];
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { [id]: _removed, ...next } = prev;
           return next;
         });
       }
@@ -610,8 +610,8 @@ function MonthlyAdvancesContent(): JSX.Element {
         }
       } finally {
         setDeletePendingById((prev) => {
-          const next = { ...prev };
-          delete next[id];
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { [id]: _removed, ...next } = prev;
           return next;
         });
       }

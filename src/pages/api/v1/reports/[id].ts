@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import type { APIRoute } from "astro";
 import { z } from "zod";
 import type { ReportDTO, ReportEmailAttemptDTO } from "@/types";
@@ -52,7 +53,7 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
     // Check permissions
     const isAdmin = userRole === "admin";
     if (!isAdmin) {
-      const contracts = report.contracts as any;
+      const contracts = report.contracts as { tenant_user_id: string };
       if (contracts.tenant_user_id !== userId) {
         return new Response(JSON.stringify({ code: "forbidden", message: "Brak dostępu do tego raportu." }), {
           status: 403,
@@ -61,7 +62,6 @@ export const GET: APIRoute = async ({ params, request, locals }) => {
       }
     }
 
-    const monthISO = report.month;
     const propertyId = report.property_id;
 
     // Fetch report items (line items)
@@ -195,7 +195,7 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
     const { status } = validationResult.data;
 
     // Update report status
-    const updateData: any = {
+    const updateData: Record<string, string | null> = {
       status,
       updated_at: new Date().toISOString(),
     };

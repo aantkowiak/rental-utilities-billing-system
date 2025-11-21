@@ -1,7 +1,9 @@
+/* eslint-disable no-console */
 import type { APIRoute } from "astro";
 import { requireAuth } from "@/lib/api/auth";
 import { errorResponse } from "@/lib/errors";
 import { z } from "zod";
+import type { Database } from "@/db/database.types";
 
 export const prerender = false;
 
@@ -137,7 +139,7 @@ export const GET: APIRoute = async ({ request, locals, url }) => {
         console.error("[GET /v1/reports] Error fetching email attempts:", attemptsError);
       } else if (attempts) {
         for (const attempt of attempts) {
-          const reportId = (attempt.report_emails as any).report_id;
+          const reportId = (attempt.report_emails as { report_id: string }).report_id;
           if (attempt.status === "success" && !lastSentMap.has(reportId)) {
             lastSentMap.set(reportId, attempt.attempted_at);
           }
@@ -146,7 +148,7 @@ export const GET: APIRoute = async ({ request, locals, url }) => {
     }
 
     // Format response items
-    const items = reportRows.map((report: any) => {
+    const items = reportRows.map((report: Database["public"]["Tables"]["reports"]["Row"]) => {
       const totalAmount = amountMap.get(report.id) ?? 0;
       const advanceKey = `${report.property_id}:${report.month}`;
       const advancePayment = advanceMap.get(advanceKey) ?? 0;

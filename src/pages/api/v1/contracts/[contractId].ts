@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import type { APIRoute } from "astro";
 
 import { z } from "zod";

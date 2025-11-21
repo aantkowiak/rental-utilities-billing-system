@@ -6,6 +6,7 @@ const serviceMocks = vi.hoisted(() => ({
   getByIdMock: vi.fn(),
   updateMock: vi.fn(),
   deleteMock: vi.fn(),
+  recomputeAllMock: vi.fn(),
 }));
 
 vi.mock("@/lib/services/MonthlyAdvanceService", async () => {
@@ -25,7 +26,19 @@ vi.mock("@/lib/services/MonthlyAdvanceService", async () => {
   };
 });
 
-const { listMock, createMock, getByIdMock, updateMock, deleteMock } = serviceMocks;
+vi.mock("@/lib/services/ReportService", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/services/ReportService")>("@/lib/services/ReportService");
+
+  return {
+    ...actual,
+    ReportService: {
+      ...actual.ReportService,
+      recomputeAll: serviceMocks.recomputeAllMock,
+    },
+  };
+});
+
+const { listMock, createMock, updateMock, deleteMock, recomputeAllMock } = serviceMocks;
 
 describe("Monthly advances API routes", () => {
   beforeEach(() => {
@@ -69,7 +82,7 @@ describe("Monthly advances API routes", () => {
     } as Parameters<typeof GET>[0]);
 
     expect(response.status).toBe(200);
-    const payload = await response.json();
+    await response.json(); // Validate response format
     expect(listMock).toHaveBeenCalledWith(
       expect.anything(),
       {
@@ -128,6 +141,7 @@ describe("Monthly advances API routes", () => {
 
   it("deletes monthly advances for admin", async () => {
     deleteMock.mockResolvedValue(undefined);
+    recomputeAllMock.mockResolvedValue(undefined);
 
     const { DELETE } = await import("../[id]");
 
@@ -155,7 +169,20 @@ describe("Monthly advances API routes", () => {
 });
 
 function createLocals() {
+  const userId = process.env.TEST_AUTH_USER_ID || "user-1";
+  const role = (process.env.TEST_AUTH_ROLE || "admin") as "admin" | "tenant";
+  const propertyId = process.env.TEST_AUTH_PROPERTY_ID || null;
+
   return {
     supabase: {},
+    auth: {
+      user: {
+        id: userId,
+        email: "test@example.com",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+      role,
+      propertyId,
+    },
   } as unknown as App.Locals;
 }

@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { timingSafeEqual } from "node:crypto";
 
 import type { APIRoute } from "astro";

@@ -9,7 +9,7 @@ jobs:
   lint:
     name: Lint Code
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -18,10 +18,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: 'npm'
+
+      - name: Configure npm
+        run: |
+          rm -f ~/.npmrc
+          npm config delete registry --location=global || true
+          npm config set registry https://registry.npmjs.org/
+          npm cache clean --force
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Run linter
         run: npm run lint
@@ -30,7 +36,7 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
     needs: [lint]
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -39,10 +45,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: 'npm'
+
+      - name: Configure npm
+        run: |
+          rm -f ~/.npmrc
+          npm config delete registry --location=global || true
+          npm config set registry https://registry.npmjs.org/
+          npm cache clean --force
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Run unit tests
         run: npm run test -- --coverage
@@ -61,8 +73,15 @@ jobs:
     name: E2E Tests
     runs-on: ubuntu-latest
     needs: [lint]
-    environment: integration
-    
+    env:
+      CI: true
+      SUPABASE_URL: http://127.0.0.1:54321
+      SUPABASE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+      SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+      SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+      PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -71,34 +90,190 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: 'npm'
+
+      - name: Configure npm
+        run: |
+          rm -f ~/.npmrc
+          npm config delete registry --location=global || true
+          npm config set registry https://registry.npmjs.org/
+          npm cache clean --force
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps
-        if: hashFiles('playwright.config.ts') != ''
+        run: npx playwright install --with-deps chromium
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase local instance
+        run: supabase start
+
+      - name: Seed CI test data
+        run: |
+          echo "================================================"
+          echo "Running CI-specific seed data..."
+          echo "================================================"
+          docker exec -i supabase_db_rental-utilities-billing-system psql -U postgres -d postgres < supabase/seed-ci.sql
+          echo "✅ CI seed data loaded"
+          echo "================================================"
+
+      - name: Wait for Supabase to be ready
+        run: |
+          echo "Waiting for Supabase to be ready..."
+          # Give Supabase time to start all services
+          sleep 15
+          
+          # Check Supabase status
+          echo "Checking Supabase status..."
+          supabase status
+          
+          # Check Docker containers
+          echo ""
+          echo "Docker containers running:"
+          docker ps --filter "name=supabase" --format "table {{.Names}}\t{{.Status}}"
+          
+          # Try multiple endpoints to verify connectivity
+          echo ""
+          echo "Testing connectivity..."
+          
+          # Test 1: Try root endpoint (might return 404 but connection works)
+          if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:54321 | grep -q "200\|404\|405"; then
+            echo "✅ API Gateway is responding"
+          else
+            echo "⚠️  API Gateway root returned unexpected status"
+          fi
+          
+          # Test 2: Try auth health endpoint
+          for i in {1..20}; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:54321/auth/v1/health 2>/dev/null)
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Auth API is healthy after $i attempts (HTTP $HTTP_CODE)"
+              break
+            fi
+            if [ $i -eq 20 ]; then
+              echo "❌ Auth API never became healthy (last status: HTTP $HTTP_CODE)"
+              echo "Checking what's actually listening on port 54321:"
+              sudo netstat -tlnp | grep 54321 || echo "Nothing listening on 54321"
+              exit 1
+            fi
+            echo "Attempt $i: Auth API status HTTP $HTTP_CODE, waiting..."
+            sleep 3
+          done
+
+      - name: Verify Supabase is running
+        run: supabase status
+
+      - name: Verify test user in database
+        run: |
+          echo "================================================"
+          echo "Verifying test user was created..."
+          echo "================================================"
+          
+          # Check if user exists with DETAILED info
+          echo "1. Checking auth.users table:"
+          docker exec supabase_db_rental-utilities-billing-system psql -U postgres -d postgres -c \
+            "SELECT 
+              id, 
+              email, 
+              email_confirmed_at IS NOT NULL as email_confirmed,
+              email_confirmed_at,
+              encrypted_password IS NOT NULL as has_password,
+              LENGTH(encrypted_password) as password_length,
+              role,
+              aud,
+              is_super_admin,
+              raw_app_meta_data,
+              banned_until,
+              deleted_at
+            FROM auth.users 
+            WHERE id = '0367969f-66af-4c5b-85b0-cc0143d6877f';" || echo "⚠️  User query failed"
+          
+          echo ""
+          echo "2. Checking auth.identities table:"
+          docker exec supabase_db_rental-utilities-billing-system psql -U postgres -d postgres -c \
+            "SELECT 
+              id,
+              user_id, 
+              provider,
+              identity_data,
+              last_sign_in_at,
+              created_at
+            FROM auth.identities 
+            WHERE user_id = '0367969f-66af-4c5b-85b0-cc0143d6877f';" || echo "⚠️  Identity query failed"
+          
+          echo ""
+          echo "3. Checking profiles table:"
+          docker exec supabase_db_rental-utilities-billing-system psql -U postgres -d postgres -c \
+            "SELECT 
+              user_id, 
+              role,
+              display_name,
+              property_id
+            FROM profiles 
+            WHERE user_id = '0367969f-66af-4c5b-85b0-cc0143d6877f';" || echo "⚠️  Profile query failed"
+          
+          echo ""
+          echo "4. Testing password encryption:"
+          docker exec supabase_db_rental-utilities-billing-system psql -U postgres -d postgres -c \
+            "SELECT 
+              email,
+              encrypted_password = crypt('password123', encrypted_password) as password_matches
+            FROM auth.users 
+            WHERE id = '0367969f-66af-4c5b-85b0-cc0143d6877f';" || echo "⚠️  Password test failed"
+          
+          echo "================================================"
+
+      - name: Test direct authentication
+        run: |
+          echo "Testing direct auth login..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST http://127.0.0.1:54321/auth/v1/token?grant_type=password \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"email":"tenant1@example.com","password":"password123"}')
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY" | head -5
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Direct auth test successful"
+          else
+            echo "❌ Auth failed with status $HTTP_CODE - THIS WILL CAUSE E2E TESTS TO FAIL!"
+            exit 1
+          fi
+
+      - name: Build application
+        run: |
+          echo "🏗️  Starting build process..."
+          echo "Build environment:"
+          echo "  SUPABASE_URL: $SUPABASE_URL"
+          echo "  SUPABASE_KEY is set: $([ -n "$SUPABASE_KEY" ] && echo 'YES' || echo 'NO')"
+          npm run build
+          echo "✅ Build completed"
+
+      - name: Prepare preview server environment
+        run: |
+          chmod +x scripts/preview-with-env.sh
+          cat > .env.production << EOF
+          SUPABASE_URL=${SUPABASE_URL}
+          SUPABASE_KEY=${SUPABASE_KEY}
+          SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+          PUBLIC_SUPABASE_URL=${PUBLIC_SUPABASE_URL}
+          PUBLIC_SUPABASE_ANON_KEY=${PUBLIC_SUPABASE_ANON_KEY}
+          EOF
 
       - name: Run E2E tests
-        run: npm run test:e2e -- --coverage
-        if: hashFiles('playwright.config.ts') != ''
-        env:
-          # Add your environment variables from secrets here
-          # Example based on typical Supabase setup:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: npm run test:e2e
 
-      - name: Upload E2E test coverage
-        uses: actions/upload-artifact@v4
-        if: always() && hashFiles('playwright.config.ts') != ''
-        with:
-          name: e2e-test-coverage
-          path: coverage-e2e/
-          retention-days: 7
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
@@ -115,7 +290,7 @@ jobs:
     if: always()
     permissions:
       pull-requests: write
-    
+
     steps:
       - name: Download unit test coverage
         uses: actions/download-artifact@v4
@@ -123,13 +298,6 @@ jobs:
         with:
           name: unit-test-coverage
           path: coverage/
-
-      - name: Download E2E test coverage
-        uses: actions/download-artifact@v4
-        continue-on-error: true
-        with:
-          name: e2e-test-coverage
-          path: coverage-e2e/
 
       - name: Prepare status message
         id: status

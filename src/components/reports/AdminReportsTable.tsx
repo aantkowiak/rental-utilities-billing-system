@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import type { JSX } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 
@@ -374,8 +375,8 @@ const AdminReportsContent = memo(function AdminReportsContentComponent(): JSX.El
         }
       } finally {
         setSendPendingById((prev) => {
-          const next = { ...prev };
-          delete next[reportId];
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { [reportId]: _removed, ...next } = prev;
           return next;
         });
       }

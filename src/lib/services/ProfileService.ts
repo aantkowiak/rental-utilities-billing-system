@@ -15,6 +15,7 @@ export interface ProfileListResponse {
  * Service for managing user profile operations.
  * Handles business logic and database interactions for profile updates.
  */
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class
 export class ProfileService {
   /**
    * Gets a single user profile with email.
@@ -26,8 +27,7 @@ export class ProfileService {
    */
   static async getWithEmail(supabase: SupabaseClient<Database>, userId: string): Promise<ProfileWithEmail> {
     // Get user email using RPC function
-    const { data: email, error: authError } = await supabase
-      .rpc("get_user_email", { user_uuid: userId });
+    const { data: email, error: authError } = await supabase.rpc("get_user_email", { user_uuid: userId });
 
     if (authError || !email) {
       throw new Error("UNAUTHORIZED");
@@ -101,11 +101,15 @@ export class ProfileService {
    * @returns Updated profile with new email
    * @throws Error if update fails or user not found
    */
-  static async updateEmail(supabase: SupabaseClient<Database>, userId: string, email: string): Promise<ProfileWithEmail> {
+  static async updateEmail(
+    supabase: SupabaseClient<Database>,
+    userId: string,
+    email: string
+  ): Promise<ProfileWithEmail> {
     // Update email in auth.users table directly
     const { data: authData, error: authError } = await supabase
-      .from("auth.users" as any)
-      .update({ email: email })
+      .from("auth.users" as unknown as "profiles")
+      .update({ email: email } as Record<string, unknown>)
       .eq("id", userId)
       .select("id, email")
       .single();

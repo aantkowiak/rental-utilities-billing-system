@@ -11,7 +11,13 @@ export default defineConfig({
   test: {
     environment: "node",
     setupFiles: ["./vitest.setup.ts"],
-    environmentMatchGlobs: [["src/components/**/__tests__/**", "jsdom"]],
+    exclude: ["node_modules", "dist", "e2e"],
+    // Use jsdom for components, node for everything else
+    environmentMatchGlobs: [
+      ["src/components/**/__tests__/**", "jsdom"],
+      ["**/*.test.tsx", "jsdom"],
+      ["**/*.test.ts", "node"],
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html", "lcov"],
@@ -23,7 +29,25 @@ export default defineConfig({
         "**/*.d.ts",
         "**/__tests__/**",
         "**/tests/**",
+        "**/*.test.{ts,tsx}",
+        "**/*.spec.{ts,tsx}",
+        "src/env.d.ts",
+        "src/db/database.types.ts",
       ],
+      // Target coverage thresholds
+      thresholds: {
+        lines: 40,
+        functions: 60,
+        branches: 48,
+        statements: 40,
+      },
+    },
+    // Enable parallel test execution
+    pool: "threads",
+    poolOptions: {
+      threads: {
+        singleThread: false,
+      },
     },
   },
 });

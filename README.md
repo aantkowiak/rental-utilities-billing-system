@@ -9,6 +9,13 @@ A modern, opinionated starter template for building fast, accessible, and AI-fri
 - [TypeScript](https://www.typescriptlang.org/) v5 - Type-safe JavaScript
 - [Tailwind CSS](https://tailwindcss.com/) v4.0.17 - Utility-first CSS framework
 
+### Testing
+
+- [Vitest](https://vitest.dev/) v2.1.4 - Unit and integration testing framework
+- [Testing Library](https://testing-library.com/) v16.2.0 - React component testing utilities
+- [Playwright](https://playwright.dev/) v1.49.1 - End-to-end testing framework
+- [jsdom](https://github.com/jsdom/jsdom) v25.0.1 - DOM emulation for component tests
+
 ## Prerequisites
 
 - Node.js v22.14.0 (as specified in `.nvmrc`)
@@ -101,7 +108,8 @@ For more details, see [scripts/README.md](scripts/README.md)
 - `npm run preview` - Preview production build
 - `npm run lint` - Run ESLint
 - `npm run lint:fix` - Fix ESLint issues
-- `npm run test` - Run tests with Vitest
+- `npm run test` - Run unit and integration tests with Vitest
+- `npm run test:e2e` - Run end-to-end tests with Playwright
 - `npm run db:seed` - Reset and seed local database with test data
 
 ## API Endpoints
@@ -166,4 +174,3 @@ Please follow the AI guidelines and coding practices defined in the AI configura
 ## License
 
 MIT
-

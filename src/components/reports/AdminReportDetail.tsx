@@ -37,12 +37,13 @@ interface AdminReportDetailProps {
 
 type ActionKind = "regenerate" | "resend" | "toggle";
 
-const currencyFormatter = new Intl.NumberFormat("pl-PL", {
-  currency: "PLN",
-  style: "currency",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+// Unused for now - used by commented formatMoney function
+// const currencyFormatter = new Intl.NumberFormat("pl-PL", {
+//   currency: "PLN",
+//   style: "currency",
+//   minimumFractionDigits: 2,
+//   maximumFractionDigits: 2,
+// });
 
 const dateTimeFormatter = new Intl.DateTimeFormat("pl-PL", {
   dateStyle: "medium",
@@ -72,7 +73,6 @@ function shouldRefetchAfterAction(error: ApiError): boolean {
 
 function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Element {
   const [report, setReport] = useState<ReportDTO | null>(null);
-  const [lineItems, setLineItems] = useState<ReportLineItem[]>([]);
   const [lastEmailAttempt, setLastEmailAttempt] = useState<ReportEmailAttemptDTO | null>(null);
   const [permissions, setPermissions] = useState<AdminReportPermissions | null>(null);
   const [loading, setLoading] = useState(false);
@@ -84,7 +84,6 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
     if (!reportId) {
       setFetchError("Brak identyfikatora raportu.");
       setReport(null);
-      setLineItems([]);
       setLastEmailAttempt(null);
       setPermissions(null);
       return;
@@ -98,14 +97,12 @@ function AdminReportDetailContent({ reportId }: AdminReportDetailProps): JSX.Ele
     try {
       const response = await apiGet<AdminReportDetailResponse>(`/api/v1/reports/${encodeURIComponent(reportId)}`);
       setReport(response.report);
-      setLineItems(Array.isArray(response.lineItems) ? response.lineItems : []);
       setLastEmailAttempt(response.lastEmailAttempt ?? null);
       setPermissions(response.permissions ?? null);
     } catch (error) {
       const apiError = toApiError(error);
 
       setReport(null);
-      setLineItems([]);
       setLastEmailAttempt(null);
       setPermissions(null);
 
@@ -316,7 +313,7 @@ const ReportActions = memo(function ReportActions({
     onActionAccessError(null);
 
     try {
-      await apiPost<void>(`/api/v1/reports/${encodeURIComponent(report.id)}/regenerate`);
+      await apiPost<Record<string, never>>(`/api/v1/reports/${encodeURIComponent(report.id)}/regenerate`);
       pushToast({
         variant: "success",
         title: "Przeliczanie zaplanowane",
@@ -348,7 +345,7 @@ const ReportActions = memo(function ReportActions({
     onActionAccessError(null);
 
     try {
-      await apiPost<void>(`/api/v1/reports/${encodeURIComponent(report.id)}/send-email`);
+      await apiPost<Record<string, never>>(`/api/v1/reports/${encodeURIComponent(report.id)}/send-email`);
       pushToast({
         variant: "success",
         title: "E-mail wysłany",
@@ -391,7 +388,7 @@ const ReportActions = memo(function ReportActions({
     onActionAccessError(null);
 
     try {
-      await apiPatch<void>(`/api/v1/reports/${encodeURIComponent(report.id)}`, { status: nextStatus });
+      await apiPatch<Record<string, never>>(`/api/v1/reports/${encodeURIComponent(report.id)}`, { status: nextStatus });
       pushToast({
         variant: "success",
         title: nextStatus === "realized" ? "Raport zaksięgowany" : "Raport odblokowany",
@@ -473,22 +470,23 @@ export function AdminReportDetail(props: AdminReportDetailProps): JSX.Element {
   );
 }
 
-interface AmountItemProps {
-  label: string;
-  value: number | null | undefined;
-  emphasize?: boolean;
-}
+// Utility component for displaying amounts (may be used in future)
+// interface AmountItemProps {
+//   label: string;
+//   value: number | null | undefined;
+//   emphasize?: boolean;
+// }
 
-function AmountItem({ label, value, emphasize }: AmountItemProps): JSX.Element {
-  return (
-    <div className="space-y-1">
-      <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className={emphasize ? "text-base font-semibold text-foreground" : "text-sm text-foreground"}>
-        {formatMoney(value)}
-      </dd>
-    </div>
-  );
-}
+// function AmountItem({ label, value, emphasize }: AmountItemProps): JSX.Element {
+//   return (
+//     <div className="space-y-1">
+//       <dt className="text-xs uppercase tracking-wide text-muted-foreground">{label}</dt>
+//       <dd className={emphasize ? "text-base font-semibold text-foreground" : "text-sm text-foreground"}>
+//         {formatMoney(value)}
+//       </dd>
+//     </div>
+//   );
+// }
 
 interface MetadataItemProps {
   label: string;
@@ -504,13 +502,13 @@ function MetadataItem({ label, value }: MetadataItemProps): JSX.Element {
   );
 }
 
-function formatMoney(raw: number | null | undefined): string {
-  if (typeof raw !== "number" || Number.isNaN(raw)) {
-    return "—";
-  }
-
-  return currencyFormatter.format(raw / 100);
-}
+// Utility function for formatting money (may be used in future)
+// function formatMoney(raw: number | null | undefined): string {
+//   if (typeof raw !== "number" || Number.isNaN(raw)) {
+//     return "—";
+//   }
+//   return currencyFormatter.format(raw / 100);
+// }
 
 function formatMonth(month: string): string {
   if (!month) {

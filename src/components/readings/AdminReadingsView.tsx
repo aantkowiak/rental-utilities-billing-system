@@ -170,7 +170,7 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
   const [formPending, setFormPending] = useState(false);
   const [formPendingTargetId, setFormPendingTargetId] = useState<string | null>(null);
   const [deletePendingById, setDeletePendingById] = useState<Record<string, boolean>>({});
-  const [recalcPending, setRecalcPending] = useState(false);
+  const [recalcPending] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
   const [actionAccessError, setActionAccessError] = useState<string | null>(null);
@@ -424,8 +424,8 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
         }
       } finally {
         setDeletePendingById((prev) => {
-          const next = { ...prev };
-          delete next[reading.id];
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { [reading.id]: _removed, ...next } = prev;
           return next;
         });
       }
@@ -477,9 +477,14 @@ const AdminReadingsContent = memo(function AdminReadingsContentComponent(): JSX.
         return;
       }
 
+      // TypeScript doesn't recognize the early return above ensures these are defined
+      if (!filters.propertyId || !readingAtIso) {
+        return;
+      }
+
       const basePayload: CreateReadingCmd = {
         propertyId: filters.propertyId,
-        readingAt: readingAtIso!,
+        readingAt: readingAtIso,
         coldM3: cold,
         hotM3: hot,
         heatingGj: heating,

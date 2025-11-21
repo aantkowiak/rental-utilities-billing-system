@@ -1,4 +1,4 @@
-import { supabaseAdmin } from "../../db/supabase.client.ts";
+import { createSupabaseAdminClient } from "../../db/supabase.server.ts";
 
 type TaskPayload = Record<string, unknown>;
 
@@ -43,6 +43,7 @@ export class TaskDispatchError extends Error {
 const SUPABASE_EDGE_FUNCTION = "enqueue_scheduler_task";
 
 const defaultTaskEnqueuer: TaskEnqueuer = async (job) => {
+  const supabaseAdmin = createSupabaseAdminClient();
   const { error } = await supabaseAdmin.functions.invoke(SUPABASE_EDGE_FUNCTION, {
     body: {
       taskName: job.taskName,

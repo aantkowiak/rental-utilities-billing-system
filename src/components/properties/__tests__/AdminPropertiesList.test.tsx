@@ -189,7 +189,9 @@ describe("AdminPropertiesList", () => {
     expect(addButton).toBeDisabled();
 
     const row = await screen.findByText("Blokowana");
-    const rowActions = within(row.closest("tr")!);
+    const tableRow = row.closest("tr");
+    if (!tableRow) throw new Error("Table row should exist");
+    const rowActions = within(tableRow);
     expect(rowActions.getByRole("button", { name: "Edytuj" })).toBeDisabled();
     expect(rowActions.getByRole("button", { name: "Usuń" })).toBeDisabled();
   });

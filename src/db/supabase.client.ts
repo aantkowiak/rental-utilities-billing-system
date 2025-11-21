@@ -1,3 +1,14 @@
+/**
+ * @deprecated This file is deprecated. Use supabase.server.ts instead.
+ *
+ * The clients defined here do not properly handle per-request authentication.
+ * For server-side code (API routes, middleware), use:
+ * - createSupabaseServerClient() for authenticated requests
+ * - createSupabaseAdminClient() for admin operations
+ *
+ * This file is kept for backward compatibility but should not be used.
+ */
+
 import { createClient } from "@supabase/supabase-js";
 
 import type { Database } from "../db/database.types.ts";
@@ -24,8 +35,18 @@ const supabaseServiceRoleKey = resolveEnv(
   "SUPABASE_SERVICE_ROLE_KEY"
 );
 
-export const supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey);
+// Client with session persistence for authenticated requests
+/** @deprecated Use createSupabaseServerClient() from supabase.server.ts */
+export const supabaseClient = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+  },
+});
 
+// Admin client without session (uses service role key)
+/** @deprecated Use createSupabaseAdminClient() from supabase.server.ts */
 export const supabaseAdmin = createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
   auth: {
     autoRefreshToken: false,

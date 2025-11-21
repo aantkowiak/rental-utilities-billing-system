@@ -18,73 +18,10 @@ TRUNCATE TABLE contracts CASCADE;
 TRUNCATE TABLE profiles CASCADE;
 TRUNCATE TABLE properties CASCADE;
 
--- Clean up auth.users (Supabase auth table)
-DELETE FROM auth.users;
-
 -- =====================================================================
--- Test Users (auth.users)
+-- Note: Test users should be created via Auth API after database seed
+-- Run: node scripts/create-test-users.js
 -- =====================================================================
--- Create test users with known IDs for consistent seeding
-
-INSERT INTO auth.users (
-  id,
-  instance_id,
-  email,
-  encrypted_password,
-  email_confirmed_at,
-  created_at,
-  updated_at,
-  raw_app_meta_data,
-  raw_user_meta_data,
-  is_super_admin,
-  role,
-  aud
-) VALUES
-  -- Admin user
-  (
-    '00000000-0000-0000-0000-000000000001',
-    '00000000-0000-0000-0000-000000000000',
-    'admin@example.com',
-    crypt('password123', gen_salt('bf')),
-    now(),
-    now(),
-    now(),
-    '{"provider":"email","providers":["email"]}',
-    '{}',
-    false,
-    'authenticated',
-    'authenticated'
-  ),
-  -- Tenant 1
-  (
-    '00000000-0000-0000-0000-000000000002',
-    '00000000-0000-0000-0000-000000000000',
-    'tenant1@example.com',
-    crypt('password123', gen_salt('bf')),
-    now(),
-    now(),
-    now(),
-    '{"provider":"email","providers":["email"]}',
-    '{}',
-    false,
-    'authenticated',
-    'authenticated'
-  ),
-  -- Tenant 2
-  (
-    '00000000-0000-0000-0000-000000000003',
-    '00000000-0000-0000-0000-000000000000',
-    'tenant2@example.com',
-    crypt('password123', gen_salt('bf')),
-    now(),
-    now(),
-    now(),
-    '{"provider":"email","providers":["email"]}',
-    '{}',
-    false,
-    'authenticated',
-    'authenticated'
-  );
 
 -- =====================================================================
 -- Properties
@@ -97,35 +34,14 @@ INSERT INTO properties (id, label, start_month, created_at, updated_at) VALUES
 -- =====================================================================
 -- Profiles
 -- =====================================================================
-INSERT INTO profiles (user_id, role, property_id, display_name, created_at, updated_at) VALUES
-  ('00000000-0000-0000-0000-000000000001', 'admin', NULL, 'Admin User', now(), now()),
-  ('00000000-0000-0000-0000-000000000002', 'tenant', '10000000-0000-0000-0000-000000000001', 'John Tenant', now(), now()),
-  ('00000000-0000-0000-0000-000000000003', 'tenant', '10000000-0000-0000-0000-000000000002', 'Jane Renter', now(), now());
+-- Note: Profiles will be created by the create-test-users.js script
+-- after users are created via the Auth API
 
 -- =====================================================================
 -- Contracts
 -- =====================================================================
--- Contract for Tenant 1 - started 13 months ago, ends in 2030
-INSERT INTO contracts (id, property_id, tenant_user_id, period, created_at, updated_at) VALUES
-  (
-    '20000000-0000-0000-0000-000000000001',
-    '10000000-0000-0000-0000-000000000001',
-    '00000000-0000-0000-0000-000000000002',
-    tstzrange((now() - interval '13 months')::timestamptz, '2030-12-31T23:59:59Z'::timestamptz, '[)'),
-    now(),
-    now()
-  );
-
--- Contract for Tenant 2 - started 13 months ago, ends in 2030
-INSERT INTO contracts (id, property_id, tenant_user_id, period, created_at, updated_at) VALUES
-  (
-    '20000000-0000-0000-0000-000000000002',
-    '10000000-0000-0000-0000-000000000002',
-    '00000000-0000-0000-0000-000000000003',
-    tstzrange((now() - interval '13 months')::timestamptz, '2030-12-31T23:59:59Z'::timestamptz, '[)'),
-    now(),
-    now()
-  );
+-- Contracts will be created by the create-test-users.js script
+-- after users are created
 
 -- =====================================================================
 -- Monthly Advances

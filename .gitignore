@@ -16,6 +16,7 @@ pnpm-debug.log*
 # environment variables
 .env
 .env.production
+.env.test
 
 # macOS-specific files
 .DS_Store
@@ -31,3 +32,11 @@ coverage-e2e/
 # test reports
 playwright-report/
 test-results/
+
+# vitest
+.vitest/
+
+# playwright
+playwright/.cache/
+trace.zip
+*-snapshots/

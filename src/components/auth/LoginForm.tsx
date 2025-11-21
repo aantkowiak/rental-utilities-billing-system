@@ -11,14 +11,15 @@ type FormStatus = "idle" | "pending" | "success" | "error";
 
 export function LoginForm(): JSX.Element {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [status, setStatus] = useState<FormStatus>("idle");
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const emailFieldId = useId();
-  const statusMessageId = useId();
+  const passwordFieldId = useId();
   const emailInputRef = useRef<HTMLInputElement>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
   const { pushToast } = useToast();
 
   const isDisabled = status === "pending";
@@ -32,40 +33,78 @@ export function LoginForm(): JSX.Element {
 
       const form = event.currentTarget;
       const emailInput = emailInputRef.current;
-      if (!emailInput) {
+      const passwordInput = passwordInputRef.current;
+
+      if (!emailInput || !passwordInput) {
         return;
       }
 
       setApiError(null);
-      setSuccessMessage(null);
       setFieldError(null);
 
-      const trimmed = emailInput.value.trim();
-      emailInput.value = trimmed;
-      setEmail(trimmed);
+      const trimmedEmail = emailInput.value.trim();
+      emailInput.value = trimmedEmail;
+      setEmail(trimmedEmail);
 
+      // Validate email
       emailInput.setCustomValidity("");
-      if (!trimmed) {
+      if (!trimmedEmail) {
         emailInput.setCustomValidity("Podaj adres e-mail.");
       }
 
+      // Validate password
+      passwordInput.setCustomValidity("");
+      if (!passwordInput.value) {
+        passwordInput.setCustomValidity("Podaj hasło.");
+      }
+
       if (!form.reportValidity()) {
-        const message = emailInput.validationMessage || "Podaj poprawny adres e-mail.";
+        const message = emailInput.validationMessage || passwordInput.validationMessage || "Popraw błędy w formularzu.";
         setFieldError(message);
         setStatus("error");
-        emailInput.focus();
-        emailInput.select();
+
+        if (emailInput.validationMessage) {
+          emailInput.focus();
+          emailInput.select();
+        } else if (passwordInput.validationMessage) {
+          passwordInput.focus();
+          passwordInput.select();
+        }
         return;
       }
 
       setStatus("pending");
 
       try {
-        await apiPost<{ status: string }>("/api/v1/auth/magic-link", { email: trimmed });
-        setStatus("success");
-        setSuccessMessage("Jeśli konto istnieje, wysłaliśmy link logowania na wskazany adres.");
+        // Password sign-in flow
+        const response = await apiPost<{
+          user: { id: string; email: string; displayName: string | null };
+          role: string;
+          propertyId: string | null;
+        }>("/api/v1/auth/sign-in", {
+          email: trimmedEmail,
+          password: passwordInput.value,
+        });
+
+        // Redirect to role-based landing page
+        const destination = response.role === "admin" ? "/admin/properties" : "/app/readings/add";
+        window.location.href = destination;
       } catch (error) {
         const normalized = toApiError(error);
+
+        if (normalized.status === 401) {
+          setFieldError("Nieprawidłowy email lub hasło.");
+          if (passwordInput) {
+            passwordInput.focus();
+            passwordInput.select();
+          } else {
+            emailInput.focus();
+            emailInput.select();
+          }
+          setStatus("error");
+          return;
+        }
+
         if (normalized.status === 400 || normalized.status === 422) {
           setFieldError(normalized.message);
           emailInput.focus();
@@ -77,7 +116,7 @@ export function LoginForm(): JSX.Element {
         setApiError(normalized.message);
         setStatus("error");
         pushToast({
-          title: "Nie udało się wysłać linku",
+          title: "Nie udało się zalogować",
           description: normalized.message,
           variant: "error",
         });
@@ -108,6 +147,7 @@ export function LoginForm(): JSX.Element {
           aria-invalid={fieldError ? true : undefined}
           autoComplete="email"
           className={buildInputClasses(Boolean(fieldError))}
+          data-test-id="email-input"
           disabled={isDisabled}
           id={emailFieldId}
           inputMode="email"
@@ -121,9 +161,6 @@ export function LoginForm(): JSX.Element {
             if (apiError) {
               setApiError(null);
             }
-            if (successMessage) {
-              setSuccessMessage(null);
-            }
             if (status !== "idle" && status !== "pending") {
               setStatus("idle");
             }
@@ -134,27 +171,70 @@ export function LoginForm(): JSX.Element {
           value={email}
         />
         {fieldError ? (
-          <p className="text-sm text-destructive" id={`${emailFieldId}-error`}>
+          <p className="text-sm text-destructive" data-test-id="login-error-message" id={`${emailFieldId}-error`}>
             {fieldError}
           </p>
         ) : (
           <p className="text-sm text-muted-foreground" id={`${emailFieldId}-hint`}>
-            Na ten adres wyślemy wiadomość z linkiem logowania.
+            Adres e-mail użyty do rejestracji konta.
           </p>
         )}
       </div>
 
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-foreground" htmlFor={passwordFieldId}>
+          Hasło
+        </label>
+        <input
+          ref={passwordInputRef}
+          aria-invalid={fieldError ? true : undefined}
+          autoComplete="current-password"
+          className={buildInputClasses(Boolean(fieldError))}
+          data-test-id="password-input"
+          disabled={isDisabled}
+          id={passwordFieldId}
+          name="password"
+          onChange={(event) => {
+            setPassword(event.target.value);
+            passwordInputRef.current?.setCustomValidity("");
+            if (fieldError) {
+              setFieldError(null);
+            }
+            if (apiError) {
+              setApiError(null);
+            }
+            if (status !== "idle" && status !== "pending") {
+              setStatus("idle");
+            }
+          }}
+          placeholder="Wprowadź hasło"
+          required
+          type="password"
+          value={password}
+        />
+        <div className="flex items-center justify-end">
+          <a
+            className="text-sm text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring/60 rounded-sm px-1"
+            href="/auth/forgot-password"
+          >
+            Zapomniałeś hasła?
+          </a>
+        </div>
+      </div>
+
       <div className="space-y-3">
-        <Button className="w-full" disabled={isDisabled} type="submit">
-          {isDisabled ? "Wysyłanie..." : "Wyślij link logowania"}
+        <Button className="w-full" data-test-id="login-submit-button" disabled={isDisabled} type="submit">
+          {isDisabled ? "Logowanie..." : "Zaloguj się"}
         </Button>
 
-        <div aria-live="polite" className="min-h-[1.5rem] text-sm text-emerald-700" id={statusMessageId} role="status">
-          {successMessage ? (
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">
-              {successMessage}
-            </div>
-          ) : null}
+        <div className="pt-2 text-center text-sm text-muted-foreground">
+          Nie masz konta?{" "}
+          <a
+            className="text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring/60 rounded-sm px-1"
+            href="/auth/register"
+          >
+            Zarejestruj się
+          </a>
         </div>
       </div>
     </form>

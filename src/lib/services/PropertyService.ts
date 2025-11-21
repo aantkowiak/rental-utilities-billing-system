@@ -11,6 +11,7 @@ export interface PropertyListResponse {
  * Service for managing property operations.
  * Handles business logic and database interactions for properties.
  */
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class
 export class PropertyService {
   static async list(supabase: SupabaseClient<Database>): Promise<PropertyListResponse> {
     const query = supabase.from("properties").select("*").order("created_at", { ascending: false });
